@@ -1,6 +1,20 @@
 const editor = document.getElementById('editor');
+const preview = document.getElementById('preview');
 const wordCount = document.getElementById('word-count');
 const charCount = document.getElementById('char-count');
+const saveStatus = document.getElementById('save-status');
+
+let isMarkdownMode = false;
+let autoSaveTimeout;
+
+// Load document data from LocalStorage instantly on app startup
+window.addEventListener('DOMContentLoaded', () => {
+    const savedContent = localStorage.getItem('notepad_online_content');
+    if (savedContent) {
+        editor.innerHTML = savedContent;
+        updateMetrics();
+    }
+});
 
 function format(command) {
     document.execCommand(command, false, null);
@@ -15,8 +29,13 @@ function changeFontSize(action) {
     editor.style.fontSize = newSize + 'px';
 }
 
-// Live analytics metrics
-editor.addEventListener('input', updateMetrics);
+// Multi-event update listener (Input changes + triggers debounce backup)
+editor.addEventListener('input', () => {
+    updateMetrics();
+    triggerAutoSave();
+    if (isMarkdownMode) renderMarkdown();
+});
+
 function updateMetrics() {
     const text = editor.innerText.trim();
     const words = text === '' ? 0 : text.split(/\s+/).length;
@@ -25,18 +44,68 @@ function updateMetrics() {
     charCount.textContent = `Characters: ${chars}`;
 }
 
-// Global Dark Mode Toggle State
+// Debounced auto-save function (Saves 1 second after typing stops)
+function triggerAutoSave() {
+    saveStatus.textContent = "✍️ Typing...";
+    saveStatus.style.color = "#888";
+    clearTimeout(autoSaveTimeout);
+    autoSaveTimeout = setTimeout(() => {
+        localStorage.setItem('notepad_online_content', editor.innerHTML);
+        saveStatus.textContent = "💾 Auto-saved";
+        saveStatus.style.color = "#28a745";
+    }, 1000);
+}
+
 function toggleDarkMode() {
     document.body.classList.toggle('dark-mode');
     const btn = document.getElementById('dark-btn');
-    if(document.body.classList.contains('dark-mode')) {
-        btn.textContent = "☀️ Light Mode";
+    btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode" : "🌙 Dark Mode";
+}
+
+// Side-by-Side Markdown Panel System Toggle
+function toggleMarkdown() {
+    isMarkdownMode = !isMarkdownMode;
+    const btn = document.getElementById('md-btn');
+    if (isMarkdownMode) {
+        preview.classList.remove('hidden');
+        btn.textContent = "📝 Hide Preview";
+        renderMarkdown();
     } else {
-        btn.textContent = "🌙 Dark Mode";
+        preview.classList.add('hidden');
+        btn.textContent = "📝 Show Markdown";
     }
 }
 
-// Direct Text-To-Speech Proofreader
+// Simple, regex-powered native Markdown text parser
+function renderMarkdown() {
+    let rawText = editor.innerText;
+    
+    // Escape standard layout components
+    let html = rawText
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        // Headings (# Header)
+        .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+        .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+        .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+        // Bold (**text**)
+        .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
+        // Italics (*text*)
+        .replace(/\*(.*)\*/gim, '<i>$1</i>')
+        // Inline code blocks (`code`)
+        .replace(/`(.*?)`/gim, '<code>$1</code>')
+        // Unordered List line match (- list item)
+        .replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>')
+        // Cleanup nested layout list tags 
+        .replace(/<\/ul>\s*<ul>/gim, '')
+        // Formatting paragraphs with clean linebreaks
+        .replace(/\n$/gim, '<br>')
+        .replace(/\n/gim, '<br>');
+
+    preview.innerHTML = html;
+}
+
 function speakText() {
     const text = editor.innerText;
     if (!text.trim()) return;
@@ -45,34 +114,30 @@ function speakText() {
     window.speechSynthesis.speak(utterance);
 }
 
-// Native Local Web Printing Window Access
 function printDoc() {
     window.print();
 }
 
-// Inline Text Find and Global HTML Substitution
 function findAndReplace() {
     const findText = document.getElementById('find-input').value;
     const replaceText = document.getElementById('replace-input').value;
-    
     if (!findText) return alert("Enter text to find.");
     
-    // Global regular expression match
     const regex = new RegExp(findText, 'g');
     const currentHTML = editor.innerHTML;
-    
-    if (!currentHTML.includes(findText)) {
-        return alert("Text variant matching phrase not found.");
-    }
+    if (!currentHTML.includes(findText)) return alert("Text phrase not found.");
     
     editor.innerHTML = currentHTML.replace(regex, replaceText);
     updateMetrics();
+    triggerAutoSave();
 }
 
 function clearDoc() {
-    if (confirm("Are you sure you want to permanently delete this layout content?")) {
+    if (confirm("Are you sure you want to permanently clear this document?")) {
         editor.innerHTML = "";
+        localStorage.removeItem('notepad_online_content');
         updateMetrics();
+        saveStatus.textContent = "🗑️ Cleared";
     }
 }
 

@@ -1,0 +1,109 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f4f6f8;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.editor-container {
+    width: 100%;
+    max-width: 900px;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid #e1e4e8;
+}
+
+/* Toolbar Layout */
+.toolbar {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e1e4e8;
+    padding: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: center;
+}
+
+.tool-group {
+    display: flex;
+    gap: 4px;
+    border-right: 1px solid #e1e4e8;
+    padding-right: 15px;
+}
+
+.tool-group:last-child {
+    border-right: none;
+    padding-right: 0;
+}
+
+.download-group {
+    margin-left: auto;
+}
+
+/* Buttons styling */
+button {
+    background: #ffffff;
+    border: 1px solid #ced4da;
+    padding: 6px 12px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+button:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.btn-save {
+    background: #007bff;
+    color: white;
+    border: none;
+}
+
+.btn-save:hover {
+    background: #0056b3;
+}
+
+/* Document Work Area */
+#editor {
+    min-height: 450px;
+    padding: 30px;
+    font-size: 16px;
+    line-height: 1.6;
+    outline: none;
+    overflow-y: auto;
+    background: #fff;
+}
+
+#editor[placeholder]:empty:before {
+    content: attr(placeholder);
+    color: #6c757d;
+}
+
+/* Status Bar */
+.status-bar {
+    background: #f8f9fa;
+    border-top: 1px solid #e1e4e8;
+    padding: 8px 20px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 20px;
+    font-size: 13px;
+    color: #6c757d;
+}

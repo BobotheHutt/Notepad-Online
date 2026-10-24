@@ -52,16 +52,17 @@
               <button role="menuitem" data-action="open"><span>Open file…</span><kbd>Ctrl+O</kbd></button>
               <button role="menuitem" data-action="duplicate"><span>Make a copy</span></button>
               <button role="menuitem" data-action="rename"><span>Rename</span></button>
-              <button role="menuitem" data-action="history"><span>Version history</span></button>
+              <button data-doc-only role="menuitem" data-action="history"><span>Version history</span></button>
               <div class="menu-sep"></div>
-              <div class="menu-label">Download as</div>
-              <button role="menuitem" data-action="export" data-arg="docx"><span>Word document (.docx)</span></button>
-              <button role="menuitem" data-action="export" data-arg="pdf"><span>PDF (.pdf)</span></button>
-              <button role="menuitem" data-action="export" data-arg="md"><span>Markdown (.md)</span></button>
-              <button role="menuitem" data-action="export" data-arg="html"><span>Web page (.html)</span></button>
-              <button role="menuitem" data-action="export" data-arg="txt"><span>Plain text (.txt)</span></button>
+              <div class="menu-label" data-doc-only>Download as</div>
+              <div class="menu-label" data-pdf-only>Download</div>
+              <button data-doc-only role="menuitem" data-action="export" data-arg="docx"><span>Word document (.docx)</span></button>
+              <button role="menuitem" data-action="export" data-arg="pdf"><span data-doc-only>PDF (.pdf)</span><span data-pdf-only>PDF with your changes</span></button>
+              <button data-doc-only role="menuitem" data-action="export" data-arg="md"><span>Markdown (.md)</span></button>
+              <button data-doc-only role="menuitem" data-action="export" data-arg="html"><span>Web page (.html)</span></button>
+              <button data-doc-only role="menuitem" data-action="export" data-arg="txt"><span>Plain text (.txt)</span></button>
               <div class="menu-sep"></div>
-              <button role="menuitem" data-action="page-setup"><span>Page setup…</span></button>
+              <button data-doc-only role="menuitem" data-action="page-setup"><span>Page setup…</span></button>
               <button role="menuitem" data-action="print"><span>Print</span><kbd>Ctrl+P</kbd></button>
               <div class="menu-sep"></div>
               <button role="menuitem" data-action="backup"><span>Back up all documents</span></button>
@@ -76,17 +77,30 @@
             <div class="menu-pop" role="menu">
               <button role="menuitem" data-action="cmd" data-arg="undo"><span>Undo</span><kbd>Ctrl+Z</kbd></button>
               <button role="menuitem" data-action="cmd" data-arg="redo"><span>Redo</span><kbd>Ctrl+Y</kbd></button>
-              <div class="menu-sep"></div>
-              <button role="menuitem" data-action="select-all"><span>Select all</span><kbd>Ctrl+A</kbd></button>
-              <div class="menu-sep"></div>
-              <button role="menuitem" data-action="find"><span>Find</span><kbd>Ctrl+F</kbd></button>
-              <button role="menuitem" data-action="replace"><span>Find and replace</span><kbd>Ctrl+H</kbd></button>
-              <div class="menu-sep"></div>
-              <div class="menu-note">Paste without formatting: <kbd>Ctrl+Shift+V</kbd></div>
+              <div class="menu-sep" data-doc-only></div>
+              <button data-doc-only role="menuitem" data-action="select-all"><span>Select all</span><kbd>Ctrl+A</kbd></button>
+              <div class="menu-sep" data-doc-only></div>
+              <button data-doc-only role="menuitem" data-action="find"><span>Find</span><kbd>Ctrl+F</kbd></button>
+              <button data-doc-only role="menuitem" data-action="replace"><span>Find and replace</span><kbd>Ctrl+H</kbd></button>
+              <div class="menu-sep" data-doc-only></div>
+              <div class="menu-note" data-doc-only>Paste without formatting: <kbd>Ctrl+Shift+V</kbd></div>
             </div>
           </div>
 
-          <div class="menu">
+          <div class="menu" data-pdf-only>
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Pages</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="pdf-rotate" data-arg="-1"><span>Rotate page left</span></button>
+              <button role="menuitem" data-action="pdf-rotate" data-arg="1"><span>Rotate page right</span></button>
+              <button role="menuitem" data-action="pdf-delete-page" class="danger"><span>Delete page</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="pdf-blank"><span>Insert blank page</span></button>
+              <button role="menuitem" data-action="pdf-add"><span>Add pages from another PDF…</span></button>
+              <div class="menu-note">These act on the page in view. Each page thumbnail has its own buttons too.</div>
+            </div>
+          </div>
+
+          <div class="menu" data-doc-only>
             <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Insert</button>
             <div class="menu-pop" role="menu">
               <button role="menuitem" data-action="image"><span>Image from your device…</span></button>
@@ -103,7 +117,7 @@
             </div>
           </div>
 
-          <div class="menu">
+          <div class="menu" data-doc-only>
             <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Format</button>
             <div class="menu-pop" role="menu">
               <button role="menuitem" data-action="cmd" data-arg="bold"><span>Bold</span><kbd>Ctrl+B</kbd></button>
@@ -138,9 +152,9 @@
           <div class="menu">
             <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">View</button>
             <div class="menu-pop" role="menu">
-              <button role="menuitemradio" data-action="view" data-arg="page" data-check="view:page"><span>Page layout</span></button>
-              <button role="menuitemradio" data-action="view" data-arg="full" data-check="view:full"><span>Full width</span></button>
-              <div class="menu-sep"></div>
+              <button data-doc-only role="menuitemradio" data-action="view" data-arg="page" data-check="view:page"><span>Page layout</span></button>
+              <button data-doc-only role="menuitemradio" data-action="view" data-arg="full" data-check="view:full"><span>Full width</span></button>
+              <div class="menu-sep" data-doc-only></div>
               <button role="menuitemradio" data-action="theme" data-arg="light" data-check="theme:light"><span>Light</span></button>
               <button role="menuitemradio" data-action="theme" data-arg="dark" data-check="theme:dark"><span>Dark</span></button>
               <button role="menuitemradio" data-action="theme" data-arg="system" data-check="theme:system"><span>Match my device</span></button>
@@ -157,15 +171,15 @@
           <div class="menu">
             <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Tools</button>
             <div class="menu-pop" role="menu">
-              <button role="menuitem" data-action="word-count"><span>Word count</span><kbd>Ctrl+Shift+C</kbd></button>
-              <button role="menuitem" data-action="goal"><span>Word goal…</span></button>
-              <div class="menu-sep"></div>
-              <button role="menuitem" data-action="speak"><span id="speak-label">Read aloud</span></button>
-              <button role="menuitem" data-action="voice"><span>Voice settings…</span></button>
-              <div class="menu-sep"></div>
-              <button role="menuitemcheckbox" data-action="spellcheck" data-check="spellcheck"><span>Spell check</span></button>
-              <button role="menuitemcheckbox" data-action="smart-md" data-check="smartMd"><span>Markdown shortcuts</span></button>
-              <div class="menu-sep"></div>
+              <button data-doc-only role="menuitem" data-action="word-count"><span>Word count</span><kbd>Ctrl+Shift+C</kbd></button>
+              <button data-doc-only role="menuitem" data-action="goal"><span>Word goal…</span></button>
+              <div class="menu-sep" data-doc-only></div>
+              <button data-doc-only role="menuitem" data-action="speak"><span id="speak-label">Read aloud</span></button>
+              <button data-doc-only role="menuitem" data-action="voice"><span>Voice settings…</span></button>
+              <div class="menu-sep" data-doc-only></div>
+              <button data-doc-only role="menuitemcheckbox" data-action="spellcheck" data-check="spellcheck"><span>Spell check</span></button>
+              <button data-doc-only role="menuitemcheckbox" data-action="smart-md" data-check="smartMd"><span>Markdown shortcuts</span></button>
+              <div class="menu-sep" data-doc-only></div>
               <button role="menuitem" data-action="shortcuts"><span>Keyboard shortcuts</span><kbd>Ctrl+/</kbd></button>
               <button role="menuitem" data-action="about"><span>About and storage</span></button>
             </div>
@@ -180,7 +194,7 @@
     </header>
 
     <!-- ===================== Formatting toolbar ===================== -->
-    <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting">
+    <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting" data-doc-only>
       <button class="tb" data-action="cmd" data-arg="undo" data-icon="undo" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
       <button class="tb" data-action="cmd" data-arg="redo" data-icon="redo" title="Redo (Ctrl+Y)" aria-label="Redo"></button>
       <span class="tb-sep"></span>
@@ -220,8 +234,46 @@
       <button class="tb" data-action="clear-format" data-icon="clear" title="Clear formatting (Ctrl+\)" aria-label="Clear formatting"></button>
     </div>
 
+    <!-- ===================== PDF toolbar ===================== -->
+    <div class="toolbar pdf-toolbar" id="pdf-toolbar" role="toolbar" aria-label="PDF tools" data-pdf-only>
+      <button class="tb pdf-pages-btn" data-pdf="pages" data-icon="sidebar" title="Pages" aria-label="Show pages"></button>
+      <button class="tb" data-pdf="undo" data-icon="undo" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
+      <button class="tb" data-pdf="redo" data-icon="redo" title="Redo (Ctrl+Y)" aria-label="Redo"></button>
+      <span class="tb-sep"></span>
+      <button class="tb tb-label" data-pdf-tool="select" data-icon="pointer" title="Select and move (V)">Select</button>
+      <button class="tb tb-label" data-pdf-tool="edit" data-icon="textCursor" title="Change the PDF's own text (E)">Edit text</button>
+      <button class="tb tb-label" data-pdf-tool="text" data-icon="type" title="Add new text (T)">Add text</button>
+      <button class="tb" data-pdf-tool="highlight" data-icon="highlight" title="Highlight (H)" aria-label="Highlight"></button>
+      <button class="tb" data-pdf-tool="whiteout" data-icon="eraser" title="White-out: cover something up (W)" aria-label="White-out"></button>
+      <button class="tb" data-pdf-tool="draw" data-icon="pen" title="Draw (D)" aria-label="Draw"></button>
+      <button class="tb" data-pdf-tool="box" data-icon="square" title="Box (B)" aria-label="Box"></button>
+      <button class="tb" data-pdf="image" data-icon="image" title="Add an image" aria-label="Add an image"></button>
+      <button class="tb tb-label" data-pdf="sign" data-icon="signature" title="Add your signature">Sign</button>
+      <span class="tb-sep"></span>
+      <span class="pdf-style" id="pdf-style" hidden></span>
+      <span class="grow"></span>
+      <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>
+      <span class="pdf-zoom" id="pdf-zoom">100%</span>
+      <button class="tb" data-pdf="zoom-in" data-icon="zoomIn" title="Zoom in" aria-label="Zoom in"></button>
+      <button class="btn btn-primary btn-sm pdf-download" data-action="export" data-arg="pdf" title="Download the PDF with your changes"><span data-icon="download"></span>Download</button>
+    </div>
+
+    <!-- ===================== PDF pages ===================== -->
+    <main class="stage pdf-stage" id="pdf-stage" data-pdf-only data-tool="select">
+      <aside class="pdf-thumbs" id="pdf-thumbs" aria-label="Pages">
+        <ol class="pdf-thumb-list" id="pdf-thumb-list"></ol>
+        <div class="pdf-thumb-foot">
+          <button class="btn btn-sm" data-action="pdf-blank"><span data-icon="plus"></span>Blank page</button>
+          <button class="btn btn-sm" data-action="pdf-add"><span data-icon="filePlus"></span>Add PDF…</button>
+        </div>
+      </aside>
+      <div class="pdf-scroller" id="pdf-scroller">
+        <div class="pdf-pages" id="pdf-pages"></div>
+      </div>
+    </main>
+
     <!-- ===================== Writing area ===================== -->
-    <main class="stage">
+    <main class="stage" data-doc-only>
       <div class="scroller" id="workspace">
         <div class="page" id="page">
           <div id="editor" class="editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Document" data-placeholder="Start writing…"></div>
@@ -257,13 +309,14 @@
     <footer class="statusbar" id="statusbar">
       <button class="sb-btn speak-pill" id="sb-speak" data-action="speak" hidden><span data-icon="stop"></span>Stop reading</button>
       <span class="grow"></span>
-      <button class="sb-btn" id="sb-goal" data-action="goal" title="Word goal">
+      <button class="sb-btn" data-doc-only id="sb-goal" data-action="goal" title="Word goal">
         <span id="goal-text">Set a goal</span>
         <span class="goal-meter" id="goal-meter" hidden><span id="goal-fill"></span></span>
       </button>
-      <button class="sb-btn" id="sb-count" data-action="word-count" title="Word count (Ctrl+Shift+C)">0 words</button>
-      <span class="sb-item sb-hide-sm" id="sb-read"></span>
-      <span class="sb-item sb-hide-sm" id="sb-pages"></span>
+      <button class="sb-btn" data-doc-only id="sb-count" data-action="word-count" title="Word count (Ctrl+Shift+C)">0 words</button>
+      <span class="sb-item sb-hide-sm" data-doc-only id="sb-read"></span>
+      <span class="sb-item sb-hide-sm" data-doc-only id="sb-pages"></span>
+      <span class="sb-item" id="sb-pdf" data-pdf-only></span>
       <button class="sb-btn" id="sb-zoom" data-action="zoom" data-arg="reset" title="Zoom (click for actual size)">100%</button>
     </footer>
   </div>
@@ -272,8 +325,10 @@
 <button class="focus-exit" id="focus-exit" data-action="focus" title="Leave focus mode (Esc)">Exit focus</button>
 <div class="popover" id="popover" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<input type="file" id="file-open" accept=".docx,.md,.markdown,.txt,.text,.html,.htm,text/plain,text/markdown,text/html" hidden multiple>
+<input type="file" id="file-open" accept=".pdf,.docx,.md,.markdown,.txt,.text,.html,.htm,application/pdf,text/plain,text/markdown,text/html" hidden multiple>
 <input type="file" id="file-image" accept="image/*" hidden>
+<input type="file" id="pdf-image-input" accept="image/*" hidden>
+<input type="file" id="pdf-add-input" accept=".pdf,application/pdf" hidden multiple>
 <input type="file" id="file-backup" accept=".json,application/json" hidden>
 
 <script src="js/icons.js"></script>
@@ -282,6 +337,7 @@
 <script src="js/zip.js"></script>
 <script src="js/docx.js"></script>
 <script src="js/store.js"></script>
+<script src="js/pdf.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

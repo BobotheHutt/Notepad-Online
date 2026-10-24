@@ -171,17 +171,21 @@
     if (saving) await saving;
     if (!dirty && !reason) return;
     const doc = current;
-    const html = serialize();
-    const text = plainText();
-    doc.html = html;
-    doc.text = text.slice(0, 200000);
-    doc.words = (text.match(WORD_RE) || []).length;
+    const isPdf = doc.type === 'pdf';
+    // A PDF's edits live on the record itself (NpPdf changes it in place).
+    const html = isPdf ? '' : serialize();
+    if (!isPdf) {
+      const text = plainText();
+      doc.html = html;
+      doc.text = text.slice(0, 200000);
+      doc.words = (text.match(WORD_RE) || []).length;
+    }
     doc.updated = Date.now();
     dirty = false;
     saving = (async () => {
       try {
         await NpStore.putDoc(doc);
-        if (reason || doc.updated - (doc.lastVersion || 0) > 10 * 60 * 1000) {
+        if (!isPdf && (reason || doc.updated - (doc.lastVersion || 0) > 10 * 60 * 1000)) {
           await NpStore.addVersion(doc.id, html, displayTitle(doc), reason || 'Autosave');
           doc.lastVersion = doc.updated;
           await NpStore.putDoc(doc);
@@ -224,6 +228,21 @@
     stopSpeaking();
     current = doc;
     current.settings = Object.assign({}, DOC_DEFAULTS, current.settings);
+    const mobile = matchMedia('(max-width: 899px)').matches;
+    document.body.classList.toggle('pdf-mode', doc.type === 'pdf');
+    if (doc.type === 'pdf') {
+      dirty = false;
+      settings.lastDoc = doc.id;
+      saveSettings();
+      updateTitle();
+      renderDocList();
+      setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
+      if (mobile) setSidebar(false, true);
+      await NpPdf.open(doc);
+      return;
+    }
+    if (NpPdf.active) NpPdf.close();
+    setZoom(settings.zoom);
     editor.innerHTML = NpSanitize.html(doc.html || '');
     if (!editor.firstChild) editor.innerHTML = '<p><br></p>';
     dirty = false;
@@ -249,16 +268,36 @@
     s.addRange(r);
   }
 
+  // A blank, untouched document is replaced rather than left behind.
+  async function dropBlankCurrent() {
+    const blank = current && current.type !== 'pdf' && !current.title && !current.goal && !(current.html || '').replace(/<p><br><\/p>|<br>/g, '').trim() && isEmptyDoc();
+    if (!blank) return;
+    const old = current;
+    await NpStore.deleteDoc(old.id).catch(() => {});
+    docs = docs.filter((d) => d !== old);
+    current = null;
+  }
+
+  async function addRecord(doc) {
+    try { await NpStore.putDoc(doc); } catch (e) { toast(/quota/i.test(String(e && e.name) + e) ? 'There is not enough storage space for that file.' : 'Could not create the document: ' + e.message); return null; }
+    docs.unshift(doc);
+    await openDoc(doc.id, { force: true });
+    return doc;
+  }
+
+  async function createPdfDoc(file, name) {
+    const buf = await file.arrayBuffer();
+    setStatus('Opening PDF…', 'pending');
+    const info = await NpPdf.newRecord(buf);
+    if (current && dirty) await saveNow();
+    await dropBlankCurrent();
+    const doc = Object.assign(newDocRecord('', name), { type: 'pdf', titleAuto: false, sources: [buf], pages: info.pages, pageCount: info.pages.length, items: [], fields: {}, text: info.text });
+    return addRecord(doc);
+  }
+
   async function createDoc(html = '', title = '', opts = {}) {
     if (current && dirty) await saveNow();
-    // A blank, untouched document is replaced rather than left behind.
-    const blank = current && !current.title && !current.goal && !(current.html || '').replace(/<p><br><\/p>|<br>/g, '').trim() && isEmptyDoc();
-    if (blank) {
-      const old = current;
-      await NpStore.deleteDoc(old.id).catch(() => {});
-      docs = docs.filter((d) => d !== old);
-      current = null;
-    }
+    await dropBlankCurrent();
     const doc = newDocRecord(html, title);
     if (opts.settings) Object.assign(doc.settings, opts.settings);
     const tmp = document.createElement('div');
@@ -319,7 +358,7 @@
         if (!fresh) return;
         const i = docs.findIndex((d) => d.id === m.id);
         if (current && current.id === m.id) {
-          if (dirty || fresh.updated <= current.updated) return;
+          if (dirty || fresh.updated <= current.updated || fresh.type === 'pdf') return;
           Object.assign(current, fresh);
           editor.innerHTML = NpSanitize.html(fresh.html);
           applyDocSettings();
@@ -909,14 +948,15 @@
     // Toolbar buttons must not take focus from the document, or the selection goes with it.
     $('#toolbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
     $('#ctxbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
-    const tb = $('#toolbar');
-    const edges = () => {
-      tb.classList.toggle('more-left', tb.scrollLeft > 2);
-      tb.classList.toggle('more-right', tb.scrollLeft + tb.clientWidth < tb.scrollWidth - 2);
-    };
-    tb.addEventListener('scroll', edges, { passive: true });
-    window.addEventListener('resize', edges);
-    edges();
+    for (const tb of [$('#toolbar'), $('#pdf-toolbar')]) {
+      const edges = () => {
+        tb.classList.toggle('more-left', tb.scrollLeft > 2);
+        tb.classList.toggle('more-right', tb.scrollLeft + tb.clientWidth < tb.scrollWidth - 2);
+      };
+      tb.addEventListener('scroll', edges, { passive: true });
+      window.addEventListener('resize', edges);
+      new ResizeObserver(edges).observe(tb);
+    }
     paintColorBars();
   }
 
@@ -1093,19 +1133,50 @@
 
   /* =========================================================== actions */
 
+  const pdfMode = () => !!current && current.type === 'pdf';
+
+  async function downloadPdf() {
+    NpPdf.finishEditing();
+    await saveNow();
+    setStatus('Preparing PDF…', 'pending');
+    try {
+      const blob = await NpPdf.export(current);
+      download(blob, safeFileName(displayTitle(current), 'pdf'));
+    } catch (e) {
+      toast('Could not make the PDF: ' + (e.message || e), 7000);
+    }
+    setStatus('Saved', 'ok');
+  }
+
+  async function printPdf() {
+    NpPdf.finishEditing();
+    const w = window.open('', '_blank');
+    try {
+      const blob = await NpPdf.export(current);
+      const url = URL.createObjectURL(blob);
+      if (w) { w.location.href = url; toast('Your PDF opened in a new tab. Print it from there.', 4000); }
+      else download(blob, safeFileName(displayTitle(current), 'pdf'));
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    } catch (e) {
+      if (w) w.close();
+      toast('Could not make the PDF: ' + (e.message || e), 7000);
+    }
+  }
+
   const ACTIONS = {
     'new': () => createDoc(),
     open: () => $('#file-open').click(),
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
-    'export': (arg) => exportAs(arg),
-    print: () => printDoc(),
+    'export': (arg) => (pdfMode() ? downloadPdf() : exportAs(arg)),
+    print: () => (pdfMode() ? printPdf() : printDoc()),
     'page-setup': pageSetupDialog,
     backup: backupAll,
     'restore-backup': () => $('#file-backup').click(),
     'delete': () => current && deleteDoc(current.id),
     cmd: (arg) => {
+      if (pdfMode()) { if (arg === 'undo') NpPdf.undo(); if (arg === 'redo') NpPdf.redo(); return; }
       exec(arg);
       if (arg === 'insertUnorderedList' || arg === 'insertOrderedList') {
         const ul = closestInEditor('ul.checklist');
@@ -1132,7 +1203,7 @@
     view: (arg) => setView(arg),
     theme: (arg) => setTheme(arg),
     'toggle-theme': () => setTheme(effectiveTheme() === 'dark' ? 'light' : 'dark'),
-    zoom: (arg) => setZoom(arg === 'in' ? settings.zoom + 0.1 : arg === 'out' ? settings.zoom - 0.1 : 1),
+    zoom: (arg) => pdfMode() ? NpPdf.zoom(arg || 'reset') : setZoom(arg === 'in' ? settings.zoom + 0.1 : arg === 'out' ? settings.zoom - 0.1 : 1),
     'toggle-sidebar': () => setSidebar(!document.body.classList.contains('sidebar-open')),
     focus: toggleFocus,
     'word-count': wordCountDialog,
@@ -1147,7 +1218,11 @@
     'find-prev': () => findStep(-1),
     'find-close': () => closeFind(true),
     'replace-one': replaceOne,
-    'replace-all': replaceAll
+    'replace-all': replaceAll,
+    'pdf-rotate': (arg) => NpPdf.rotateCurrent(+arg),
+    'pdf-delete-page': () => NpPdf.deleteCurrent(),
+    'pdf-blank': () => NpPdf.insertBlank(),
+    'pdf-add': () => NpPdf.addPages()
   };
 
   document.addEventListener('click', (e) => {
@@ -1163,6 +1238,7 @@
   /* ----- keyboard shortcuts ----- */
 
   document.addEventListener('keydown', (e) => {
+    if (pdfMode() && !openMenu && NpPdf.onKey(e)) return;
     if (e.key === 'Escape') {
       if (document.querySelector('dialog[open]')) return;
       if (popover.open) { closePopover(); restoreSelection(); return; }
@@ -1178,10 +1254,15 @@
     const code = e.code;
     const run = (fn) => { e.preventDefault(); fn(); };
 
-    if (k === 's' && !e.shiftKey) return run(() => { saveNow('Saved by you').then(() => toast(NpStore.persistent ? 'Saved — a restore point was added to version history' : 'Saved for this visit only')); });
+    if (k === 's' && !e.shiftKey) return run(() => { saveNow('Saved by you').then(() => toast(!NpStore.persistent ? 'Saved for this visit only' : pdfMode() ? 'Saved' : 'Saved — a restore point was added to version history')); });
     if (k === 'o' && !e.shiftKey) return run(() => $('#file-open').click());
-    if (k === 'p' && !e.shiftKey) return run(printDoc);
+    if (k === 'p' && !e.shiftKey) return run(() => (pdfMode() ? printPdf() : printDoc()));
     if (k === 'f' && e.shiftKey) return run(toggleFocus);
+    if (pdfMode()) {
+      if (k === '/') run(shortcutsDialog);
+      else if (e.altKey && code === 'KeyN') run(() => createDoc());
+      return;
+    }
     if (k === 'f' && !e.altKey) return run(() => openFind(false));
     if (k === 'h' && !e.shiftKey) return run(() => openFind(true));
     if (k === '/') return run(shortcutsDialog);
@@ -1469,6 +1550,7 @@
       ['Text', [['Bold', 'Ctrl+B'], ['Italic', 'Ctrl+I'], ['Underline', 'Ctrl+U'], ['Strikethrough', 'Ctrl+Shift+X'], ['Inline code', 'Ctrl+E'], ['Superscript / subscript', 'Ctrl+. / Ctrl+,'], ['Link', 'Ctrl+K'], ['Clear formatting', 'Ctrl+\\']]],
       ['Paragraphs', [['Normal text', 'Ctrl+Alt+0'], ['Heading 1–3', 'Ctrl+Alt+1 / Ctrl+Alt+3'], ['Numbered list', 'Ctrl+Shift+7'], ['Bulleted list', 'Ctrl+Shift+8'], ['Checklist', 'Ctrl+Shift+9'], ['Align left / center / right / justify', 'Ctrl+Shift+L / Ctrl+Shift+E / Ctrl+Shift+R / Ctrl+Shift+J'], ['Indent list item', 'Tab / Shift+Tab'], ['Page break', 'Ctrl+Enter']]],
       ['Document', [['Save a restore point', 'Ctrl+S'], ['Open a file', 'Ctrl+O'], ['New document', 'Ctrl+Alt+N'], ['Find / replace', 'Ctrl+F / Ctrl+H'], ['Print', 'Ctrl+P'], ['Word count', 'Ctrl+Shift+C'], ['Focus mode', 'Ctrl+Shift+F'], ['Paste without formatting', 'Ctrl+Shift+V']]],
+      ['PDF tools (single keys, while a PDF is open)', [['Select and move', 'V'], ['Edit the PDF’s text', 'E'], ['Add text', 'T'], ['Highlight', 'H'], ['White-out', 'W'], ['Draw', 'D'], ['Box', 'B'], ['Delete what is selected', 'Delete'], ['Nudge what is selected', 'Arrow keys']]],
       ['Markdown shortcuts (type, then space)', [['Heading 1, 2, 3', '# / ## / ###'], ['Bulleted list', '- / *'], ['Numbered list', '1.'], ['Checklist', '[ ]'], ['Quote', '>'], ['Code block', '```'], ['Horizontal line (then Enter)', '---']]]
     ];
     const html = groups.map(([g, rows]) => '<h3>' + escapeHtml(g) + '</h3><table class="keys">' +
@@ -2001,6 +2083,7 @@
         const name = file.name.replace(/\.[^.]+$/, '');
         const ext = (file.name.split('.').pop() || '').toLowerCase();
         let html;
+        if (ext === 'pdf' || file.type === 'application/pdf') { last = (await createPdfDoc(file, name)) || last; continue; }
         if (ext === 'docx') html = NpSanitize.html(await NpDocx.import(await file.arrayBuffer()));
         else if (ext === 'doc') { toast('Old .doc files cannot be opened. In Word, use Save As → .docx first.', 6000); continue; }
         else if (ext === 'md' || ext === 'markdown' || file.type === 'text/markdown') html = NpSanitize.html(NpMarkdown.toHtml(await file.text()));
@@ -2015,7 +2098,7 @@
         toast('Could not open “' + file.name + '”: ' + (e.message || e), 6000);
       }
     }
-    if (last) { placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); }
+    if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); }
   }
 
   $('#file-open').addEventListener('change', (e) => {
@@ -2028,17 +2111,54 @@
     if (!current) return;
     await saveNow();
     const src = current;
+    if (src.type === 'pdf') {
+      const now = Date.now();
+      const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
+        id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0))
+      });
+      await addRecord(copy);
+      toast('Copy created');
+      return;
+    }
     await createDoc(src.html, 'Copy of ' + displayTitle(src), { settings: src.settings, keepFocus: true });
     toast('Copy created');
   }
 
   async function backupAll() {
     await saveNow();
-    const all = await NpStore.allDocs();
+    const all = (await NpStore.allDocs()).map((d) => (d.type === 'pdf' ? Object.assign({}, d, { sources: d.sources.map(bufToB64) }) : d));
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);
     download(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'notepad-backup-' + stamp + '.json');
     toast('Backup downloaded (' + all.length + ' document' + (all.length === 1 ? '' : 's') + ')');
+  }
+
+  function bufToB64(buf) {
+    const bytes = new Uint8Array(buf);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+
+  function b64ToBuf(b64) {
+    const bin = atob(String(b64));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out.buffer;
+  }
+
+  // A PDF from a backup: keep only the fields the editor knows, with sane types.
+  function restoredPdf(raw, id) {
+    const num = (v) => (Number.isFinite(+v) ? +v : 0);
+    const items = (Array.isArray(raw.items) ? raw.items : []).filter((it) => it && typeof it === 'object' && typeof it.page === 'string' &&
+      ['text', 'image', 'highlight', 'whiteout', 'box', 'ink'].includes(it.type) && (it.type !== 'image' || /^data:image\/(png|jpeg);base64,/.test(it.src)));
+    return Object.assign(newDocRecord('', String(raw.title || 'PDF')), {
+      id, type: 'pdf', titleAuto: false, text: String(raw.text || ''),
+      created: num(raw.created) || Date.now(), updated: num(raw.updated) || Date.now(),
+      sources: raw.sources.map(b64ToBuf),
+      pages: raw.pages.filter((p) => p && typeof p.uid === 'string').map((p) => ({ uid: p.uid, src: num(p.src), index: num(p.index), rotate: num(p.rotate) % 360, w: num(p.w), h: num(p.h) })),
+      pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {}
+    });
   }
 
   async function restoreBackupFile(file) {
@@ -2048,6 +2168,17 @@
     let added = 0;
     let skipped = 0;
     for (const raw of data.docs) {
+      if (raw && raw.type === 'pdf' && Array.isArray(raw.sources) && Array.isArray(raw.pages)) {
+        const existing = docs.find((d) => d.id === raw.id);
+        if (existing && existing.updated === raw.updated) { skipped++; continue; }
+        try {
+          const doc = restoredPdf(raw, existing ? uid() : String(raw.id || uid()));
+          await NpStore.putDoc(doc);
+          docs.push(doc);
+          added++;
+        } catch (e) { /* a damaged entry is skipped */ }
+        continue;
+      }
       if (!raw || typeof raw.html !== 'string') continue;
       const existing = docs.find((d) => d.id === raw.id);
       if (existing && existing.updated === raw.updated && existing.html === raw.html) { skipped++; continue; }
@@ -2091,8 +2222,10 @@
       }
       return el('li', { class: 'doc-item' + (active ? ' active' : '') },
         el('button', { class: 'doc-open', type: 'button', 'aria-current': active ? 'true' : null, onclick: () => openDoc(d.id) },
-          el('span', { class: 'doc-name' }, displayTitle(d)),
-          el('span', { class: 'doc-meta' }, snippet || (ago(d.updated) + ' · ' + fmtNum(d.words || 0) + ' word' + (d.words === 1 ? '' : 's')))),
+          el('span', { class: 'doc-name' }, d.type === 'pdf' ? el('span', { class: 'doc-badge' }, 'PDF') : null, displayTitle(d)),
+          el('span', { class: 'doc-meta' }, snippet || (ago(d.updated) + ' · ' + (d.type === 'pdf'
+            ? fmtNum(d.pageCount || (d.pages || []).length) + ' page' + ((d.pageCount || (d.pages || []).length) === 1 ? '' : 's')
+            : fmtNum(d.words || 0) + ' word' + (d.words === 1 ? '' : 's'))))),
         el('button', { class: 'doc-del icon-btn sm', type: 'button', 'data-icon': 'trash', title: 'Delete', 'aria-label': 'Delete ' + displayTitle(d), onclick: (e) => { e.stopPropagation(); deleteDoc(d.id); } }));
     }));
     if (!list.length) docList.append(el('li', { class: 'doc-empty' }, q ? 'No documents match.' : 'No documents yet.'));
@@ -2111,7 +2244,7 @@
   const scheduleMetrics = debounce(refreshMetrics, 250);
 
   function refreshMetrics() {
-    if (!current) return;
+    if (!current || current.type === 'pdf') return;
     const text = plainText();
     const st = stats(text);
     $('#sb-count').textContent = fmtNum(st.words) + ' word' + (st.words === 1 ? '' : 's');
@@ -2299,6 +2432,7 @@
     if (isMac) for (const k of $$('kbd')) k.textContent = k.textContent.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     for (const b of $$('[title]')) if (isMac) b.title = b.title.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     buildToolbar();
+    NpPdf.init({ el, toast, dialog, changed: () => markDirty() });
     applyTheme();
     setView(settings.view);
     setZoom(settings.zoom);

@@ -1,8 +1,9 @@
 # Notepad Online
 
-A fast, private word processor that runs entirely in your browser. No
-account, no server, no tracking. What you write stays on your device. It
-saves as you type, works offline, and opens and saves Word documents.
+A fast, private word processor and PDF editor that runs entirely in your
+browser. No account, no server, no tracking. What you write stays on your
+device. It saves as you type, works offline, opens and saves Word documents,
+and lets you edit and sign PDFs.
 
 ## Features
 
@@ -22,6 +23,21 @@ saves as you type, works offline, and opens and saves Word documents.
 - **Download** as Word (`.docx`), PDF, Markdown, web page or plain text
 - Page setup per document: font, size, line spacing, Letter or A4, margins
 - Back up every document to one file and restore it anywhere
+
+**PDFs**
+- Open any PDF (menu, or drop it on the window). It goes in your documents list like everything else.
+- **Edit text**: click any line of the PDF's own text and retype it. The new text matches the original's color and size, in the closest standard font.
+- Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
+- Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
+- Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
+- Undo and redo for everything; your changes are saved as you go
+- **Download** a new PDF with your changes. The original file is never touched.
+
+What PDF editing cannot do, so nothing surprises you:
+- Changed or whited-out text is **covered, not erased**. The old words are still inside the file and can be copied out, so do not use this to hide private information.
+- Replacement text uses standard PDF fonts (Helvetica, Times, Courier), so it can look slightly different from the original font. Characters outside Western European alphabets cannot be written yet.
+- Scanned pages are pictures, so their words cannot be edited (but you can white-out and type over them).
+- Password-protected PDFs cannot be changed.
 
 **Tools**
 - Find and replace with highlighting, match case, whole words and regex
@@ -61,6 +77,8 @@ js/sanitize.js         cleans pasted and opened content
 js/markdown.js         Markdown import and export
 js/docx.js             Word .docx import and export
 js/zip.js              the zip reading and writing .docx needs
+js/pdf.js              the PDF editor
+vendor/                PDF.js (shows pages) and pdf-lib (writes PDFs), loaded only for PDFs
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

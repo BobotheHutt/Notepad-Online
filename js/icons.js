@@ -49,7 +49,19 @@
     colRight: '<rect x="3" y="3" width="9" height="18" rx="1.5"/><path d="M15 12h7M18.5 8.5v7"/>',
     delRow: '<rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="m9.5 10.5 5 3M14.5 10.5l-5 3"/>',
     delCol: '<rect x="8" y="3" width="8" height="18" rx="1.5"/><path d="m10.5 9.5 3 5M13.5 9.5l-3 5"/>',
-    header: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18" stroke-width="3"/>'
+    header: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18" stroke-width="3"/>',
+    pointer: '<path d="m4 4 7 17 2.5-7.5L21 11z"/>',
+    textCursor: '<path d="M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1M7 22h1a4 4 0 0 0 4-4M7 2h1a4 4 0 0 1 4 4M9 12h6"/>',
+    type: '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
+    eraser: '<path d="m7 21-4.3-4.3a2.4 2.4 0 0 1 0-3.4l9.6-9.6a2.4 2.4 0 0 1 3.4 0l5.6 5.6a2.4 2.4 0 0 1 0 3.4L13 21M22 21H7M5 11l9 9"/>',
+    pen: '<path d="M3 17c3-6 5-6 7-2s4 4 7-2 4-6 4-6"/>',
+    square: '<rect x="4" y="5" width="16" height="14" rx="1.5"/>',
+    signature: '<path d="M3 16c2-1 3-6 5-6s0 6 2 6 3-7 5-7 1 5 3 5 2-2 3-2M3 21h18"/>',
+    zoomIn: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
+    zoomOut: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M8 11h6"/>',
+    filePlus: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 12v6M9 15h6"/>',
+    rotateL: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>',
+    rotateR: '<path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/>'
   };
 
   function svg(name) {

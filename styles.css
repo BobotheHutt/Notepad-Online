@@ -83,7 +83,6 @@ body {
     margin-left: auto;
 }
 
-/* Floating Table Layout Component Styles */
 .table-menu-container {
     position: relative;
     display: inline-block;
@@ -238,7 +237,6 @@ body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
     flex: none;
 }
 
-/* Injected Document Table Formatting Styles */
 #editor table {
     width: 100%;
     border-collapse: collapse;
@@ -257,6 +255,21 @@ body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
     font-weight: bold;
 }
 
+/* Inlined Document Images formatting styling */
+#editor img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+    margin: 12px 0;
+    display: block;
+}
+
+/* Visual cue highlight for file hovering dropzones */
+.workspace-wrapper.drag-hover {
+    box-shadow: inset 0 0 15px rgba(0, 123, 255, 0.4);
+    background-color: rgba(0, 123, 255, 0.03) !important;
+}
+
 #preview {
     flex: 1;
     background: var(--preview-bg);
@@ -270,10 +283,9 @@ body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
 #preview h1, #preview h2, #preview h3 { margin-bottom: 10px; margin-top: 10px; }
 #preview ul, #preview ol { padding-left: 20px; margin-bottom: 10px; }
 #preview code { background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
-
-/* Markdown View Table Rendering fallback */
 #preview table { width: 100%; border-collapse: collapse; margin: 15px 0; }
 #preview table th, #preview table td { border: 1px solid var(--table-border); padding: 8px 12px; }
+#preview img { max-width: 100%; height: auto; border-radius: 4px; margin: 12px 0; }
 
 button {
     background: var(--button-bg);

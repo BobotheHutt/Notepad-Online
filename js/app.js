@@ -16,6 +16,9 @@
   const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
+  // Shown in Tools → About, so it is easy to tell which version is running.
+  const APP_VERSION = '2026.10.24-11';
+
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -1575,7 +1578,8 @@
       el('ul', { class: 'facts' },
         el('li', {}, el('strong', {}, String(docs.length)), ' document' + (docs.length === 1 ? '' : 's') + (usage ? ' · ' + usage : '')),
         el('li', {}, NpStore.persistent ? (persisted ? 'Storage is marked persistent: the browser will not clear it to free space.' : 'Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.') : 'This browser is not allowing storage (private window?). Work is kept only until you close the tab.'),
-        el('li', {}, 'Works offline once loaded, and can be installed as an app from your browser’s menu.')),
+        el('li', {}, 'Works offline once loaded, and can be installed as an app from your browser’s menu.'),
+        el('li', {}, 'Version ' + APP_VERSION)),
       el('p', { class: 'muted' }, 'Tip: File → Back up all documents saves everything to one file you can restore on another computer.'));
     dialog({ title: 'About and storage', body });
   }

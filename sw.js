@@ -1,7 +1,9 @@
 /* Notepad Online — offline support.
-   Serves the app from cache and refreshes the cache in the background, so it
-   opens with no connection and picks up updates on the next visit. */
-const CACHE = 'notepad-online-v10';
+   The app's own files are fetched fresh whenever there is a connection (so an
+   update shows up on the next load, not some loads later) and served from the
+   cache only when offline. The large libraries under vendor/ never change for
+   a given version, so they are served from the cache first. */
+const CACHE = 'notepad-online-v11';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
   './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/app.js'
@@ -19,14 +21,19 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin) return;
   e.respondWith(caches.open(CACHE).then(async (cache) => {
     const cached = await cache.match(req, { ignoreSearch: true });
-    const fresh = fetch(req).then((res) => {
+    if (cached && url.pathname.includes('/vendor/')) return cached;
+    try {
+      // no-cache: ask the server even if the browser's own HTTP cache thinks its copy is recent
+      const res = await fetch(req, { cache: 'no-cache' });
       if (res.ok) cache.put(req, res.clone());
       return res;
-    }).catch(() => cached);
-    if (cached) { e.waitUntil(fresh.catch(() => {})); return cached; }
-    return fresh;
+    } catch (err) {
+      if (cached) return cached;
+      throw err;
+    }
   }));
 });

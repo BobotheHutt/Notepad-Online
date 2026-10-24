@@ -243,6 +243,9 @@
     setTool(S.tool === 'image' || S.tool === 'sign' ? 'select' : S.tool);
     updateUndoButtons();
     suggestOcr(rec);
+    if (rec.ocr && Object.values(rec.ocr).some((o) => !o.rules)) {
+      api.toast('This PDF’s text was read by an older version of the app. Click “Read text” again for better edits; for an edit made before, select it and choose Restore original.', 9000);
+    }
     // matched fonts from earlier sessions: load them, then redraw with them
     const used = rec.items.filter((i) => i.font);
     if (used.length && typeof NpFonts !== 'undefined') {

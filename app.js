@@ -31,6 +31,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     updateMetrics();
     buildInteractiveTableGrid();
+    setupDragAndDropImages();
 });
 
 function format(command, value = null) {
@@ -78,7 +79,6 @@ function buildInteractiveTableGrid() {
             cell.dataset.row = r;
             cell.dataset.col = c;
             
-            // Hover matrix mapping event tracking
             cell.addEventListener('mouseover', () => highlightGridCells(r, c));
             cell.addEventListener('click', () => insertTableFromGrid(r, c));
             
@@ -110,7 +110,6 @@ function insertTableFromGrid(rows, cols) {
     for (let i = 0; i < rows; i++) {
         tableHtml += '<tr>';
         for (let j = 0; j < cols; j++) {
-            // First row acts as standard bold structural headers
             if (i === 0) {
                 tableHtml += '<th>Header</th>';
             } else {
@@ -119,16 +118,61 @@ function insertTableFromGrid(rows, cols) {
         }
         tableHtml += '</tr>';
     }
-    tableHtml += '</table><p><br></p>'; // trailing paragraph ensures cursor can escape table layout below
+    tableHtml += '</table><p><br></p>';
     
     format('insertHTML', tableHtml);
     tableGridMenu.classList.add('hidden');
 }
 
-// Close float screens cleanly if clicked outside selection boxes
+// Media Image Integration Core Systems logic
+function triggerImageUpload() {
+    document.getElementById('image-file-input').click();
+}
+
+function handleImageFileSelect(input) {
+    if (input.files && input.files[0]) {
+        processAndInsertImageFile(input.files[0]);
+    }
+}
+
+function setupDragAndDropImages() {
+    // Intercept workspace actions to enable visual drop alerts
+    ['dragenter', 'dragover'].forEach(eventName => {
+        workspaceOuter.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            workspaceOuter.classList.add('drag-hover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        workspaceOuter.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            workspaceOuter.classList.remove('drag-hover');
+        }, false);
+    });
+
+    workspaceOuter.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files[0] && files[0].type.startsWith('image/')) {
+            processAndInsertImageFile(files[0]);
+        }
+    }, false);
+}
+
+function processAndInsertImageFile(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const imgHtml = `<img src="${e.target.result}" alt="Inlined Image"><p><br></p>`;
+        format('insertHTML', imgHtml);
+        triggerAutoSave();
+    };
+    reader.readAsDataURL(file);
+}
+
 window.addEventListener('click', (e) => {
     if (!e.target.matches('#table-btn') && !e.target.closest('#table-grid-menu')) {
-        tableGridMenu.classList.add('hidden');
+        if(tableGridMenu) tableGridMenu.classList.add('hidden');
     }
 });
 

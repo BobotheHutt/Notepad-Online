@@ -303,3 +303,32 @@ function printDoc() {
 
 function findAndReplace() {
     const findText = document.getElementById('find-input').value;
+    const replaceText = document.getElementById('replace-input').value;
+if (!findText) return alert("Enter text to find.");
+const regex = new RegExp(findText, 'g');
+const currentHTML = editor.innerHTML;
+if (!currentHTML.includes(findText)) return alert("Text phrase not found.");
+editor.innerHTML = currentHTML.replace(regex, replaceText);
+updateMetrics();
+triggerAutoSave();
+}
+function clearDoc() {
+if (confirm("Are you sure you want to permanently clear this document?")) {
+editor.innerHTML = '';
+localStorage.removeItem('notepad_online_content');
+updateMetrics();
+if (saveStatus) saveStatus.textContent = "🗑️ Cleared";
+}
+}
+function saveFile(type) {
+let content = type === 'txt' ? editor.innerText : editor.innerHTML;
+let filename = prompt("Enter filename:", document.${type});
+if (!filename) return; // Cancel out safely if user changes mind
+let mimeType = type === 'txt' ? "text/plain" : "text/html";
+const blob = new Blob([content], { type: mimeType });
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = filename;
+link.click();
+URL.revokeObjectURL(link.href);
+}

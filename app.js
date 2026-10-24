@@ -123,6 +123,7 @@ function insertTableFromGrid(rows, cols) {
     
     format('insertHTML', tableHtml);
     tableGridMenu.classList.add('hidden');
+    triggerAutoSave();
 }
 
 // Native Active Spellchecking Engine Toggler
@@ -132,11 +133,11 @@ function toggleSpellcheck() {
     
     if (isSpellcheckOn) {
         editor.setAttribute('spellcheck', 'false');
-        if (btn) btn.textContent = "✔️ Spellcheck: OFF";
+        if (btn) btn.textContent = "✔️ Spellcheck Switcher (OFF)";
         if (btn) btn.classList.remove('active-toggle');
     } else {
         editor.setAttribute('spellcheck', 'true');
-        if (btn) btn.textContent = "✔️ Spellcheck: ON";
+        if (btn) btn.textContent = "✔️ Spellcheck Switcher (ON)";
         if (btn) btn.classList.add('active-toggle');
     }
     
@@ -158,6 +159,7 @@ function handleImageFileSelect(input) {
     }
 }
 
+// Image dropping core handler
 function setupDragAndDropImages() {
     if (!workspaceOuter) return;
     ['dragenter', 'dragover'].forEach(eventName => {
@@ -195,8 +197,8 @@ function processAndInsertImageFile(file) {
 
 // Global click monitoring to automatically hide dropdown submenus smoothly
 window.addEventListener('click', (e) => {
-    if (!e.target.matches('#table-btn') && !e.target.closest('#table-grid-menu')) {
-        if(tableGridMenu) tableGridMenu.classList.add('hidden');
+    if (!e.target.matches('#table-btn') && !e.target.closest('#table-grid-menu') && !e.target.matches('.insert-menu button')) {
+        if (tableGridMenu) tableGridMenu.classList.add('hidden');
     }
 });
 
@@ -254,19 +256,20 @@ function triggerAutoSave() {
 function toggleDarkMode() {
     document.body.classList.toggle('dark-mode');
     const btn = document.getElementById('dark-btn');
-    if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode" : "🌙 Dark Mode";
+    if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode Toggle" : "🌙 Dark Mode Toggle";
 }
 
+// Markdown split parsing layout trigger logic
 function toggleMarkdown() {
     isMarkdownMode = !isMarkdownMode;
     const btn = document.getElementById('md-btn');
     if (isMarkdownMode) {
         if (preview) preview.classList.remove('hidden');
-        if (btn) btn.textContent = "📝 Hide Preview";
+        if (btn) btn.textContent = "📝 Hide Markdown Preview";
         renderMarkdown();
     } else {
         if (preview) preview.classList.add('hidden');
-        if (btn) btn.textContent = "📝 Show Markdown";
+        if (btn) btn.textContent = "📝 Split Markdown View";
     }
 }
 
@@ -298,12 +301,11 @@ function speakText() {
 }
 
 function printDoc() {
-    window.print();
+window.print();
 }
-
 function findAndReplace() {
-    const findText = document.getElementById('find-input').value;
-    const replaceText = document.getElementById('replace-input').value;
+const findText = document.getElementById('find-input').value;
+const replaceText = document.getElementById('replace-input').value;
 if (!findText) return alert("Enter text to find.");
 const regex = new RegExp(findText, 'g');
 const currentHTML = editor.innerHTML;
@@ -322,8 +324,9 @@ if (saveStatus) saveStatus.textContent = "🗑️ Cleared";
 }
 function saveFile(type) {
 let content = type === 'txt' ? editor.innerText : editor.innerHTML;
-let filename = prompt("Enter filename:", document.${type});
-if (!filename) return; // Cancel out safely if user changes mind
+let defaultName = type === 'txt' ? "document.txt" : "document.html";
+let filename = prompt("Enter filename:", defaultName);
+if (!filename) return;
 let mimeType = type === 'txt' ? "text/plain" : "text/html";
 const blob = new Blob([content], { type: mimeType });
 const link = document.createElement('a');

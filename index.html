@@ -33,6 +33,7 @@
                 <button onclick="changeFontSize('increase')" title="Zoom In">A+</button>
                 <button onclick="changeFontSize('decrease')" title="Zoom Out">A-</button>
                 <button onclick="toggleDarkMode()" id="dark-btn" title="Toggle Dark Mode">🌙 Dark Mode</button>
+                <button onclick="toggleMarkdown()" id="md-btn" title="Toggle Markdown Mode">📝 Show Markdown</button>
                 <button onclick="speakText()" title="Read Aloud">🔊 Read</button>
             </div>
 
@@ -51,11 +52,15 @@
             <button onclick="findAndReplace()">Replace All</button>
         </div>
 
-        <!-- Text Work Area -->
-        <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
+        <!-- Workspace Wrapper (Splits for Markdown view) -->
+        <div class="workspace">
+            <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
+            <div id="preview" class="hidden"></div>
+        </div>
 
         <!-- Status Tracking Bar -->
         <div class="status-bar">
+            <span id="save-status">💾 Auto-saved</span>
             <span id="word-count">Words: 0</span>
             <span id="char-count">Characters: 0</span>
         </div>

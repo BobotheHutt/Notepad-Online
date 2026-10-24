@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notepad+ Advanced Text Editor</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="editor-container">
+        <!-- Toolbar for Word Processing Features -->
+        <div class="toolbar">
+            <div class="tool-group">
+                <button onclick="format('bold')" title="Bold"><b>B</b></button>
+                <button onclick="format('italic')" title="Italic"><i>I</i></button>
+                <button onclick="format('underline')" title="Underline"><u>U</u></button>
+                <button onclick="format('strikeThrough')" title="Strikethrough"><s>S</s></button>
+            </div>
+            
+            <div class="tool-group">
+                <button onclick="format('justifyLeft')" title="Align Left">Left</button>
+                <button onclick="format('justifyCenter')" title="Center">Center</button>
+                <button onclick="format('justifyRight')" title="Align Right">Right</button>
+                <button onclick="format('justifyFull')" title="Justify">Justify</button>
+            </div>
+
+            <div class="tool-group">
+                <button onclick="changeFontSize('increase')" title="Zoom In">A+</button>
+                <button onclick="changeFontSize('decrease')" title="Zoom Out">A-</button>
+                <button onclick="speakText()" title="Read Aloud">🔊 Read</button>
+            </div>
+
+            <div class="tool-group download-group">
+                <button onclick="saveFile('txt')" class="btn-save">Save .txt</button>
+                <button onclick="saveFile('html')" class="btn-save">Save .html</button>
+            </div>
+        </div>
+
+        <!-- The actual editor field -->
+        <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
+
+        <!-- Live status bar -->
+        <div class="status-bar">
+            <span id="word-count">Words: 0</span>
+            <span id="char-count">Characters: 0</span>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

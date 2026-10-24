@@ -13,6 +13,7 @@
     --button-bg: #ffffff;
     --button-text: #333333;
     --preview-bg: #fafafa;
+    --workspace-bg: #ffffff;
 }
 
 body.dark-mode {
@@ -24,6 +25,7 @@ body.dark-mode {
     --button-bg: #3a3a3a;
     --button-text: #e0e0e0;
     --preview-bg: #252525;
+    --workspace-bg: #1e1e1e;
 }
 
 body {
@@ -40,7 +42,7 @@ body {
 
 .editor-container {
     width: 100%;
-    max-width: 1100px;
+    max-width: 1200px;
     background: var(--container-bg);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -65,6 +67,7 @@ body {
     gap: 4px;
     border-right: 1px solid var(--border-color);
     padding-right: 12px;
+    align-items: center;
 }
 
 .tool-group:last-child {
@@ -76,13 +79,33 @@ body {
     margin-left: auto;
 }
 
+.color-group input[type="color"] {
+    border: none;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    background: none;
+    vertical-align: middle;
+}
+
+select {
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    background: var(--button-bg);
+    color: var(--button-text);
+    font-size: 13px;
+    outline: none;
+}
+
 .find-replace-bar {
     background: var(--toolbar-bg);
     border-bottom: 1px solid var(--border-color);
     padding: 8px 15px;
     display: flex;
-    gap: 10px;
+    gap: 12px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .find-replace-bar input {
@@ -95,42 +118,87 @@ body {
     outline: none;
 }
 
+.goal-group {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #888;
+}
+
+.goal-group input {
+    width: 70px;
+}
+
+/* Goal Progress Bar styling */
+#goal-progress-container {
+    width: 100%;
+    height: 4px;
+    background: var(--border-color);
+}
+#goal-progress-container.hidden { display: none; }
+#goal-progress-bar {
+    width: 0%;
+    height: 100%;
+    background: #28a745;
+    transition: width 0.2s ease;
+}
+
+/* Outer wrapper handles the scroll & page backgrounds */
+.workspace-wrapper {
+    overflow-y: auto;
+    height: 550px;
+    transition: background 0.3s;
+}
+
+.workspace-wrapper.bg-notepad { background: var(--workspace-bg); }
+.workspace-wrapper.bg-page { background: #e9ecef; }
+body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
+
 .workspace {
     display: flex;
-    min-height: 500px;
-    background: var(--container-bg);
+    min-height: 100%;
+    justify-content: center;
 }
 
 #editor, #preview {
-    flex: 1;
     padding: 35px;
     font-size: 16px;
     line-height: 1.6;
     outline: none;
-    overflow-y: auto;
-    height: 550px;
+    min-height: 100%;
 }
 
-#editor {
+/* Styles for default seamless Notepad view */
+.workspace-wrapper.bg-notepad #editor {
+    flex: 1;
     color: var(--text-color);
+    background: var(--workspace-bg);
+}
+
+/* Styles for Virtual A4/Letter Paper Sheet view */
+.workspace-wrapper.bg-page #editor {
+    width: 100%;
+    max-width: 812px; /* standard proportions matching a paper canvas */
+    background: var(--container-bg);
+    margin: 20px auto;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    flex: none;
 }
 
 #preview {
+    flex: 1;
     background: var(--preview-bg);
     border-left: 1px solid var(--border-color);
     color: var(--text-color);
 }
 
-#preview.hidden {
-    display: none;
-}
+#preview.hidden { display: none; }
+#editor[placeholder]:empty:before { content: attr(placeholder); color: #888; }
 
-#editor[placeholder]:empty:before {
-    content: attr(placeholder);
-    color: #888;
-}
-
-/* Base styling for elements rendered inside the Markdown preview window */
 #preview h1, #preview h2, #preview h3 { margin-bottom: 10px; margin-top: 10px; }
 #preview ul, #preview ol { padding-left: 20px; margin-bottom: 10px; }
 #preview code { background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
@@ -161,15 +229,14 @@ button:hover { opacity: 0.85; }
     color: #888;
 }
 
-#save-status {
-    margin-right: auto;
-    font-style: italic;
-    color: #28a745;
-}
+#save-status { margin-right: auto; font-style: italic; color: #28a745; }
+#goal-status { font-weight: bold; color: #007bff; margin-right: 10px; }
 
 @media print {
     body { background: white; color: black; padding: 0; }
-    .toolbar, .find-replace-bar, .status-bar, #preview { display: none !important; }
+    .toolbar, .find-replace-bar, .status-bar, #preview, #goal-progress-container { display: none !important; }
     .editor-container { border: none; box-shadow: none; max-width: 100%; }
+    .workspace-wrapper { height: auto; overflow: visible; background: white; }
+    .workspace-wrapper.bg-page #editor { border: none; box-shadow: none; margin: 0; max-width: 100%; padding: 0; }
     #editor { padding: 0; height: auto; min-height: auto; }
 }

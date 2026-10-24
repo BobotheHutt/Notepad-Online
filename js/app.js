@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.24-12';
+  const APP_VERSION = '2026.10.24-13';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2165,7 +2165,8 @@
       id, type: 'pdf', titleAuto: false, text: String(raw.text || ''),
       created: num(raw.created) || Date.now(), updated: num(raw.updated) || Date.now(),
       sources: raw.sources.map(b64ToBuf),
-      pages: raw.pages.filter((p) => p && typeof p.uid === 'string').map((p) => ({ uid: p.uid, src: num(p.src), index: num(p.index), rotate: num(p.rotate) % 360, w: num(p.w), h: num(p.h) })),
+      pages: raw.pages.filter((p) => p && typeof p.uid === 'string').map((p) => ({ uid: p.uid, src: num(p.src), index: num(p.index), rotate: num(p.rotate) % 360, w: num(p.w), h: num(p.h),
+        ...(num(p.skew) && Math.abs(num(p.skew)) <= 10 ? { skew: num(p.skew), paper: /^#[0-9a-f]{6}$/i.test(p.paper) ? p.paper : '#ffffff' } : {}) })),
       pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {}
     });
   }

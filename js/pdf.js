@@ -223,6 +223,25 @@
     return S.pageCache.get(key);
   }
 
+  // Options to draw a page at k pixels per point (offset in pixels), turned
+  // by the page's skew so a scan that went through the scanner crooked is
+  // drawn straight.
+  const paperOf = (info) => (info.entry.skew && info.entry.paper) || '#fff';
+  function renderOpts(info, g, k, ox, oy) {
+    ox = ox || 0;
+    oy = oy || 0;
+    const o = { canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot, offsetX: ox, offsetY: oy }) };
+    const a = ((info.entry.skew || 0) * Math.PI) / 180;
+    if (a) {
+      const cx = (info.w / 2) * k + ox;
+      const cy = (info.h / 2) * k + oy;
+      const c = Math.cos(-a);
+      const sn = Math.sin(-a);
+      o.transform = [c, sn, -sn, c, cx - c * cx + sn * cy, cy - sn * cx - c * cy];
+    }
+    return o;
+  }
+
   async function open(rec) {
     close();
     S.rec = rec;
@@ -439,8 +458,10 @@
     const off = document.createElement('canvas');
     off.width = W;
     off.height = H;
-    const viewport = info.page.getViewport({ scale: scale * dpr, rotation: info.rot });
-    const task = info.page.render({ canvasContext: off.getContext('2d'), viewport });
+    const og = off.getContext('2d');
+    og.fillStyle = paperOf(info);
+    og.fillRect(0, 0, W, H);
+    const task = info.page.render(renderOpts(info, og, scale * dpr));
     info.task = task;
     let done = true;
     try { await task.promise; } catch (e) { done = false; /* cancelled by a newer render */ }
@@ -558,7 +579,7 @@
       if (sel && lay.length) {
         const y0 = Math.min(...it.words.map((w) => w.y0)) - 1;
         const y1 = Math.max(...it.words.map((w) => w.y1)) + 1;
-        const x1 = Math.max(...lay.map((r) => r.x + textWidth(r.text, r.st) * r.scaleX));
+        const x1 = Math.max(...lay.map((r) => r.x + measureRun(r.text, r.st, it.smallCaps).w * r.scaleX));
         frag.append(el('div', { class: 'pdf-conv-box', style: 'left:' + px(lay[0].x - 1) + ';top:' + px(y0) + ';width:' + px(x1 - lay[0].x + 2) + ';height:' + px(y1 - y0) }));
       }
       for (const r of lay) {
@@ -584,7 +605,8 @@
             (it.scan ? ';filter:blur(' + Math.max(0.2, 0.16 * S.scale).toFixed(2) + 'px)' : '') +
             (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
         });
-        d.textContent = r.text;
+        if (it.smallCaps) d.append(...scParts(r.text, it.smallCaps).map((q) => (q.small ? el('span', { style: 'font-size:' + q.k + 'em' }, q.t) : document.createTextNode(q.t))));
+        else d.textContent = r.text;
         frag.append(d);
       }
       return frag;
@@ -593,7 +615,8 @@
       const d = el('div', {
         class: 'pdf-item pdf-textbox' + (sel ? ' sel' : ''), 'data-id': it.id,
         style: 'left:' + px(it.x) + ';top:' + px(it.y) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(it).replace(/"/g, "'") +
-          ';color:' + it.color + ';font-weight:' + (it.font ? it.font.weight : it.bold ? 700 : 400) + ';font-style:' + (it.italic ? 'italic' : 'normal')
+          ';color:' + it.color + ';font-weight:' + (it.font ? it.font.weight : it.bold ? 700 : 400) + ';font-style:' + (it.italic ? 'italic' : 'normal') +
+          (it.smallCaps ? ';font-variant:small-caps' : '')
       });
       d.textContent = it.anchored || it.conv ? it.text.replace(/\s+/g, ' ') : it.text;
       return d;
@@ -635,7 +658,7 @@
     info.nativeCount = out.length;
     // A scanned page has no text of its own: use what OCR read, if it has run.
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
-    if (!out.length && ocr && ocr.rot === info.rot) {
+    if (!out.length && ocrFits(ocr, info.entry, info.rot)) {
       ocr.lines.forEach((l, li) => ocrPhrases(l, ocr.rules).forEach((ph, pi) => out.push({
         key: info.entry.uid + ':ocr' + li + '.' + pi, str: ph.map((w) => w.t).join(' '), x: ph[0].x0, base: l.base, size: l.size,
         top: Math.min(...ph.map((w) => w.y0)), w: ph[ph.length - 1].x1 - ph[0].x0, words: ph, scan: true, fontName: null, family: 'sans'
@@ -887,8 +910,9 @@
     const ctx = c.getContext('2d');
     const scale = (c.width / info.w);
     if (!info.page) { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); return; }
-    const vp = info.page.getViewport({ scale, rotation: info.rot });
-    try { await info.page.render({ canvasContext: ctx, viewport: vp }).promise; } catch (e) { /* ignore */ }
+    ctx.fillStyle = paperOf(info);
+    ctx.fillRect(0, 0, c.width, c.height);
+    try { await info.page.render(renderOpts(info, ctx, scale)).promise; } catch (e) { /* ignore */ }
   }
 
   function scrollToPage(uidv) {
@@ -1429,9 +1453,9 @@
     c.width = Math.max(1, Math.ceil((x1 - x0) * k));
     c.height = Math.max(1, Math.ceil((y1 - y0) * k));
     const g = c.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = '#fff';
+    g.fillStyle = paperOf(info);
     g.fillRect(0, 0, c.width, c.height);
-    if (info.page) await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot, offsetX: -x0 * k, offsetY: -y0 * k }) }).promise;
+    if (info.page) await info.page.render(renderOpts(info, g, k, -x0 * k, -y0 * k)).promise;
     return words.filter((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2).slice(0, 8).map((w) => ({
       text: w.t, canvas: c,
       x: Math.max(0, Math.floor((w.x0 - x0) * k)), y: Math.max(0, Math.floor((w.y0 - y0) * k)),
@@ -1693,9 +1717,9 @@
     c.width = Math.round(info.w * k);
     c.height = Math.round(info.h * k);
     const g = c.getContext('2d');
-    g.fillStyle = '#fff';
+    g.fillStyle = paperOf(info);
     g.fillRect(0, 0, c.width, c.height);
-    await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot }) }).promise;
+    await info.page.render(renderOpts(info, g, k)).promise;
     const px = g.getImageData(0, 0, c.width, c.height).data;
     const clean = withoutRules(c, px);
     const { data } = await worker.recognize(clean);
@@ -1778,6 +1802,69 @@
     return { lines, rules };
   }
 
+  // OCR read from the page as it is drawn now (same quarter turn, same straightening)
+  function ocrFits(ocr, entry, rot) {
+    return !!ocr && ocr.rot === rot && (ocr.skew || 0) === (entry.skew || 0);
+  }
+
+  // How far a scan's lines slope, in degrees (clockwise positive), or 0. The
+  // page's dark pixels are sheared at a range of angles; at the right one
+  // the lines of text and table borders fall into the fewest, fullest rows.
+  async function detectSkew(info) {
+    if (!info.page) return 0;
+    const k = 100 / 72;
+    const W = Math.round(info.w * k);
+    const H = Math.round(info.h * k);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, W, H);
+    await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot }) }).promise;
+    const d = g.getImageData(0, 0, W, H).data;
+    const xs = [];
+    const ys = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 128) { xs.push(x); ys.push(y); }
+    }
+    if (xs.length < 400) return { skew: 0 };
+    // the paper: the usual color around the page's edge, to fill the corners
+    // a straightened page turns away from
+    const edge = [];
+    const m = Math.max(2, Math.round(Math.min(W, H) * 0.02));
+    for (let x = 0; x < W; x += 3) for (const y of [m, H - 1 - m]) edge.push((y * W + x) * 4);
+    for (let y = 0; y < H; y += 3) for (const x of [m, W - 1 - m]) edge.push((y * W + x) * 4);
+    const lumOf = (i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    edge.sort((p, q) => lumOf(p) - lumOf(q));
+    const pi = edge[Math.floor(edge.length * 0.6)];
+    const paper = '#' + [d[pi], d[pi + 1], d[pi + 2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+    const step = Math.max(1, Math.floor(xs.length / 150000));
+    const pad = Math.ceil(W * 0.2);
+    const rows = new Float64Array(H + pad * 2);
+    const score = (deg) => {
+      const t = Math.tan((deg * Math.PI) / 180);
+      rows.fill(0);
+      for (let i = 0; i < xs.length; i += step) {
+        const r = Math.round(ys[i] - xs[i] * t) + pad;
+        if (r >= 0 && r < rows.length) rows[r]++;
+      }
+      let sum = 0;
+      for (let r = 0; r < rows.length; r++) sum += rows[r] * rows[r];
+      return sum;
+    };
+    let best = 0;
+    let top = score(0);
+    const flat = top;
+    for (let a = -8; a <= 8.001; a += 0.25) { const v = score(a); if (v > top) { top = v; best = a; } }
+    const coarse = best;
+    for (let a = coarse - 0.25; a <= coarse + 0.25001; a += 0.025) { const v = score(a); if (v > top) { top = v; best = a; } }
+    // too small to see, or no clear winner (a photo, an empty page)
+    if (Math.abs(best) < 0.1 || top < flat * 1.03) return { skew: 0 };
+    return { skew: Math.round(best * 100) / 100, paper };
+  }
+
   async function nativeTextCount(info) {
     if (info.nativeCount === undefined) { info.text = null; await textItems(info); }
     return info.nativeCount;
@@ -1802,6 +1889,7 @@
     const btn = $('#pdf-toolbar [data-pdf="ocr"]');
     if (btn) btn.disabled = true;
     let found = 0;
+    let straightened = 0;
     try {
       let n = 0;
       const worker = await getOcr((m) => {
@@ -1813,8 +1901,23 @@
         n++;
         if (S.rec !== rec) return;
         api.status('Reading text, page ' + n + ' of ' + targets.length + '…', 'pending');
+        // a crooked scan is straightened first (its own undo step), unless
+        // the page already has edits placed on it as it is
+        if (!rec.items.some((i) => i.page === info.entry.uid)) {
+          const { skew, paper } = await detectSkew(info);
+          if (skew !== (info.entry.skew || 0)) {
+            const was = snap();
+            if (skew) { info.entry.skew = skew; info.entry.paper = paper; } else { delete info.entry.skew; delete info.entry.paper; }
+            commit(was);
+            info.text = null;
+            renderPage(info);
+            const li = document.querySelector('.pdf-thumb[data-uid="' + info.entry.uid + '"]');
+            if (li) renderThumb(li);
+            if (skew) straightened++;
+          }
+        }
         const { lines, rules } = await ocrPage(worker, info);
-        rec.ocr[info.entry.uid] = { rot: info.rot, lines, rules };
+        rec.ocr[info.entry.uid] = { rot: info.rot, skew: info.entry.skew || 0, lines, rules };
         if (lines.length) found++;
         info.text = null;
         info.nativeCount = undefined;
@@ -1834,7 +1937,7 @@
       changed();
       if (made) {
         setTool('edit');
-        api.toast('The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. To check what was read, click Original to see the scan.', 8000);
+        api.toast((straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. To check what was read, click Original to see the scan.', 8000);
       } else if (found) {
         setTool('edit');
         api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.' +
@@ -1945,6 +2048,75 @@
     if (group.length) flush();
   }
 
+  // A line set in small caps: its words start with a full-height capital and
+  // go on in shorter ones (or are all short, for words written in lower
+  // case). Returns the words in their real case and the short letters'
+  // height as a share of the tall ones, or null.
+  function smallCapsOf(words, d, W, H, K, bgHex) {
+    const caps = words.filter((w) => /\p{L}/u.test(w.t));
+    if (!caps.length || caps.some((w) => /\p{Ll}/u.test(w.t))) return null;
+    const bg = [1, 3, 5].map((p) => parseInt(bgHex.slice(p, p + 2), 16));
+    const bgL = bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114;
+    // the top of the ink between two x positions inside a word's box
+    const top = (w, xa, xb) => {
+      const x0 = Math.max(0, Math.floor(xa * K));
+      const x1 = Math.min(W, Math.ceil(xb * K));
+      const y0 = Math.max(0, Math.floor(w.y0 * K) - 1);
+      const y1 = Math.min(H, Math.ceil(w.y1 * K));
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = (y * W + x) * 4;
+        if (bgL - (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) > 80) return y / K;
+      }
+      return null;
+    };
+    const m = words.map((w) => {
+      const letters = w.t.replace(/[^\p{L}]/gu, '');
+      if (letters.length < 2) return null;
+      const per = (w.x1 - w.x0) / w.t.length;
+      const t1 = top(w, w.x0, w.x0 + per * 0.9);
+      // past the first letter, with room for a wide one (M, W)
+      const t2 = top(w, w.x0 + per * (letters.length >= 3 ? 1.7 : 1.2), w.x1);
+      return t1 == null || t2 == null ? null : { first: w.y1 - t1, rest: w.y1 - t2 };
+    });
+    const tall = Math.max(0, ...m.filter(Boolean).map((v) => v.first));
+    if (!tall) return null;
+    let mixed = 0;
+    const ratios = [];
+    const kind = m.map((v) => {
+      if (!v) return 'keep';
+      if (v.first > tall * 0.9 && v.rest < v.first * 0.86) { mixed++; ratios.push(v.rest / v.first); return 'title'; }
+      if (v.first < tall * 0.86 && v.rest < tall * 0.86) { ratios.push(Math.max(v.first, v.rest) / tall); return 'lower'; }
+      return 'keep';
+    });
+    if (!mixed) return null;
+    const ratio = median(ratios);
+    if (!(ratio > 0.55 && ratio < 0.88)) return null;
+    const recase = (t, how) => (how === 'lower' ? t.toLowerCase() : how === 'title' ? t.replace(/^(\P{L}*\p{L})(.*)$/u, (all, a, b) => a + b.toLowerCase()) : t);
+    return { ratio: Math.round(ratio * 1000) / 1000, words: words.map((w, i) => Object.assign({}, w, { t: recase(w.t, kind[i]) })) };
+  }
+
+  // Small caps drawn by hand: capitals at full size, lower-case letters as
+  // capitals at k of it, in runs.
+  function scParts(text, k) {
+    const out = [];
+    for (const ch of text) {
+      const small = ch !== ch.toUpperCase();
+      const last = out[out.length - 1];
+      const t = small ? ch.toUpperCase() : ch;
+      if (last && last.small === small) last.t += t;
+      else out.push({ t, small, k: small ? k : 1 });
+    }
+    return out;
+  }
+  function measureRun(text, st, sc) {
+    if (!sc) return inkOf(text, st);
+    const parts = scParts(text, sc);
+    let adv = 0;
+    for (const p of parts) adv += textWidth(p.t, Object.assign({}, st, { size: st.size * p.k }));
+    const first = inkOf(parts[0].t, Object.assign({}, st, { size: st.size * parts[0].k }));
+    return { lsb: first.lsb, w: adv - first.lsb, h: first.h };
+  }
+
   // The baseline, from where the words' letters stand: the bottom of words
   // with nothing hanging below the line (OCR's own baseline can be pulled
   // down by an underline or a fill-in line).
@@ -2015,9 +2187,9 @@
     c.width = Math.round(info.w * K);
     c.height = Math.round(info.h * K);
     const g = c.getContext('2d', { willReadFrequently: true });
-    g.fillStyle = '#fff';
+    g.fillStyle = paperOf(info);
     g.fillRect(0, 0, c.width, c.height);
-    await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: K, rotation: info.rot }) }).promise;
+    await info.page.render(renderOpts(info, g, K)).promise;
     const view = { canvas: c, w: info.w };
     const samplesOf = (ws, n) => ws.filter((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2).slice(0, n).map((w) => ({
       text: w.t, canvas: c,
@@ -2031,6 +2203,12 @@
       const sw = median(ws.map((w) => w.sw));
       return { t, ink, bold: sw != null ? sw > S.boldStroke : ink.density > 0.3, n: ws.length };
     });
+    // small caps: OCR reads them as capitals, so the letters are measured
+    const cd = g.getImageData(0, 0, c.width, c.height).data;
+    for (const q of list) {
+      const sc = smallCapsOf(q.t.words, cd, c.width, c.height, K, q.ink.bg);
+      if (sc) { q.caps = sc.ratio; q.t = Object.assign({}, q.t, { words: sc.words }); }
+    }
     api.status('Matching the fonts…', 'pending');
     const out = [];
     const rgb = (hex) => [1, 3, 5].map((p) => parseInt(hex.slice(p, p + 2), 16));
@@ -2038,7 +2216,8 @@
       const mine = list.filter((q) => q.bold === bold);
       if (!mine.length) continue;
       let main = null;
-      try { main = await styleFont(mine.map((q) => q.t.words), bold, samplesOf); } catch (e) { main = null; }
+      const plain = mine.filter((q) => !q.caps);
+      try { main = await styleFont((plain.length ? plain : mine).map((q) => q.t.words), bold, samplesOf); } catch (e) { main = null; }
       // Without the page's font (offline, say) a redrawn line would look
       // nothing like the original: leave these lines as scanned.
       if (!main) { S.convNoFont = true; continue; }
@@ -2085,11 +2264,17 @@
         const family = cat === 'mono' ? 'mono' : cat === 'serif' ? 'serif' : 'sans';
         const style = ref ? { family, font: { id: ref.id, weight: ref.weight, style: ref.style }, bold: ref.weight >= 600, italic: ref.style === 'italic' } : { family: 'sans', bold, italic: false };
         for (const q of qs) {
+          if (q.caps) {
+            // sized by the full capitals that start its words
+            const r = q.t.words.filter((w) => /^\p{Lu}/u.test(w.t)).map((w) => (w.y1 - w.y0) / inkOf(w.t[0], Object.assign({}, style, { size: 1 })).h).filter((v) => v > 0 && isFinite(v));
+            q.size = Math.round((median(r) || q.t.size) * 10) / 10;
+            continue;
+          }
           const h = sizeFromInk(q.t.words, style, q.t.size);
           q.size = clamp(fitSize(q.t.words, style, h), h * 0.88, h * 1.14);
         }
         clusterSizes(qs);
-        if (ref) for (const q of qs) q.vs = await wordStyles(q.t.words, ref, samplesOf);
+        if (ref) for (const q of qs) if (!q.caps) q.vs = await wordStyles(q.t.words, ref, samplesOf);
         for (const q of qs) {
           const ws = q.t.words;
           const v = rgb(q.ink.fg);
@@ -2097,7 +2282,7 @@
           const it = Object.assign({
             id: uid(), type: 'text', page: info.entry.uid, origKey: q.t.key, conv: true,
             words: ws.map((w, i) => (q.vs && q.vs[i] ? Object.assign({}, w, { v: q.vs[i] }) : w)), origText: ws.map((w) => w.t).join(' '), text: ws.map((w) => w.t).join(' '),
-            base: inkBase(ws, q.t.base), size: q.size, heightSize: q.t.size, color: near ? commonHex : q.ink.fg, bg: q.ink.bg,
+            base: inkBase(ws, q.t.base), size: q.size, smallCaps: q.caps || undefined, heightSize: q.t.size, color: near ? commonHex : q.ink.fg, bg: q.ink.bg,
             limit: await lineLimit(info, q.t, ws)
           }, JSON.parse(JSON.stringify(style)));
           it.x = ws[0].x0 - inkOf(ws[0].t, it).lsb;
@@ -2116,7 +2301,7 @@
     if (!info || !S.rec) return;
     if (isConv(info.entry.uid)) { api.toast('This page’s text is already editable. Click a line with Edit text to change it.'); return; }
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
-    if (!ocr || ocr.rot !== info.rot) { await runOcr('current'); return; }
+    if (!ocrFits(ocr, info.entry, info.rot)) { await runOcr('current'); return; }
     const before = snap();
     let n = 0;
     S.convNoFont = false;
@@ -2188,7 +2373,7 @@
     neu.forEach((t, i) => {
       const o = i < p ? orig[i] : i >= neu.length - s ? orig[orig.length - (neu.length - i)] : null;
       const v = o ? o.v : vNew;
-      const ink = inkOf(t, runStyle(it, v));
+      const ink = measureRun(t, runStyle(it, v), it.smallCaps);
       const flow = end == null ? orig[0].x0 : end + gap;
       // words before the change stay put; from the change on the line flows
       // like ordinary text
@@ -2256,7 +2441,40 @@
   // edge goes too, so a letter OCR's box cut through is taken whole; long
   // lines (table borders, fill-in lines) stay, and nothing inside skip is
   // touched.
-  function inpaint(d, W, H, rects, skip) {
+  // Lengths of the straight runs of ink through each pixel of an image whose
+  // lines are not level: those that run along y = r + x·tA (lines across the
+  // page) and x = c + y·tB (lines down it). A scan that is drawn turned has
+  // its borders as staircases in its own pixels; following the slope finds
+  // them whole.
+  function lineRuns(d, W, H, tA, tB) {
+    const lum = (i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    const sample = [];
+    for (let i = 0; i < W * H; i += 97) sample.push(lum(i * 4));
+    sample.sort((a, b) => a - b);
+    const thr = sample[Math.floor(sample.length * 0.6)] - 60;
+    const dark = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) dark[i] = lum(i * 4) < thr ? 1 : 0;
+    const h = new Uint16Array(W * H);
+    const v = new Uint16Array(W * H);
+    const walk = (n, len, at, out) => {
+      // n paths, each len steps; at(path, step) → pixel index or -1
+      const run = [];
+      for (let r = 0; r < n; r++) {
+        for (let k = 0; k <= len; k++) {
+          const i = k < len ? at(r, k) : -1;
+          if (i >= 0 && dark[i]) { run.push(i); continue; }
+          if (run.length) { const l = Math.min(65535, run.length); for (const j of run) out[j] = l; run.length = 0; }
+        }
+      }
+    };
+    const offA = Math.ceil(Math.abs(tA) * W) + 1;
+    walk(H + offA * 2, W, (r, x) => { const y = Math.round(r - offA + x * tA); return y >= 0 && y < H ? y * W + x : -1; }, h);
+    const offB = Math.ceil(Math.abs(tB) * H) + 1;
+    walk(W + offB * 2, H, (c, y) => { const x = Math.round(c - offB + y * tB); return x >= 0 && x < W ? y * W + x : -1; }, v);
+    return { h, v };
+  }
+
+  function inpaint(d, W, H, rects, skip, runs) {
     const lum = (i) => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
     const inSkip = (x, y) => skip && skip.some((r) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1);
     for (const r of rects) {
@@ -2294,7 +2512,13 @@
       // a line: a straight run of ink longer than any stroke of a letter
       const long = Math.max(6, Math.round(em * 1.3));
       const prot = new Uint8Array(ww * wh);
-      for (let y = wy0; y < wy1; y++) {
+      if (runs) {
+        for (let y = wy0; y < wy1; y++) for (let x = wx0; x < wx1; x++) {
+          const gi = y * W + x;
+          if (runs.h[gi] >= long || runs.v[gi] >= long) prot[idx(x, y)] = 1;
+        }
+      }
+      for (let y = wy0; y < wy1 && !runs; y++) {
         let x = wx0;
         while (x < wx1) {
           if (!dark[idx(x, y)]) { x++; continue; }
@@ -2308,7 +2532,7 @@
           x = b;
         }
       }
-      for (let x = wx0; x < wx1; x++) {
+      for (let x = wx0; x < wx1 && !runs; x++) {
         let y = wy0;
         while (y < wy1) {
           if (!dark[idx(x, y)]) { y++; continue; }
@@ -2991,7 +3215,19 @@
       const skip = [];
       for (const r of soft) for (const q of r.keep || []) skip.push(pxRect(q));
       const img2 = g.getImageData(0, 0, cw, ch);
-      inpaint(img2.data, cw, ch, soft.map(pxRect), skip);
+      // the page's lines as they lie in this image's pixels (turned, if the
+      // page was straightened)
+      const ox = toPx(0, 0);
+      const ux = toPx(1, 0);
+      const uy = toPx(0, 1);
+      const a = [ux[0] - ox[0], ux[1] - ox[1]];
+      const b = [uy[0] - ox[0], uy[1] - ox[1]];
+      const across = Math.abs(a[0]) >= Math.abs(a[1]) ? a : b;
+      const down = across === a ? b : a;
+      const tA = across[1] / across[0];
+      const tB = down[0] / down[1];
+      const runs = Math.abs(tA) > 0.0005 || Math.abs(tB) > 0.0005 ? lineRuns(img2.data, cw, ch, tA, tB) : null;
+      inpaint(img2.data, cw, ch, soft.map(pxRect), skip, runs);
       g.putImageData(img2, 0, 0);
     }
     for (const r of hits) {
@@ -3199,8 +3435,25 @@
     for (const { entry, page, baseRot } of final) {
       const R = ((baseRot + entry.rotate) % 360 + 360) % 360;
       page.setRotation(L.degrees(R));
+      if (entry.skew) {
+        // the crooked scan turned straight about the page's center: a counter-
+        // clockwise turn on screen is the same turn in the page's own space
+        const cb = page.getCropBox();
+        const a = (entry.skew * Math.PI) / 180;
+        const c = Math.cos(a);
+        const sn = Math.sin(a);
+        const cx = cb.x + cb.width / 2;
+        const cy = cb.y + cb.height / 2;
+        page.node.normalize();
+        const ctx0 = base.context;
+        const pc = hexRgb(entry.paper || '#ffffff');
+        page.node.wrapContentStreams(
+          ctx0.register(ctx0.contentStream([L.pushGraphicsState(), L.setFillingRgbColor(pc.red, pc.green, pc.blue), L.rectangle(cb.x, cb.y, cb.width, cb.height), L.fill(), L.popGraphicsState(),
+            L.pushGraphicsState(), L.concatTransformationMatrix(c, sn, -sn, c, cx - c * cx + sn * cy, cy - sn * cx - c * cy)])),
+          ctx0.register(ctx0.contentStream([L.popGraphicsState()])));
+      }
       const items = (rec.items || []).filter((i) => i.page === entry.uid);
-      const ocr = rec.ocr && rec.ocr[entry.uid] && rec.ocr[entry.uid].rot === R ? rec.ocr[entry.uid].lines : [];
+      const ocr = rec.ocr && ocrFits(rec.ocr[entry.uid], entry, R) ? rec.ocr[entry.uid].lines : [];
       if (!items.length && !ocr.length) continue;
       const regions = [];
       const box = page.getCropBox();
@@ -3327,9 +3580,13 @@
             ? await fontFor(Object.assign({}, r.st, { font: null })) : matched;
           let safe = '';
           for (const ch of r.text) { try { font.encodeText(ch); safe += ch; } catch (e) { safe += '?'; replaced++; } }
-          const [x, y] = toPdf(R, box, r.x, r.base);
           if (r.scaleX < 1) page.pushOperators(L.pushGraphicsState(), L.setCharacterSqueeze(r.scaleX * 100));
-          page.drawText(safe, { x, y, size: it.size, font, color: hexRgb(it.color), rotate: L.degrees(R) });
+          let xd = r.x;
+          for (const q of it.smallCaps ? scParts(safe, it.smallCaps) : [{ t: safe, k: 1 }]) {
+            const [x, y] = toPdf(R, box, xd, r.base);
+            page.drawText(q.t, { x, y, size: it.size * q.k, font, color: hexRgb(it.color), rotate: L.degrees(R) });
+            xd += font.widthOfTextAtSize(q.t, it.size * q.k) * r.scaleX;
+          }
           if (r.scaleX < 1) page.pushOperators(L.popGraphicsState());
           over = over || r.overflow;
         }

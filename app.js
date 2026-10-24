@@ -124,6 +124,28 @@ function insertTableFromGrid(rows, cols) {
     tableGridMenu.classList.add('hidden');
 }
 
+// Native Active Spellchecking Engine Toggler
+function toggleSpellcheck() {
+    const btn = document.getElementById('spell-btn');
+    const isSpellcheckOn = editor.getAttribute('spellcheck') === 'true';
+    
+    if (isSpellcheckOn) {
+        editor.setAttribute('spellcheck', 'false');
+        btn.textContent = "✔️ Spellcheck: OFF";
+        btn.classList.remove('active-toggle');
+    } else {
+        editor.setAttribute('spellcheck', 'true');
+        btn.textContent = "✔️ Spellcheck: ON";
+        btn.classList.add('active-toggle');
+    }
+    
+    // Force browser text field structural re-render to update wavy lines
+    const textHolder = editor.innerHTML;
+    editor.innerHTML = '';
+    editor.innerHTML = textHolder;
+    editor.focus();
+}
+
 // Media Image Integration Core Systems logic
 function triggerImageUpload() {
     document.getElementById('image-file-input').click();
@@ -136,7 +158,6 @@ function handleImageFileSelect(input) {
 }
 
 function setupDragAndDropImages() {
-    // Intercept workspace actions to enable visual drop alerts
     ['dragenter', 'dragover'].forEach(eventName => {
         workspaceOuter.addEventListener(eventName, (e) => {
             e.preventDefault();
@@ -170,6 +191,7 @@ function processAndInsertImageFile(file) {
     reader.readAsDataURL(file);
 }
 
+// Global click monitoring to automatically hide dropdown submenus smoothly
 window.addEventListener('click', (e) => {
     if (!e.target.matches('#table-btn') && !e.target.closest('#table-grid-menu')) {
         if(tableGridMenu) tableGridMenu.classList.add('hidden');
@@ -288,23 +310,19 @@ function findAndReplace() {
 }
 
 function clearDoc() {
-    if (confirm("Are you sure you want to permanently clear this document?")) {
-        editor.innerHTML = "";
-        localStorage.removeItem('notepad_online_content');
-        updateMetrics();
-        saveStatus.textContent = "🗑️ Cleared";
-    }
+localStorage.removeItem('notepad_online_content');
+updateMetrics();
+saveStatus.textContent = "🗑️ Cleared";
 }
-
+}
 function saveFile(type) {
-    let content = type === 'txt' ? editor.innerText : editor.innerHTML;
-    let filename = `document.${type}`;
-    let mimeType = type === 'txt' ? "text/plain" : "text/html";
-
-    const blob = new Blob([content], { type: mimeType });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
+let content = type === 'txt' ? editor.innerText : editor.innerHTML;
+let filename = document.${type};
+let mimeType = type === 'txt' ? "text/plain" : "text/html";
+const blob = new Blob([content], { type: mimeType });
+const link = document.createElement('a');
+link.href = URL.createObjectURL(blob);
+link.download = filename;
+link.click();
+URL.revokeObjectURL(link.href);
 }

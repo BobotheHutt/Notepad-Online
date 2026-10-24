@@ -1121,6 +1121,7 @@ body:not(.pdf-mode) [data-pdf-only], body.pdf-mode [data-doc-only] { display: no
 }
 .pdf-textbox.editing { outline: 1.5px dashed var(--accent); outline-offset: 2px; cursor: text; user-select: text; -webkit-user-select: text; background: rgba(255, 255, 255, 0.35); }
 .pdf-textbox.editing.pdf-own { background: transparent; }
+.pdf-textbox.pdf-para { white-space: pre-wrap; overflow-wrap: break-word; }
 .pdf-stage[data-tool="select"] .pdf-textbox:hover:not(.editing) { outline: 1px dashed rgba(37, 99, 235, 0.6); outline-offset: 2px; }
 .pdf-item.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pdf-textbox.sel:not(.editing) { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1138,6 +1139,10 @@ body.pdf-show-original .pdf-conv { visibility: hidden; }
 .pdf-stage[data-tool="edit"] .pdf-hand:hover, .pdf-stage[data-tool="select"] .pdf-hand:hover { outline: 1.5px dashed var(--ink-3); outline-offset: 1px; }
 .pdf-stage[data-tool="edit"] .pdf-hand.erased { outline: 1px dashed rgba(107, 114, 128, 0.35); }
 .pdf-hand.sel { outline: 2px solid var(--accent) !important; outline-offset: 1px; }
+.pdf-erase-area { position: absolute; outline: 1.5px dashed var(--danger); background: rgba(220, 38, 38, 0.06); pointer-events: none; }
+.pdf-hand-part { position: absolute; border-radius: 2px; cursor: pointer; outline: 1px dashed rgba(220, 38, 38, 0.7); }
+.pdf-hand-part.keep { outline: 1.5px solid rgba(21, 128, 61, 0.85); background: rgba(21, 128, 61, 0.08); }
+.pdf-style-hint { font-size: 12px; color: var(--ink-3); padding: 0 6px; white-space: nowrap; }
 .pdf-proof { position: absolute; border-radius: 2px; cursor: pointer; }
 .pdf-proof:hover { outline: 1.5px solid var(--accent); background: rgba(37, 99, 235, 0.08); }
 .pdf-proof.doubt { background: rgba(245, 158, 11, 0.25); }

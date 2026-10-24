@@ -59,6 +59,7 @@
   function itemFonts(it) {
     const out = it.font ? [it.font] : [];
     for (const w of (it.conv && it.words) || []) if (w.v && it.font) out.push(runStyle(it, w.v).font);
+    for (const v of (it.conv && it.tv) || []) if (v && it.font) out.push(runStyle(it, v).font);
     return out;
   }
 
@@ -556,6 +557,13 @@
           title: it.erased ? 'Erased handwriting. Select it and choose Put back to restore it.' : 'Handwriting, left as it was scanned. Select it to erase it.',
           style: 'left:' + px(b.x) + ';top:' + px(b.y) + ';width:' + px(b.w) + ';height:' + px(b.h)
         }));
+        if (it.erased && it.id === S.sel && it.parts) {
+          it.parts.forEach((q, k) => layer.append(el('div', {
+            class: 'pdf-hand-part' + (q.keep ? ' keep' : ''), 'data-hand': it.id, 'data-part': k,
+            title: q.keep ? 'Kept as part of the form. Click to erase it too.' : 'Erased. Click to keep it.',
+            style: 'left:' + px(q.x0 - 0.5) + ';top:' + px(q.y0 - 0.5) + ';width:' + px(q.x1 - q.x0 + 1) + ';height:' + px(q.y1 - q.y0 + 1)
+          })));
+        }
         continue;
       }
       if (it.type === 'ink') {
@@ -617,12 +625,29 @@
 
   function itemEl(it) {
     const sel = it.id === S.sel;
+    const editingPara = it.para && S.editPrep && (itemById(S.editPrep) || {}).para === it.para;
+    if (editingPara && it.id !== S.editPrep) return document.createDocumentFragment();
+    if (editingPara) {
+      // the whole paragraph, wrapping at its width as it is typed
+      const lines = paraLines(it.para);
+      const g = paraGeom(lines);
+      const top = lines[0];
+      const d = el('div', {
+        class: 'pdf-item pdf-textbox pdf-para', 'data-id': it.id,
+        style: 'left:' + px(g.left) + ';top:' + px(top.base - BASELINE[top.family] * top.size - (g.pitch - top.size * LINE) / 2) + ';width:' + px(g.right - g.left + top.size * 0.2) +
+          ';text-indent:' + px(g.first - g.left) + ';line-height:' + px(g.pitch) + ';font-size:' + px(top.size) + ';font-family:' + familyCss(top).replace(/"/g, "'") +
+          ';color:' + top.color + ';font-weight:' + (top.font ? top.font.weight : top.bold ? 700 : 400) + ';font-style:' + (top.italic ? 'italic' : 'normal') +
+          (top.smallCaps ? ';font-variant:small-caps' : '')
+      });
+      d.textContent = lines.map((l) => l.text.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
+      return d;
+    }
     if (it.type === 'text' && it.conv && S.editPrep !== it.id) {
       const frag = document.createDocumentFragment();
       const lay = convLayout(it);
       if (sel && lay.length) {
-        const y0 = Math.min(...it.words.map((w) => w.y0)) - 1;
-        const y1 = Math.max(...it.words.map((w) => w.y1)) + 1;
+        const y0 = (it.words.length ? Math.min(...it.words.map((w) => w.y0)) : it.base - it.size * 0.75) - 1;
+        const y1 = (it.words.length ? Math.max(...it.words.map((w) => w.y1)) : it.base + it.size * 0.25) + 1;
         const x1 = Math.max(...lay.map((r) => r.x + measureRun(r.text, r.st, it.smallCaps).w * r.scaleX));
         frag.append(el('div', { class: 'pdf-conv-box', style: 'left:' + px(lay[0].x - 1) + ';top:' + px(y0) + ';width:' + px(x1 - lay[0].x + 2) + ';height:' + px(y1 - y0) }));
       }
@@ -634,7 +659,8 @@
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
             (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
         });
-        d.textContent = r.text;
+        if (it.smallCaps) d.append(...scParts(r.text, it.smallCaps).map((q) => (q.small ? el('span', { style: 'font-size:' + q.k + 'em' }, q.t) : document.createTextNode(q.t))));
+        else d.textContent = r.text;
         frag.append(d);
       }
       return frag;
@@ -650,8 +676,7 @@
             (it.scan ? ';filter:blur(' + Math.max(0.2, 0.16 * S.scale).toFixed(2) + 'px)' : '') +
             (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
         });
-        if (it.smallCaps) d.append(...scParts(r.text, it.smallCaps).map((q) => (q.small ? el('span', { style: 'font-size:' + q.k + 'em' }, q.t) : document.createTextNode(q.t))));
-        else d.textContent = r.text;
+        d.textContent = r.text;
         frag.append(d);
       }
       return frag;
@@ -720,6 +745,9 @@
     const words = [];
     for (const [ri, w] of raw.entries()) {
       let t = w.t;
+      // a bar no taller than the letters is the word "I", read as "|"; a
+      // separator printed between columns stands taller than the text
+      if (/^[|¦]$/.test(t) && w.h != null && w.h < (l.size || l.h) * 0.85) t = 'I';
       let x0 = w.x;
       let x1 = w.x + w.w;
       const y0 = w.y != null ? w.y : l.y;
@@ -1107,6 +1135,15 @@
     if (!info) return;
     if (e.target.closest('.pdf-field') || e.target.closest('.pdf-fix')) return;
     if (S.fix) closeFix(true);
+    // one piece of erased handwriting: keep it, or erase it after all
+    const part = e.target.closest('.pdf-hand-part');
+    if (part) {
+      e.preventDefault();
+      const it = itemById(part.dataset.hand);
+      const q = it && it.parts && it.parts[+part.dataset.part];
+      if (q) { const before = snap(); q.keep = !q.keep; commit(before); renderOverlay(info); }
+      return;
+    }
     // a word read from the scan: correct what OCR read (proofreading, or a word it was unsure of)
     const fixNode = e.target.closest('[data-fix]');
     if (fixNode && (S.showOriginal || (S.tool === 'edit' && fixNode.classList.contains('pdf-doubt')))) {
@@ -1148,6 +1185,7 @@
       const target = e.target.closest('.pdf-target');
       if (item && item.type === 'text') { e.preventDefault(); startEditing(item.id); return; }
       if (target) { e.preventDefault(); editOriginal(info, target.dataset.key); return; }
+      if (isConv(info.entry.uid)) { e.preventDefault(); startEraseArea(e, info, x, y); return; }
       if (info.text && !info.text.length) api.toast('This page is a scan, so its words are a picture. Click “Read text” first, then you can edit them.', 4500);
       return;
     }
@@ -1233,6 +1271,36 @@
       S.rec.items.push(it);
       commit(before);
       renderOverlay(info);
+    });
+  }
+
+  // On a page made editable, a box dragged with Edit text over writing the
+  // app did not find erases the pen strokes in it: the printed text read
+  // there, long lines and printed marks stay.
+  function startEraseArea(e, info, x0, y0) {
+    const preview = el('div', { class: 'pdf-erase-area' });
+    info.layer.append(preview);
+    let rect = null;
+    drag(e, (ev) => {
+      const [x, y] = pointIn(ev, info);
+      rect = { x: Math.min(x0, x), y: Math.min(y0, y), w: Math.abs(x - x0), h: Math.abs(y - y0) };
+      Object.assign(preview.style, { left: px(rect.x), top: px(rect.y), width: px(rect.w), height: px(rect.h) });
+    }, async () => {
+      preview.remove();
+      if (!rect || rect.w < 4 || rect.h < 4) return;
+      const it = { id: uid(), type: 'hand', page: info.entry.uid, area: true, words: [{ x0: rect.x, y0: rect.y, x1: rect.x + rect.w, y1: rect.y + rect.h }], erased: false };
+      const before = snap();
+      S.rec.items.push(it);
+      await setHand([it], true, before);
+      if (it.parts && !it.parts.some((q) => !q.keep)) {
+        // nothing there to erase
+        S.rec.items = S.rec.items.filter((i) => i !== it);
+        S.undo.pop();
+        renderOverlay(info);
+        api.toast('No handwriting was found in that box. Printed text the app read, lines and printed marks are never erased this way.', 5000);
+        return;
+      }
+      select(it.id);
     });
   }
 
@@ -1324,6 +1392,13 @@
     const before = node.dataset.isNew ? null : node.dataset.before;
     let text = node.innerText.replace(/\r/g, '').replace(/\n$/, '');
     if (it.anchored || it.conv) text = text.replace(/\s+/g, ' ').trim();
+    if (it.conv && it.para) {
+      const before = node.dataset.before;
+      if (reflowPara(it.para, text)) commit(before);
+      renderOverlay(info);
+      renderStyleBar();
+      return;
+    }
     if (node.dataset.fresh && text === it.origText) {
       // clicked a run of the PDF's text but changed nothing: leave the page alone
       S.rec.items = S.rec.items.filter((i) => i.id !== id);
@@ -2296,11 +2371,15 @@
     for (const weight of [...new Set([ref.weight, near(400), near(700)])]) for (const style of ['normal', 'italic']) vars.push({ weight, style });
     const same = (a, b) => a.weight === b.weight && a.style === b.style;
     // a heavier or lighter weight only where the strokes say so too
-    // a line's weight against the page's strokes; a word's against its own line's
-    const lineSw = median(words.map((w) => w.sw));
+    // a line's weight against the page's strokes; a word's against the
+    // lighter and the heavier words of its own line (so in a line half in
+    // bold, a bold word still stands out from the regular ones)
+    const sws = words.map((w) => w.sw).filter((v) => v > 0).sort((a, b) => a - b);
+    const lineSw = median(sws);
+    const lightSw = sws.length ? sws[Math.floor((sws.length - 1) * 0.25)] : null;
+    const heavySw = sws.length ? sws[Math.ceil((sws.length - 1) * 0.75)] : null;
     const allowed = (v, from, sw, word) => v.weight === from.weight || (sw != null && (word
-      // (a line half in bold has a middling median, so the page's measure counts too)
-      ? lineSw != null && (v.weight > from.weight ? sw > Math.min(lineSw * 1.25, S.boldCut) : sw < Math.max(lineSw / 1.25, S.boldCut))
+      ? lineSw != null && (v.weight > from.weight ? sw > lightSw * 1.3 : sw < heavySw / 1.3)
       // near the line between regular and bold, how the letters look decides
       : v.weight > from.weight ? sw > S.boldCut * 0.9 : sw < S.boldCut * 1.1));
     const best = async (sm, from, sw, word) => {
@@ -2414,8 +2493,11 @@
       // one that fits the page's font clearly worse than the rest gets the
       // font that fits it, found among the fonts already matched or anew.
       if (main && NpFonts.score) {
+        // judged on plain words: a misread mark ("*" read as "™") draws
+        // nothing like what is on the page and would make print look like writing
+        const plainWord = (w) => /^[\p{L}\p{N}]+$/u.test(w.t);
         for (const q of mine) {
-          q.samp = samplesOf(q.t.words, 6);
+          q.samp = samplesOf(q.t.words.filter(plainWord), 6);
           q.sc = q.samp.length ? await NpFonts.score(q.samp, main) : null;
         }
         // how well the page's font fits its lines, from lines with enough words to say
@@ -2441,16 +2523,21 @@
         // found on the page (nor its italic) is left as it was scanned,
         // rather than have its letters half erased and typed over.
         for (const q of mine) {
-          if (q.ref || q.sc == null || typical == null || q.sc >= typical - 0.15) continue;
+          // small caps read as capitals look nothing like the capitals drawn for them
+          if (q.ref || q.caps || q.sc == null || typical == null || q.sc >= typical - 0.15) continue;
           let best = q.sc;
           for (const f of known.slice(1).concat([{ id: main.id, weight: main.weight, style: 'italic' }])) {
             const sc = await NpFonts.score(q.samp, f);
             if (sc != null) best = Math.max(best, sc);
           }
-          if (best < typical - 0.15) q.skip = true;
+          // read surely, a loose fit is print in a font not on the list; only a
+          // poor fit, or a loose one read unsurely, is left as it was scanned
+          const cs = q.t.words.map((w) => w.c).filter((c) => c != null);
+          const conf = cs.length ? cs.reduce((a, b) => a + b, 0) / cs.length : 100;
+          if (best < typical - 0.2 || (best < typical - 0.15 && conf < 90)) { q.skip = true; q.fit = best - typical; }
         }
       }
-      for (let i = mine.length - 1; i >= 0; i--) if (mine[i].skip) { left.push(mine[i].t); mine.splice(i, 1); }
+      for (let i = mine.length - 1; i >= 0; i--) if (mine[i].skip) { left.push(Object.assign({}, mine[i].t, { fit: mine[i].fit })); mine.splice(i, 1); }
       const byFont = new Map();
       for (const q of mine) {
         const ref = q.ref || main;
@@ -2495,9 +2582,20 @@
       }
     }
     if (S.rec.items.some((i) => i.page === info.entry.uid && i.conv)) return 0;
+    groupParagraphs(out);
     S.rec.items.push(...out);
     if (out.length) {
-      for (const t of left) {
+      // Offered for erasing only when it is surely writing: read with little
+      // confidence. Print in a font not on the list (a logo) reads surely,
+      // so it stays and is never offered, and neither is a stray mark read
+      // as a character or two.
+      const handLike = (t) => {
+        const cs = t.words.map((w) => w.c).filter((c) => c != null);
+        const conf = cs.length ? cs.reduce((a, b) => a + b, 0) / cs.length : 100;
+        const chars = t.words.map((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
+        return chars >= 3 && conf < 82;
+      };
+      for (const t of left.filter(handLike)) {
         S.rec.items.push({ id: uid(), type: 'hand', page: info.entry.uid, origKey: t.key, words: t.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 })), erased: false });
       }
     }
@@ -2534,9 +2632,17 @@
     api.toast('This page is back to the original scan. Edit text now changes single words and leaves the rest of the scan as it is.', 7000);
   }
 
-  function setHand(list, erased) {
+  async function setHand(list, erased, before0) {
     if (!list.length) return;
-    const before = snap();
+    const before = before0 || snap();
+    if (erased) {
+      api.status('Finding the pen strokes…', 'pending');
+      for (const it of list) {
+        const info = S.info.get(it.page);
+        if (!it.parts && info && info.page) { try { it.parts = await handParts(info, it); } catch (e) { it.parts = null; } }
+      }
+      api.status('Saved', 'ok');
+    }
     for (const it of list) it.erased = erased;
     commit(before);
     for (const uidv of new Set(list.map((i) => i.page))) renderOverlay(S.info.get(uidv));
@@ -2544,14 +2650,14 @@
   }
 
   // To clear a filled-in form: take all handwriting off the page in view.
-  function clearHandwriting() {
+  async function clearHandwriting() {
     const info = currentPage();
     const list = info ? S.rec.items.filter((i) => i.page === info.entry.uid && i.type === 'hand' && !i.erased) : [];
     if (!list.length) {
       api.toast(isConv(info && info.entry.uid) ? 'No handwriting was found on this page.' : 'Click “Read text” first; handwriting is found while the page is read.', 5000);
       return;
     }
-    setHand(list, true);
+    await setHand(list, true);
     api.toast('Erased ' + list.length + ' piece' + (list.length === 1 ? '' : 's') + ' of handwriting. Undo puts them back; so does selecting one and choosing Put back.', 6000);
   }
 
@@ -2741,13 +2847,14 @@
     const gap = gaps.length ? gaps[gaps.length >> 1] : textWidth(' ', it);
     const runs = [];
     let end = null;
-    // new words take the look of the word they replace (or the one before them)
+    // new words take the look of the word they replace (or the one before
+    // them), or the look they had before a paragraph was rewrapped (tv)
     const vNew = (orig[Math.min(p, orig.length - 1)] || {}).v;
     neu.forEach((t, i) => {
       const o = i < p ? orig[i] : i >= neu.length - s ? orig[orig.length - (neu.length - i)] : null;
-      const v = o ? o.v : vNew;
+      const v = o ? o.v : it.tv && it.tv[i] !== undefined ? it.tv[i] : vNew;
       const ink = measureRun(t, runStyle(it, v), it.smallCaps);
-      const flow = end == null ? orig[0].x0 : end + gap;
+      const flow = end == null ? lineStart(it) : end + gap;
       // words before the change stay put; from the change on the line flows
       // like ordinary text
       const x0 = i < p ? o.x0 : flow;
@@ -2758,7 +2865,8 @@
     });
     let scaleX = 1;
     let overflow = false;
-    const limit = it.limit != null ? Math.max(it.limit, orig[orig.length - 1].x1) : orig[orig.length - 1].x1 + it.size * 0.2;
+    const lastX1 = orig.length ? orig[orig.length - 1].x1 : lineStart(it);
+    const limit = it.limit != null ? Math.max(it.limit, lastX1) : lastX1 + it.size * 0.2;
     if (end > limit + 0.5 && p < runs.length) {
       const from = runs[p].x0;
       const f = Math.max(0.8, (limit - from) / (end - from));
@@ -2766,7 +2874,174 @@
       scaleX = f;
       for (let i = p; i < runs.length; i++) { runs[i].x0 = from + (runs[i].x0 - from) * f; runs[i].w *= f; runs[i].sx *= f; }
     }
-    return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, o: r.o, st: runStyle(it, r.v) }));
+    return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, o: r.o, v: r.v, st: runStyle(it, r.v) }));
+  }
+
+  // Where a converted line starts: its first word on the page, or for a line
+  // a rewrapped paragraph added, the paragraph's left edge.
+  const lineStart = (it) => (it.words.length ? it.words[0].x0 : it.lineX);
+  const lineEnd = (it) => (it.words.length ? it.words[it.words.length - 1].x1 : it.lineX);
+
+  /* ----- paragraphs ----- */
+
+  // Lines that are one paragraph: each just below the last at a steady
+  // spacing, in the same column, starting at the same left edge (the first
+  // may be indented), in the same font and size, and every line but the
+  // last full: the next line's first word would not have fitted on it.
+  // A short line ends a paragraph, so form rows stay apart.
+  function groupParagraphs(items) {
+    const lines = items.filter((i) => i.words.length).sort((a, b) => a.base - b.base || lineStart(a) - lineStart(b));
+    const below = new Map();
+    for (const a of lines) {
+      let best = null;
+      for (const b of lines) {
+        const dy = b.base - a.base;
+        if (b === a || dy < a.size * 0.9 || dy > a.size * 1.9) continue;
+        const overlap = Math.min(lineEnd(a), lineEnd(b)) - Math.max(lineStart(a), lineStart(b));
+        if (overlap < Math.min(lineEnd(a) - lineStart(a), lineEnd(b) - lineStart(b)) * 0.3) continue;
+        if (!best || dy < best.dy - 0.5 || (Math.abs(dy - best.dy) <= 0.5 && Math.abs(lineStart(b) - lineStart(a)) < Math.abs(lineStart(best.b) - lineStart(a)))) best = { b, dy };
+      }
+      if (best) below.set(a, best.b);
+    }
+    const taken = new Set();
+    for (const a of lines) {
+      if (taken.has(a)) continue;
+      const group = [a];
+      let cur = a;
+      let left = null;
+      while (below.has(cur)) {
+        const b = below.get(cur);
+
+        if (taken.has(b) || group.includes(b)) break;
+        if (Math.abs(b.size - cur.size) > cur.size * 0.18 || !!b.smallCaps !== !!cur.smallCaps) break;
+        const bx0 = lineStart(b);
+        if (left == null ? bx0 > lineStart(cur) + cur.size * 0.8 || bx0 < lineStart(cur) - cur.size * 4 : Math.abs(bx0 - left) > cur.size * 0.8) break;
+        if (group.length >= 2 && Math.abs((b.base - cur.base) - (cur.base - group[group.length - 2].base)) > cur.size * 0.25) break;
+        const right = Math.max(lineEnd(b), ...group.map(lineEnd));
+        const first = b.words[0];
+        const need = lineEnd(cur) + textWidth(' ', cur) + (first.x1 - first.x0);
+        if (need < right - cur.size * 0.1) break;
+        // nor if it had room to spare before its cell border or the margin (a
+        // short list item), allowing for a cell's padding
+        if (cur.limit != null && need < cur.limit - cur.size * 1.2) break;
+        if (left == null) left = bx0;
+        group.push(b);
+        cur = b;
+      }
+      for (const l of group) taken.add(l);
+      if (group.length >= 2) { const pid = uid(); for (const l of group) l.para = pid; }
+    }
+  }
+
+  function paraLines(pid) {
+    return S.rec.items.filter((i) => i.conv && i.para === pid).sort((a, b) => a.base - b.base);
+  }
+
+  // The paragraph's box: its left edge (the lines after the first), the
+  // first line's start, its right edge and its line spacing.
+  function paraGeom(lines) {
+    const rest = lines.length > 1 ? lines.slice(1) : lines;
+    const left = Math.min(...rest.map(lineStart));
+    const right = Math.max(...lines.map((l) => {
+      const lay = convLayout(l);
+      const r = lay[lay.length - 1];
+      return Math.max(lineEnd(l), r ? r.x + measureRun(r.text, r.st, l.smallCaps).w * r.scaleX : 0);
+    }));
+    const pitches = lines.slice(1).map((l, k) => l.base - lines[k].base);
+    const pitch = median(pitches) || lines[0].size * 1.2;
+    return { left, right, first: lineStart(lines[0]), pitch };
+  }
+
+  // Styles carried from the old words to the new by matching them up (the
+  // longest common run of words); new words take the look of the word before.
+  function carryStyles(old, neu) {
+    const n = old.length;
+    const m = neu.length;
+    const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = old[i].t === neu[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    const out = new Array(m).fill(undefined);
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (old[i].t === neu[j]) { out[j] = old[i].v || null; i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++;
+    }
+    for (let k = 0; k < m; k++) if (out[k] === undefined) out[k] = k ? out[k - 1] : (old[0] && old[0].v) || null;
+    return out;
+  }
+
+  // Rewrap a paragraph after an edit, as a word processor would: lines
+  // before the change stay as they are, the text flows from just before it
+  // until the line breaks fall where they did before, and lines after that
+  // stay too. A longer paragraph gets new lines below; a shorter one leaves
+  // its last lines empty.
+  function reflowPara(pid, text) {
+    const lines = paraLines(pid);
+    if (!lines.length) return false;
+    const g = paraGeom(lines);
+    const old = [];
+    for (const l of lines) for (const r of convLayout(l)) old.push({ t: r.text, v: r.v });
+    const neu = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    if (neu.join(' ') === old.map((o) => o.t).join(' ')) return false;
+    const vs = carryStyles(old, neu);
+    const toks = (l) => l.text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    // the first line that no longer reads the same
+    let li = 0;
+    let pos = 0;
+    while (li < lines.length) {
+      const t = toks(lines[li]);
+      if (!t.every((w, k) => neu[pos + k] === w) || (li === lines.length - 1 && pos + t.length !== neu.length)) break;
+      pos += t.length;
+      li++;
+    }
+    // from the line before it, so a word added at a line's end can stay there
+    let j = Math.max(0, li - 1);
+    pos = lines.slice(0, j).reduce((n, l) => n + toks(l).length, 0);
+    const placed = [];
+    let caughtUp = false;
+    let grew = false;
+    while (pos < neu.length) {
+      if (j > li && j < lines.length && neu.slice(pos).join(' ') === lines.slice(j).map((l) => toks(l).join(' ')).join(' ')) { caughtUp = true; break; }
+      const line = lines[j];
+      const st = line || lines[lines.length - 1];
+      const x = line ? lineStart(line) : g.left;
+      // a line keeps at least the room its own words had
+      const room = Math.min(Math.max(g.right, line ? x + measureRun(toks(line).join(' '), st, st.smallCaps).w : 0), st.limit != null ? st.limit : Infinity) - x + 0.5;
+      // as many words as the line takes when laid out as it will be drawn
+      // (its unchanged words stay where they were), without narrowing any
+      const probe = line || { words: [], lineX: g.left };
+      const fits = (k) => {
+        const lay = convLayout(Object.assign({}, st, probe, { text: neu.slice(pos, k).join(' '), tv: vs.slice(pos, k), limit: Infinity }));
+        const r = lay[lay.length - 1];
+        return !r || r.x + measureRun(r.text, r.st, st.smallCaps).w * r.scaleX - x <= room;
+      };
+      let k = pos + 1;
+      while (k < neu.length && fits(k + 1)) k++;
+      placed.push({ j, text: neu.slice(pos, k).join(' '), tv: vs.slice(pos, k) });
+      pos = k;
+      j++;
+    }
+    for (const q of placed) {
+      if (q.j < lines.length) {
+        lines[q.j].text = q.text;
+        lines[q.j].tv = q.tv;
+        continue;
+      }
+      grew = true;
+      const last = lines[lines.length - 1];
+      const base = last.base + g.pitch * (q.j - lines.length + 1);
+      const it = {
+        id: uid(), type: 'text', page: last.page, conv: true, para: pid, words: [], origText: '', text: q.text, tv: q.tv, lineX: g.left,
+        base, size: last.size, heightSize: last.heightSize, color: last.color, bg: last.bg, limit: last.limit, smallCaps: last.smallCaps,
+        family: last.family, font: last.font ? Object.assign({}, last.font) : undefined, bold: last.bold, italic: last.italic
+      };
+      it.x = g.left;
+      it.y = base - BASELINE[it.family || 'sans'] * it.size;
+      S.rec.items.push(it);
+    }
+    // the text ran out before the old lines did: those are left empty
+    if (!caughtUp) for (let k = j; k < lines.length; k++) { lines[k].text = ''; lines[k].tv = undefined; }
+    if (grew) api.toast('The paragraph needs more lines than it had, so it now runs below where it ended. Check that it does not cover anything; shorten it if it does.', 7000);
+    return true;
   }
 
   // The original words that come off the page: all of them.
@@ -2775,7 +3050,7 @@
   // What cleanCanvas would take off a page, to know when to draw it again.
   function cleanSig(info) {
     if (S.showOriginal || !S.rec) return '';
-    return S.rec.items.filter((i) => i.page === info.entry.uid && (i.conv || (i.type === 'hand' && i.erased))).map((i) => i.id + ':' + (i.conv ? convErased(i).length + ':' + (convErased(i)[0] || {}).x0 : 'x')).join('|');
+    return S.rec.items.filter((i) => i.page === info.entry.uid && (i.conv || (i.type === 'hand' && i.erased))).map((i) => i.id + ':' + (i.conv ? convErased(i).length + ':' + (convErased(i)[0] || {}).x0 : 'x' + (i.parts || []).map((q) => (q.keep ? 1 : 0)).join(''))).join('|');
   }
 
   // What comes off the page for a converted line, in points: one rectangle
@@ -2811,14 +3086,136 @@
     const y0 = Math.min(...it.words.map((w) => w.y0));
     const x1 = Math.max(...it.words.map((w) => w.x1));
     const y1 = Math.max(...it.words.map((w) => w.y1));
-    const pad = Math.max(1.5, (y1 - y0) * 0.15);
+    const pad = it.area ? 0 : Math.max(1.5, (y1 - y0) * 0.15);
     return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 };
   }
+  // The size of the page's printed text: the measure for what counts as a
+  // printed line or mark next to handwriting.
+  function printedEm(uidv) {
+    return median(S.rec.items.filter((i) => i.page === uidv && i.conv).map((i) => i.size)) || 10;
+  }
+  // What erasing takes off: each pen stroke found in it (or, before those
+  // are known, the whole of it), and what it must not touch: the form's own
+  // marks among the strokes, like the slashes of a date.
   function handRects(it) {
-    if (!it.erased) return [];
-    // one piece, gaps included: a pen stroke often runs between the words OCR found
+    if (!it.erased) return { rects: [], keep: [] };
+    const em = printedEm(it.page);
+    if (!it.parts) {
+      const b = handBox(it);
+      return { rects: [{ x: b.x, y: b.y, w: b.w, h: b.h, em }], keep: [] };
+    }
+    const box = (q, pad) => ({ x: q.x0 - pad, y: q.y0 - pad, w: q.x1 - q.x0 + pad * 2, h: q.y1 - q.y0 + pad * 2, em });
+    return { rects: it.parts.filter((q) => !q.keep).map((q) => box(q, 0.6)), keep: it.parts.filter((q) => q.keep).map((q) => box(q, 0.2)) };
+  }
+
+  // The pieces of ink in a piece of handwriting, each marked to keep or not.
+  // Kept: long straight lines (fill-in lines, as long as printed text is
+  // tall or longer) and short straight printed marks (a date's slashes, bits
+  // of underscore): straight, thin, isolated, and leaning like a printed
+  // slash or lying flat. Everything else is the pen.
+  async function handParts(info, it) {
     const b = handBox(it);
-    return [{ x: b.x, y: b.y, w: b.w, h: b.h, em: Math.max(4, b.h * 0.8) }];
+    const em = printedEm(info.entry.uid);
+    // the words of printed text read on the page (made editable, or left as
+    // scanned but not writing)
+    const handKeys = new Set(S.rec.items.filter((i) => i.type === 'hand' && i.origKey).map((i) => i.origKey));
+    const printed = [];
+    for (const i of S.rec.items) if (i.page === info.entry.uid && i.conv) printed.push(...i.words);
+    for (const t of (await textItems(info))) if (t.scan && !handKeys.has(t.key) && !S.rec.items.some((i) => i.conv && i.origKey === t.key)) printed.push(...t.words);
+    const K = 300 / 72;
+    const m = em * 0.5;
+    const x0 = b.x - m;
+    const y0 = b.y - m;
+    const W = Math.max(1, Math.ceil((b.w + m * 2) * K));
+    const H = Math.max(1, Math.ceil((b.h + m * 2) * K));
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = paperOf(info);
+    g.fillRect(0, 0, W, H);
+    await info.page.render(renderOpts(info, g, K, -x0 * K, -y0 * K)).promise;
+    const d = g.getImageData(0, 0, W, H).data;
+    const lum = (i) => d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114;
+    const ls = [];
+    for (let i = 0; i < W * H; i += 7) ls.push(lum(i));
+    ls.sort((p, q) => p - q);
+    const thr = ls[Math.floor(ls.length * 0.6)] - 60;
+    const dark = new Uint8Array(W * H);
+    for (let i = 0; i < W * H; i++) dark[i] = lum(i) < thr ? 1 : 0;
+    // long lines through the area: part of the form, never erased
+    const long = Math.round(em * 1.3 * K);
+    const line = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) {
+      let x = 0;
+      while (x < W) { if (!dark[y * W + x]) { x++; continue; } let e = x; while (e < W && dark[y * W + e]) e++; if (e - x >= long) for (let q = x; q < e; q++) line[y * W + q] = 1; x = e; }
+    }
+    for (let x = 0; x < W; x++) {
+      let y = 0;
+      while (y < H) { if (!dark[y * W + x]) { y++; continue; } let e = y; while (e < H && dark[e * W + x]) e++; if (e - y >= long) for (let q = y; q < e; q++) line[q * W + x] = 1; y = e; }
+    }
+    // the pieces of ink left: connected strokes
+    const minInk = Math.max(6, Math.pow(em * K * 0.07, 2));
+    const seen = new Uint8Array(W * H);
+    const parts = [];
+    const inBox = (px, py) => px / K + x0 > b.x && px / K + x0 < b.x + b.w && py / K + y0 > b.y && py / K + y0 < b.y + b.h;
+    for (let start = 0; start < W * H; start++) {
+      if (!dark[start] || line[start] || seen[start]) continue;
+      const pts = [];
+      const stack = [start];
+      seen[start] = 1;
+      while (stack.length) {
+        const i = stack.pop();
+        pts.push(i);
+        const x = i % W;
+        const y = (i / W) | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const j = ny * W + nx;
+          if (dark[j] && !line[j] && !seen[j]) { seen[j] = 1; stack.push(j); }
+        }
+      }
+      let mx = 0;
+      let my = 0;
+      let bx0 = W;
+      let by0 = H;
+      let bx1 = 0;
+      let by1 = 0;
+      for (const i of pts) { const x = i % W; const y = (i / W) | 0; mx += x; my += y; if (x < bx0) bx0 = x; if (y < by0) by0 = y; if (x > bx1) bx1 = x; if (y > by1) by1 = y; }
+      // specks smaller than any pen mark (the dots of a scan's shading) are no part of it
+      if (pts.length < minInk) continue;
+      // only ink that belongs to this handwriting: a piece mostly outside it is the form's
+      if (!inBox((bx0 + bx1) / 2, (by0 + by1) / 2)) continue;
+      // nor a letter of printed text the app read there
+      const cxp = ((bx0 + bx1) / 2) / K + x0;
+      const cyp = ((by0 + by1) / 2) / K + y0;
+      if (printed.some((w) => cxp >= w.x0 - 0.5 && cxp <= w.x1 + 0.5 && cyp >= w.y0 - 0.5 && cyp <= w.y1 + 0.5)) continue;
+      mx /= pts.length;
+      my /= pts.length;
+      let sxx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (const i of pts) { const x = i % W - mx; const y = ((i / W) | 0) - my; sxx += x * x; syy += y * y; sxy += x * y; }
+      sxx /= pts.length; syy /= pts.length; sxy /= pts.length;
+      const tr = sxx + syy;
+      const det = sxx * syy - sxy * sxy;
+      const l1 = tr / 2 + Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+      const l2 = Math.max(0, tr - l1);
+      const len = Math.sqrt(12 * l1);
+      const thick = Math.max(1, pts.length / Math.max(1, len));
+      const across = Math.sqrt(l2);
+      // the long axis, as degrees from upright (0) to flat (90)
+      const ang = Math.abs((Math.atan2(l1 - sxx, sxy || 1e-9) * 180) / Math.PI);
+      const fromUp = 90 - Math.min(ang, 180 - ang);
+      const emPx = em * K;
+      const straight = across <= Math.max(1.2, thick * 0.6);
+      const printedMark = straight && thick <= emPx * 0.14 && len >= emPx * 0.45 && len <= emPx * 1.6 &&
+        ((fromUp >= 12 && fromUp <= 40) || fromUp >= 80);
+      parts.push({ x0: bx0 / K + x0, y0: by0 / K + y0, x1: (bx1 + 1) / K + x0, y1: (by1 + 1) / K + y0, keep: printedMark });
+    }
+    return parts;
   }
 
   // Paint the given rectangles (pixels, each with its text's em in pixels)
@@ -2944,7 +3341,7 @@
         return !(x >= wx0 && x < wx1 && y >= wy0 && y < wy1 && prot[idx(x, y)]);
       });
       const even = pool.filter((q) => Math.abs(lum(q) - mid) <= 14).length;
-      const textured = pool.length > 20 && even < pool.length * 0.7;
+      const textured = pool.length > 20 && even < pool.length * 0.85;
       const src = textured ? pool.map((q) => [d[q], d[q + 1], d[q + 2]]) : null;
       let seed = (x0 * 73856093) ^ (y0 * 19349663);
       const pick = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return src[seed % src.length]; };
@@ -3002,7 +3399,7 @@
     const skip = [];
     const toPx = (b) => ({ x0: b.x * k, y0: b.y * k, x1: (b.x + b.w) * k, y1: (b.y + b.h) * k, em: (b.em || 0) * k });
     for (const it of S.rec.items) {
-      if (it.page === info.entry.uid && it.type === 'hand') rects.push(...handRects(it).map(toPx));
+      if (it.page === info.entry.uid && it.type === 'hand') { const hr = handRects(it); rects.push(...hr.rects.map(toPx)); skip.push(...hr.keep.map(toPx)); }
       if (it.page !== info.entry.uid || !it.conv) continue;
       const cr = convRects(it);
       rects.push(...cr.rects.map(toPx));
@@ -3107,7 +3504,8 @@
       const b = el('button', { type: 'button', class: 'btn btn-sm', title: it.erased ? 'Show this handwriting again' : 'Take this handwriting off the page (Del)' }, it.erased ? 'Put back' : 'Erase handwriting');
       b.addEventListener('mousedown', (e) => e.preventDefault());
       b.addEventListener('click', () => setHand([it], !it.erased));
-      bar.replaceChildren(b);
+      const hint = it.erased && it.parts ? el('span', { class: 'pdf-style-hint' }, 'Click a piece to keep or erase it') : null;
+      bar.replaceChildren(...[b, hint].filter(Boolean));
       bar.hidden = false;
       return;
     }
@@ -3141,7 +3539,7 @@
     const before = node0Before(it) || snap();
     S.editing = null;
     if (it.conv) it.text = '';
-    else if (it.type === 'hand') it.erased = true;
+    else if (it.type === 'hand') { setHand([it], true); return; }
     else S.rec.items = S.rec.items.filter((i) => i.id !== it.id);
     S.sel = null;
     commit(before);
@@ -3898,7 +4296,11 @@
       for (const it of items) {
         if (it.cover) regions.push(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: it.cover.color }));
         if (it.type === 'whiteout') regions.push(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: it.color }));
-        if (it.type === 'hand') for (const b of handRects(it)) regions.push(Object.assign(rectToPdf(R, box, b.x, b.y, b.w, b.h), { color: '#ffffff', inpaint: true, em: b.em }));
+        if (it.type === 'hand') {
+          const hr = handRects(it);
+          const keep = hr.keep.map((b) => rectToPdf(R, box, b.x, b.y, b.w, b.h));
+          for (const b of hr.rects) regions.push(Object.assign(rectToPdf(R, box, b.x, b.y, b.w, b.h), { color: '#ffffff', inpaint: true, em: b.em, keep }));
+        }
         if (it.conv) {
           const cr = convRects(it);
           const keep = cr.keep.map((b) => rectToPdf(R, box, b.x, b.y, b.w, b.h));

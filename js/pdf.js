@@ -582,7 +582,7 @@
     // A scanned page has no text of its own: use what OCR read, if it has run.
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
     if (!out.length && ocr && ocr.rot === info.rot) {
-      ocr.lines.forEach((l, li) => ocrPhrases(l).forEach((ph, pi) => out.push({
+      ocr.lines.forEach((l, li) => ocrPhrases(l, ocr.rules).forEach((ph, pi) => out.push({
         key: info.entry.uid + ':ocr' + li + '.' + pi, str: ph.map((w) => w.t).join(' '), x: ph[0].x0, base: l.base, size: l.size,
         top: Math.min(...ph.map((w) => w.y0)), w: ph[ph.length - 1].x1 - ph[0].x0, words: ph, scan: true, fontName: null, family: 'sans'
       })));
@@ -593,7 +593,7 @@
 
   // Split an OCR line into the pieces a person would edit separately: table
   // borders that OCR reads as "|", and wide gaps between columns, end a piece.
-  function ocrPhrases(l) {
+  function ocrPhrases(l, rules) {
     const raw = l.words && l.words.length ? l.words : [{ t: l.text, x: l.x, w: l.w }];
     const words = [];
     for (const w of raw) {
@@ -613,8 +613,11 @@
     const phrases = [];
     let cur = [];
     const gap = (l.h || l.size) * 1.3;
+    // a table border found while reading the page, standing between two words
+    const ruleBetween = (a, b) => (rules || []).some((r) => r.x > a.x1 - 0.5 && r.x < b.x0 + 0.5 && r.y0 < Math.max(a.y1, b.y1) && r.y1 > Math.min(a.y0, b.y0));
     for (const w of words) {
-      if (w.sep || (cur.length && w.x0 - cur[cur.length - 1].x1 > gap)) { if (cur.length) phrases.push(cur); cur = []; if (w.sep) continue; }
+      const prev = cur[cur.length - 1];
+      if (w.sep || (prev && (w.x0 - prev.x1 > gap || ruleBetween(prev, w)))) { if (cur.length) phrases.push(cur); cur = []; if (w.sep) continue; }
       cur.push(w);
     }
     if (cur.length) phrases.push(cur);
@@ -1235,6 +1238,18 @@
     }
   }
 
+  // The font size that makes each original word as wide as it is on the page,
+  // taken word by word (median), so one odd word or gap cannot skew it, and
+  // kept within a third of what the letters' height says.
+  function fitSize(words, it, fromHeight) {
+    const r = words.filter((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2)
+      .map((w) => (w.x1 - w.x0) / inkOf(w.t, Object.assign({}, it, { size: 1 })).w)
+      .filter((v) => v > 0 && isFinite(v)).sort((a, b) => a - b);
+    if (!r.length) return fromHeight;
+    const m = r[r.length >> 1];
+    return m > fromHeight * 0.75 && m < fromHeight * 1.33 ? Math.round(m * 10) / 10 : fromHeight;
+  }
+
   // Edit a run of the PDF's own text (or a phrase OCR read on a scan). The
   // edit remembers the original words, so only the words you change are
   // erased and redrawn.
@@ -1255,10 +1270,7 @@
       // original words exactly as wide as they are on the scan.
       const sws = words.map((w) => w.sw).filter((v) => v > 0).sort((a, b) => a - b);
       bold = sws.length ? sws[sws.length >> 1] > S.boldStroke : ink.density > 0.3;
-      const span = words[words.length - 1].x1 - words[0].x0;
-      const fit = (b) => span / textWidth(origText, { family: fam, bold: b, italic: false, size: 1 });
-      const s1 = fit(bold);
-      if (s1 > t.size * 0.6 && s1 < t.size * 1.6) size = Math.round(s1 * 10) / 10;
+      size = fitSize(words, { family: fam, bold, italic: false }, Math.round(t.size * 10) / 10);
     } else {
       try {
         const f = info.page.commonObjs.get(t.fontName);
@@ -1282,7 +1294,7 @@
     }
     const it = {
       id: uid(), type: 'text', page: info.entry.uid, origKey: key, anchored: true, scan: !!t.scan, limit,
-      words, origText, text: origText, x: words[0].x0, base: t.base, y: t.base - BASELINE[fam] * size,
+      words, origText, text: origText, x: words[0].x0, base: t.base, y: t.base - BASELINE[fam] * size, heightSize: t.size,
       size, family: fam, color: ink.fg, bg: ink.bg, bold, italic
     };
     S.rec.items.push(it);
@@ -1348,12 +1360,7 @@
     it.italic = ref.style === 'italic';
     const cat = NpFonts.CATALOG[ref.id] ? NpFonts.CATALOG[ref.id][1] : 'sans';
     it.family = cat === 'mono' ? 'mono' : cat === 'serif' ? 'serif' : 'sans';
-    if (it.scan) {
-      // with the real font, the size that makes the original words exactly as wide
-      const span = words[words.length - 1].x1 - words[0].x0;
-      const s1 = span / textWidth(it.origText, Object.assign({}, it, { size: 1 }));
-      if (s1 > it.size * 0.7 && s1 < it.size * 1.4) it.size = Math.round(s1 * 10) / 10;
-    }
+    if (it.scan) it.size = fitSize(words, it, it.heightSize || it.size);
     it.y = it.base - BASELINE[it.family] * it.size;
     const node = S.editing === it.id ? info.layer.querySelector('.pdf-textbox[data-id="' + it.id + '"]') : null;
     if (node) { applyTextStyle(node, it); node.style.top = px(it.y); } else renderOverlay(info);

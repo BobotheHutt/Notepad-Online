@@ -1222,7 +1222,9 @@
     'pdf-rotate': (arg) => NpPdf.rotateCurrent(+arg),
     'pdf-delete-page': () => NpPdf.deleteCurrent(),
     'pdf-blank': () => NpPdf.insertBlank(),
-    'pdf-add': () => NpPdf.addPages()
+    'pdf-add': () => NpPdf.addPages(),
+    'pdf-ocr': (arg) => NpPdf.ocr(arg),
+    'pdf-copy-text': () => NpPdf.copyText()
   };
 
   document.addEventListener('click', (e) => {
@@ -2432,7 +2434,7 @@
     if (isMac) for (const k of $$('kbd')) k.textContent = k.textContent.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     for (const b of $$('[title]')) if (isMac) b.title = b.title.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     buildToolbar();
-    NpPdf.init({ el, toast, dialog, changed: () => markDirty() });
+    NpPdf.init({ el, toast, dialog, changed: () => markDirty(), status: setStatus });
     applyTheme();
     setView(settings.view);
     setZoom(settings.zoom);

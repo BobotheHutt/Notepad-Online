@@ -96,6 +96,10 @@
               <div class="menu-sep"></div>
               <button role="menuitem" data-action="pdf-blank"><span>Insert blank page</span></button>
               <button role="menuitem" data-action="pdf-add"><span>Add pages from another PDF…</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="pdf-ocr" data-arg="scanned"><span>Read text on scanned pages (OCR)</span></button>
+              <button role="menuitem" data-action="pdf-ocr" data-arg="current"><span>Read text on this page</span></button>
+              <button role="menuitem" data-action="pdf-copy-text"><span>Copy text from this page</span></button>
               <div class="menu-note">These act on the page in view. Each page thumbnail has its own buttons too.</div>
             </div>
           </div>
@@ -249,8 +253,7 @@
       <button class="tb" data-pdf-tool="box" data-icon="square" title="Box (B)" aria-label="Box"></button>
       <button class="tb" data-pdf="image" data-icon="image" title="Add an image" aria-label="Add an image"></button>
       <button class="tb tb-label" data-pdf="sign" data-icon="signature" title="Add your signature">Sign</button>
-      <span class="tb-sep"></span>
-      <span class="pdf-style" id="pdf-style" hidden></span>
+      <button class="tb tb-label" data-pdf="ocr" data-icon="scan" title="Read the text on scanned pages (OCR), so you can edit, search and copy it">Read text</button>
       <span class="grow"></span>
       <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>
       <span class="pdf-zoom" id="pdf-zoom">100%</span>
@@ -270,6 +273,8 @@
       <div class="pdf-scroller" id="pdf-scroller">
         <div class="pdf-pages" id="pdf-pages"></div>
       </div>
+      <!-- Style of the selected item or the active tool; floats so the page never jumps -->
+      <div class="ctxbar pdf-style" id="pdf-style" role="toolbar" aria-label="Style" hidden></div>
     </main>
 
     <!-- ===================== Writing area ===================== -->

@@ -29,14 +29,16 @@ and lets you edit and sign PDFs.
 - **Edit text**: click any line of the PDF's own text and retype it. The new text matches the original's color and size, in the closest standard font.
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
+- **Read text on scanned pages (OCR)**: click Read text and the words on a scan become editable with Edit text, and the downloaded PDF can be searched and copied from. English only for now; needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
 - **Download** a new PDF with your changes. The original file is never touched.
 
 What PDF editing cannot do, so nothing surprises you:
-- Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. Pictures and drawings under a white-out are only covered, though. That includes scanned pages, which are pictures, so they still hold what is underneath. The app tells you when a white-out had no text to erase.
+- Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. That includes scanned pages and other pictures: the covered pixels are painted over inside the image itself. Only drawings (lines and shapes) under a white-out stay in the file, hidden. The app tells you when that happens.
+- A color scan you have erased part of is saved again as JPEG, so that page's file size can roughly double. Black-and-white scans stay small.
+- OCR can misread faint, tiny or handwritten text. Check what it read before relying on it.
 - Replacement text uses standard PDF fonts (Helvetica, Times, Courier), so it can look slightly different from the original font. Characters outside Western European alphabets cannot be written yet.
-- Scanned pages are pictures, so their words cannot be edited (but you can white-out and type over them).
 - Password-protected PDFs cannot be changed.
 
 **Tools**

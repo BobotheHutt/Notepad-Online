@@ -217,6 +217,7 @@
     await build();
     setTool(S.tool === 'image' || S.tool === 'sign' ? 'select' : S.tool);
     updateUndoButtons();
+    suggestOcr(rec);
   }
 
   function close() {
@@ -425,6 +426,7 @@
     if (S.editing && itemById(S.editing) && itemById(S.editing).page === info.entry.uid) return;
     const layer = info.layer;
     layer.replaceChildren();
+    info.seq = (info.seq || 0) + 1;
     const mine = S.rec.items.filter((i) => i.page === info.entry.uid);
     // patches over replaced text go underneath everything else
     for (const it of mine) {
@@ -508,13 +510,21 @@
       const fam = /mono|courier/i.test(style.fontFamily || '') ? 'mono' : /sans/i.test(style.fontFamily || '') ? 'sans' : /serif/i.test(style.fontFamily || '') ? 'serif' : 'sans';
       out.push({ key: info.entry.uid + ':' + i, str: item.str, x: tx[4], base: tx[5], size, top: tx[5] - ascent * size, w: item.width, fontName: item.fontName, family: fam });
     });
+    info.nativeCount = out.length;
+    // A scanned page has no text of its own: use what OCR read, if it has run.
+    const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
+    if (!out.length && ocr && ocr.rot === info.rot) {
+      ocr.lines.forEach((l, i) => out.push({ key: info.entry.uid + ':ocr' + i, str: l.text, x: l.x, base: l.base, size: l.size, top: l.y, w: l.w, fontName: null, family: 'sans' }));
+    }
     info.text = out;
     return out;
   }
 
   async function renderTextTargets(info) {
+    const seq = info.seq;
     const items = await textItems(info);
-    if (S.tool !== 'edit' || !info.layer.isConnected) return;
+    // a newer render has replaced this layer while the text was loading
+    if (S.tool !== 'edit' || !info.layer.isConnected || seq !== info.seq) return;
     const used = new Set(S.rec.items.filter((i) => i.origKey).map((i) => i.origKey));
     const frag = document.createDocumentFragment();
     for (const t of items) {
@@ -653,6 +663,7 @@
     if (!entry) return;
     measureTextItems();
     rotateItems(uidv, dir);
+    if (S.rec.ocr) delete S.rec.ocr[uidv];
     entry.rotate = (entry.rotate + (dir > 0 ? 90 : 270)) % 360;
     commit(before);
     await build();
@@ -778,7 +789,8 @@
     if (t === 'edit') {
       const target = e.target.closest('.pdf-target');
       if (item && item.type === 'text') { e.preventDefault(); startEditing(item.id); return; }
-      if (target) { e.preventDefault(); editOriginal(info, target.dataset.key); }
+      if (target) { e.preventDefault(); editOriginal(info, target.dataset.key); return; }
+      if (info.text && !info.text.length) api.toast('This page is a scan, so its words are a picture. Click “Read text” first, then you can edit them.', 4500);
       return;
     }
     if (t === 'draw') { e.preventDefault(); startInk(e, info, x, y); return; }
@@ -1174,6 +1186,134 @@
     out.height = Math.max(1, y1 - y0 + 1);
     out.getContext('2d').drawImage(c, x0, y0, out.width, out.height, 0, 0, out.width, out.height);
     return out.toDataURL('image/png');
+  }
+
+  /* ============================================================ OCR */
+
+  // Tesseract reads scanned pages. Its lines are stored per page in display
+  // points (rec.ocr[uid] = { rot, lines: [{ text, x, y, w, h, base, size }] })
+  // and become Edit-text targets, plus an invisible, searchable text layer in
+  // the downloaded file.
+
+  let ocrWorker = null;
+
+  async function getOcr(progress) {
+    if (!/^https?:$/.test(location.protocol)) {
+      throw new Error('Reading text needs the app opened from its web address (your GitHub Pages site), not from a file on this computer.');
+    }
+    if (ocrWorker) return ocrWorker;
+    if (typeof Tesseract === 'undefined') await loadScript(VENDOR + 'tesseract/tesseract.min.js');
+    const abs = (path) => new URL(VENDOR + 'tesseract/' + path, location.href).href;
+    ocrWorker = await Tesseract.createWorker('eng', 1, {
+      workerPath: abs('worker.min.js'),
+      corePath: abs('tesseract-core-simd-lstm.wasm.js'),
+      langPath: abs('').replace(/\/$/, ''),
+      cacheMethod: 'none',
+      logger: (m) => progress && progress(m)
+    });
+    return ocrWorker;
+  }
+
+  async function ocrPage(worker, info) {
+    const k = Math.min(300 / 72, 3400 / Math.max(info.w, info.h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(info.w * k);
+    c.height = Math.round(info.h * k);
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot }) }).promise;
+    const { data } = await worker.recognize(c);
+    const lines = [];
+    for (const l of data.lines || []) {
+      const text = (l.text || '').replace(/\s+/g, ' ').trim();
+      if (!text || l.confidence < 35) continue;
+      const b = l.bbox;
+      const bl = l.baseline && l.baseline.has_baseline !== false ? (l.baseline.y0 + l.baseline.y1) / 2 : b.y1;
+      const lineH = (b.y1 - b.y0) / k;
+      const base = Math.min(bl, b.y1) / k;
+      const top = b.y0 / k;
+      // top of the box to the baseline is about the cap height, ~0.7 em
+      const size = clamp((base - top) / 0.7, lineH * 0.55, lineH * 1.6);
+      const words = (l.words || []).filter((w) => w.text && w.text.trim()).map((w) => ({ t: w.text.trim(), x: w.bbox.x0 / k, w: (w.bbox.x1 - w.bbox.x0) / k }));
+      lines.push({ text, x: b.x0 / k, y: top, w: (b.x1 - b.x0) / k, h: lineH, base, size: Math.round(size * 10) / 10, words });
+    }
+    return lines;
+  }
+
+  async function nativeTextCount(info) {
+    if (info.nativeCount === undefined) { info.text = null; await textItems(info); }
+    return info.nativeCount;
+  }
+
+  async function runOcr(scope) {
+    if (!S.rec || S.ocrBusy) return;
+    const rec = S.rec;
+    const cur = currentPage();
+    const targets = [];
+    for (const info of S.info.values()) {
+      if (!info.page) continue;
+      if (scope === 'current' && info !== cur) continue;
+      if (scope !== 'current' && (await nativeTextCount(info)) >= 3) continue;
+      targets.push(info);
+    }
+    if (!targets.length) {
+      api.toast('This PDF already has real text, so Edit text works on it directly. To read one page anyway, use Pages → Read text on this page.', 6000);
+      return;
+    }
+    S.ocrBusy = true;
+    const btn = $('#pdf-toolbar [data-pdf="ocr"]');
+    if (btn) btn.disabled = true;
+    let found = 0;
+    try {
+      let n = 0;
+      const worker = await getOcr((m) => {
+        if (m.status === 'recognizing text') api.status('Reading text, page ' + n + ' of ' + targets.length + ' (' + Math.round((m.progress || 0) * 100) + '%)…', 'pending');
+        else if (/load|initializ/.test(m.status || '')) api.status('Getting text recognition ready…', 'pending');
+      });
+      rec.ocr = rec.ocr || {};
+      for (const info of targets) {
+        n++;
+        if (S.rec !== rec) return;
+        api.status('Reading text, page ' + n + ' of ' + targets.length + '…', 'pending');
+        const lines = await ocrPage(worker, info);
+        rec.ocr[info.entry.uid] = { rot: info.rot, lines };
+        if (lines.length) found++;
+        info.text = null;
+        info.nativeCount = undefined;
+        renderOverlay(info);
+      }
+      const all = rec.pages.map((p) => (rec.ocr[p.uid] ? rec.ocr[p.uid].lines.map((l) => l.text).join('\n') : '')).join('\n');
+      rec.text = ((rec.text || '') + '\n' + all).trim().slice(0, 200000);
+      changed();
+      if (found) {
+        setTool('edit');
+        api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.', 6000);
+      } else api.toast('No readable text was found. Very faint or handwritten pages may not work.', 6000);
+    } catch (e) {
+      api.toast(e.message || 'Text recognition failed.', 7000);
+    } finally {
+      S.ocrBusy = false;
+      if (btn) btn.disabled = false;
+      api.status('Saved', 'ok');
+    }
+  }
+
+  async function copyPageText() {
+    const info = currentPage();
+    if (!info) return;
+    const items = await textItems(info);
+    if (!items.length) { api.toast('This page has no text to copy. If it is a scan, click “Read text” first.'); return; }
+    const lines = [];
+    let lastBase = null;
+    for (const t of items.slice().sort((p, q) => (Math.abs(p.base - q.base) < p.size * 0.5 ? p.x - q.x : p.base - q.base))) {
+      if (lastBase !== null && Math.abs(t.base - lastBase) < t.size * 0.5) lines[lines.length - 1] += ' ' + t.str;
+      else lines.push(t.str);
+      lastBase = t.base;
+    }
+    const text = lines.join('\n').replace(/ {2,}/g, ' ');
+    try { await navigator.clipboard.writeText(text); api.toast('Copied the text of this page'); }
+    catch (e) { api.toast('Your browser blocked copying. Select the text in the downloaded PDF instead.'); }
   }
 
   /* ============================================================ style bar */
@@ -1610,6 +1750,21 @@
           try { form = xobjs.lookup(N(a[0].v)); } catch (e) { form = null; }
           if (!form || !form.dict) break;
           const st = form.dict.lookup(N('Subtype'));
+          if (st && st.decodeText() === 'Image') {
+            // A picture (a scanned page is one): redact its pixels on download.
+            const mask = form.dict.lookup(N('ImageMask'));
+            if (mask && mask.asBoolean && mask.asBoolean()) break;
+            const pts = [[0, 0], [1, 0], [0, 1], [1, 1]].map(([u, w]) => apply(gs.ctm, u, w));
+            const xs = pts.map((q) => q[0]);
+            const ys = pts.map((q) => q[1]);
+            const bb = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+            const hits = regions.filter((r) => r.x < bb.x1 && r.x + r.width > bb.x0 && r.y < bb.y1 && r.y + r.height > bb.y0);
+            if (!hits.length) break;
+            const newName = a[0].v + '_np' + Math.random().toString(36).slice(2, 7);
+            count.images.push({ xobjs, name: a[0].v, newName, ref: xobjs.get(N(a[0].v)), ctm: gs.ctm.slice(), hits });
+            edits.push({ start: o.start, end: o.end, text: '/' + newName + ' Do' });
+            break;
+          }
           if (!st || st.decodeText() !== 'Form') break;
           const fm = form.dict.lookup(N('Matrix'));
           const m = fm ? [0, 1, 2, 3, 4, 5].map((k) => num(fm.lookup(k))) : [1, 0, 0, 1, 0, 0];
@@ -1650,7 +1805,85 @@
   }
 
   // Erase the text under regions (page space) from a page. Returns glyphs removed.
-  function eraseText(doc, page, regions) {
+  // Repaint the covered parts of an image. PDF.js decodes it (any format a
+  // PDF can hold: JPEG, fax, JBIG2, JPEG 2000…) by rendering a one-image
+  // scratch PDF at one pixel per image pixel.
+  async function redactImage(doc, ref, ctm, hits) {
+    const L = PDFLib;
+    const N = (k) => L.PDFName.of(k);
+    const img = doc.context.lookup(ref);
+    if (!img || !img.dict) return null;
+    const W = num(img.dict.lookup(N('Width')));
+    const H = num(img.dict.lookup(N('Height')));
+    if (!W || !H) return null;
+    const bpc = num(img.dict.lookup(N('BitsPerComponent')));
+    const filt = img.dict.lookup(N('Filter'));
+    const filters = filt ? (filt.asArray ? filt.asArray().map((f) => f.toString()) : [filt.toString()]) : [];
+    const bilevel = bpc === 1 || filters.some((f) => /CCITT|JBIG2/.test(f));
+
+    const tmp = await L.PDFDocument.create();
+    const copied = L.PDFObjectCopier.for(doc.context, tmp.context).copy(img);
+    const tref = tmp.context.register(copied);
+    const tpage = tmp.addPage([W, H]);
+    const xname = tpage.node.newXObject('Im', tref);
+    tpage.pushOperators(L.pushGraphicsState(), L.concatTransformationMatrix(W, 0, 0, H, 0, 0), L.drawObject(xname), L.popGraphicsState());
+    const pdoc = await loadPdfJs((await tmp.save()).buffer);
+    const scale = Math.min(1, Math.sqrt(40e6 / (W * H)));
+    const cw = Math.max(1, Math.round(W * scale));
+    const ch = Math.max(1, Math.round(H * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw;
+    canvas.height = ch;
+    const g = canvas.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, cw, ch);
+    const pg = await pdoc.getPage(1);
+    await pg.render({ canvasContext: g, viewport: pg.getViewport({ scale: cw / W }) }).promise;
+    pdoc.destroy();
+
+    // page space → image unit square → pixels (image row 0 is the top)
+    const [a, b, c, d, e, f] = ctm;
+    const det = a * d - b * c;
+    if (!det) return null;
+    const toPx = (x, y) => {
+      const u = (d * (x - e) - c * (y - f)) / det;
+      const v = (a * (y - f) - b * (x - e)) / det;
+      return [u * cw, (1 - v) * ch];
+    };
+    for (const r of hits) {
+      g.fillStyle = r.color || '#ffffff';
+      g.beginPath();
+      [[r.x, r.y], [r.x + r.width, r.y], [r.x + r.width, r.y + r.height], [r.x, r.y + r.height]].forEach(([x, y], k) => {
+        const [px0, py0] = toPx(x, y);
+        if (k) g.lineTo(px0, py0); else g.moveTo(px0, py0);
+      });
+      g.closePath();
+      g.fill();
+      g.lineWidth = 2;
+      g.strokeStyle = g.fillStyle;
+      g.stroke();
+    }
+
+    const ctx = doc.context;
+    if (bilevel) {
+      // black-and-white scans stay 1 bit per pixel, so the file stays small
+      const data = g.getImageData(0, 0, cw, ch).data;
+      const rowBytes = Math.ceil(cw / 8);
+      const bits = new Uint8Array(rowBytes * ch);
+      for (let y = 0; y < ch; y++) {
+        for (let x = 0; x < cw; x++) {
+          const k = (y * cw + x) * 4;
+          if (data[k] * 0.299 + data[k + 1] * 0.587 + data[k + 2] * 0.114 >= 128) bits[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
+        }
+      }
+      return ctx.register(ctx.flateStream(bits, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceGray', BitsPerComponent: 1 }));
+    }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+    const jpg = new Uint8Array(await blob.arrayBuffer());
+    return ctx.register(ctx.stream(jpg, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }));
+  }
+
+  async function eraseText(doc, page, regions) {
     const L = PDFLib;
     const N = (k) => L.PDFName.of(k);
     const ctx = doc.context;
@@ -1668,13 +1901,20 @@
     const res = page.node.Resources() ? page.node.Resources().clone(ctx) : ctx.obj({});
     const xo = res.lookup(N('XObject'));
     if (xo) res.set(N('XObject'), xo.clone(ctx));
-    const count = { n: 0 };
+    const count = { n: 0, images: [] };
     const out = eraseIn(bytes, res, [1, 0, 0, 1, 0, 0], regions, ctx, count, 0);
     if (!out) return 0;
+    let redacted = 0;
+    for (const im of count.images) {
+      let fresh = null;
+      try { fresh = await redactImage(doc, im.ref, im.ctm, im.hits); } catch (e) { fresh = null; }
+      im.xobjs.set(N(im.newName), fresh || im.ref);
+      if (fresh) redacted++;
+    }
     page.node.set(N('Resources'), res);
     // an array, as normalize() left it, so later wrapping can add to it
     page.node.set(N('Contents'), ctx.obj([ctx.register(ctx.flateStream(out))]));
-    return count.n;
+    return count.n + redacted;
   }
 
   /* ============================================================ export */
@@ -1757,17 +1997,18 @@
       const R = ((baseRot + entry.rotate) % 360 + 360) % 360;
       page.setRotation(L.degrees(R));
       const items = (rec.items || []).filter((i) => i.page === entry.uid);
-      if (!items.length) continue;
+      const ocr = rec.ocr && rec.ocr[entry.uid] && rec.ocr[entry.uid].rot === R ? rec.ocr[entry.uid].lines : [];
+      if (!items.length && !ocr.length) continue;
       const box = page.getCropBox();
       // Text under edits and white-out is removed from the file, not just hidden.
       const regions = [];
       for (const it of items) {
-        if (it.cover) regions.push(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h));
-        if (it.type === 'whiteout') regions.push(rectToPdf(R, box, it.x, it.y, it.w, it.h));
+        if (it.cover) regions.push(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: it.cover.color }));
+        if (it.type === 'whiteout') regions.push(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: it.color }));
       }
       if (regions.length) {
         let n = 0;
-        try { n = eraseText(base, page, regions); } catch (e) { n = 0; }
+        try { n = await eraseText(base, page, regions); } catch (e) { n = 0; }
         erased += n;
         if (!n) coveredNothing++;
       }
@@ -1775,6 +2016,33 @@
       page.node.normalize();
       const ctx = base.context;
       page.node.wrapContentStreams(ctx.register(ctx.contentStream([L.pushGraphicsState()])), ctx.register(ctx.contentStream([L.popGraphicsState()])));
+
+      if (ocr.length) {
+        // invisible text over the scan, so the PDF can be searched and copied;
+        // nothing is written back inside an area that was just erased
+        const font = await fontFor({ family: 'sans' });
+        const key = page.node.newFontDictionary(font.name, font.ref);
+        const rad = (R * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const inRegion = (x, y) => regions.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
+        // word by word, so a white-out over part of a line drops just those words
+        for (const l of ocr) {
+          const words = l.words && l.words.length ? l.words : [{ t: l.text, x: l.x, w: l.w }];
+          for (const wd of words) {
+            const mid = toPdf(R, box, wd.x + wd.w / 2, l.base - l.size * 0.3);
+            if (inRegion(mid[0], mid[1])) continue;
+            let safe = '';
+            for (const ch of wd.t) { try { font.encodeText(ch); safe += ch; } catch (e) { safe += '?'; } }
+            const wAt = font.widthOfTextAtSize(safe + ' ', l.size);
+            if (!wAt || !safe) continue;
+            const [x, y] = toPdf(R, box, wd.x, l.base);
+            // q/Q: invisible mode and squeeze are graphics state and would leak into the visible text drawn next
+            page.pushOperators(L.pushGraphicsState(), L.beginText(), L.setFontAndSize(key, l.size), L.setTextRenderingMode(L.TextRenderingMode.Invisible),
+              L.setCharacterSqueeze(clamp((wd.w / font.widthOfTextAtSize(safe, l.size)) * 100, 10, 1000)), L.setTextMatrix(cos, sin, -sin, cos, x, y), L.showText(font.encodeText(safe)), L.endText(), L.popGraphicsState());
+          }
+        }
+      }
 
       for (const it of items) if (it.cover) {
         page.drawRectangle(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: hexRgb(it.cover.color) }));
@@ -1817,7 +2085,7 @@
     }
     const bytes = await base.save({ updateFieldAppearances: false });
     if (replaced) api.toast(replaced + ' character' + (replaced === 1 ? '' : 's') + ' could not be written with the PDF’s standard fonts and became “?”.', 6000);
-    if (coveredNothing) api.toast('Some covered areas had no text in them to remove (a scanned page, or a picture). Those are hidden, but still inside the file.', 7000);
+    if (coveredNothing) api.toast('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.', 7000);
     if (warnings.length) api.toast('Some form fields could not be filled: ' + warnings.slice(0, 3).join(', '), 6000);
     return new Blob([bytes], { type: 'application/pdf' });
   }
@@ -1840,6 +2108,7 @@
       if (act === 'zoom-in') zoom('in');
       if (act === 'zoom-out') zoom('out');
       if (act === 'pages') document.body.classList.toggle('pdf-thumbs-open');
+      if (act === 'ocr') runOcr('scanned');
     });
     $('#pdf-scroller').addEventListener('scroll', () => { if (!S.raf) S.raf = requestAnimationFrame(() => { S.raf = 0; updatePageStatus(); }); }, { passive: true });
     window.addEventListener('resize', () => { if (S.rec && S.fit && document.body.classList.contains('pdf-mode')) fitWidth(); });
@@ -1866,6 +2135,13 @@
     return { pages: Array.from({ length: n }, (_, i) => ({ uid: uid(), src: 0, index: i, rotate: 0 })), text: text.replace(/[ \t]+/g, ' ').trim() };
   }
 
+  async function suggestOcr(rec) {
+    // a PDF whose first page has no text of its own is almost always a scan
+    const first = S.info.get(rec.pages[0] && rec.pages[0].uid);
+    if (!first || !first.page || (rec.ocr && Object.keys(rec.ocr).length)) return;
+    if ((await nativeTextCount(first)) === 0 && S.rec === rec) api.toast('This looks like a scanned PDF. Click “Read text” to make its words editable and searchable.', 6000);
+  }
+
   window.NpPdf = {
     init, open, close, newRecord,
     export: exportPdf,
@@ -1874,6 +2150,8 @@
     rotateCurrent: (dir) => { const c = currentPage(); if (c) rotatePage(c.entry.uid, dir); },
     deleteCurrent: () => { const c = currentPage(); if (c) deletePage(c.entry.uid); },
     insertBlank,
+    ocr: (scope) => runOcr(scope),
+    copyText: copyPageText,
     addPages: () => $('#pdf-add-input').click(),
     get active() { return !!S.rec; },
     finishEditing

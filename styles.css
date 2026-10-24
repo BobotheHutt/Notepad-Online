@@ -1042,8 +1042,9 @@ body:not(.pdf-mode) [data-pdf-only], body.pdf-mode [data-doc-only] { display: no
 .tb-label { width: auto; padding: 0 9px 0 7px; gap: 5px; font-size: 13px; font-weight: 550; }
 .tb:disabled { opacity: 0.35; cursor: default; }
 .tb:disabled:hover { background: none; }
-.pdf-style { display: inline-flex; align-items: center; gap: 4px; }
+.pdf-style { gap: 4px; top: 12px; bottom: auto; }
 .pdf-style .btn { margin-left: 4px; }
+.pdf-style .tb-select { border: 1px solid var(--line); }
 .pdf-color { width: 30px; height: 26px; padding: 0; border: 1px solid var(--line-2); border-radius: 6px; background: none; cursor: pointer; }
 .pdf-zoom { font-size: 12px; color: var(--ink-3); min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
 .pdf-download { margin-left: 6px; }

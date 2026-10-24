@@ -7,49 +7,61 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
     <div class="editor-container">
-        <!-- Modern Streamlined Toolbar Layout -->
-        <div class="toolbar">
-            <!-- Group 1: Core History -->
+        <!-- Main Application Control Toolbar -->
+        <header class="toolbar">
+            
+            <!-- History / Undo Redo Group -->
             <div class="tool-group">
-                <button onclick="format('undo')" title="Undo">↩️</button>
-                <button onclick="format('redo')" title="Redo">↪️</button>
+                <button onclick="format('undo')" title="Undo">↩</button>
+                <button onclick="format('redo')" title="Redo">↪</button>
             </div>
 
-            <!-- Group 2: Quick Style Toggles -->
+            <!-- Inline Typography Format Group -->
             <div class="tool-group">
-                <button onclick="format('bold')" title="Bold"><b>B</b></button>
-                <button onclick="format('italic')" title="Italic"><i>I</i></button>
-                <button onclick="format('underline')" title="Underline"><u>U</u></button>
-                <button onclick="format('strikeThrough')" title="Strikethrough"><s>S</s></button>
+                <button onclick="format('bold')" style="font-weight: bold;" title="Bold">B</button>
+                <button onclick="format('italic')" style="font-style: italic;" title="Italic">I</button>
+                <button onclick="format('underline')" style="text-decoration: underline;" title="Underline">U</button>
+                <button onclick="format('strikeThrough')" style="text-decoration: line-through;" title="Strikethrough">~~</button>
             </div>
 
-            <!-- Group 3: Font Configuration Dropdowns -->
+            <!-- Font Family Configuration Picker -->
             <div class="tool-group">
-                <select id="font-family" onchange="changeFontFamily(this.value)" title="Font Family">
-                    <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">System Default</option>
-                    <option value="'Arial', sans-serif">Arial</option>
+                <select id="font-family-select" onchange="changeFontFamily(this.value)">
+                    <option value="-apple-system, BlinkMacSystemFont, sans-serif">System Default</option>
+                    <option value="Arial, sans-serif">Arial</option>
                     <option value="'Times New Roman', serif">Times New Roman</option>
                     <option value="'Courier New', monospace">Courier New</option>
-                    <option value="'Georgia', serif">Georgia</option>
+                    <option value="Georgia, serif">Georgia</option>
                 </select>
-
-                <button onclick="changeFontSize('increase')" title="Zoom In">A+</button>
-                <button onclick="changeFontSize('decrease')" title="Zoom Out">A-</button>
             </div>
-            
-            <!-- Group 4: Integrated Dropdown Menus -->
+
+            <!-- Font Scale Sizing Group -->
             <div class="tool-group">
-                <!-- Colors Dropdown -->
+                <button onclick="changeFontSize('increase')" title="Increase Text Size">A+</button>
+                <button onclick="changeFontSize('decrease')" title="Decrease Text Size">A-</button>
+            </div>
+
+            <!-- Style Color Selection Custom Cascading Dropdown -->
+            <div class="tool-group">
                 <div class="dropdown">
-                    <button class="dropbtn">🎨 Colors ▼</button>
+                    <button class="dropbtn" id="color-btn">🎨 Colors ▼</button>
                     <div class="dropdown-content color-menu">
-                        <label>Text Color: <input type="color" id="text-color-picker" oninput="changeTextColor(this.value)" value="#333333"></label>
-                        <label>Highlight: <input type="color" id="bg-color-picker" oninput="changeHighlightColor(this.value)" value="#ffffff"></label>
+                        <label>
+                            <span>Text Color:</span>
+                            <input type="color" id="text-color-picker" value="#333333" oninput="changeTextColor(this.value)">
+                        </label>
+                        <label>
+                            <span>Highlight:</span>
+                            <input type="color" id="highlight-color-picker" value="#ffffff" oninput="changeHighlightColor(this.value)">
+                        </label>
                     </div>
                 </div>
+            </div>
 
-                <!-- Alignment Dropdown -->
+            <!-- Text Block Alignment Selection Cascading Dropdown -->
+            <div class="tool-group">
                 <div class="dropdown">
                     <button class="dropbtn">▤ Align ▼</button>
                     <div class="dropdown-content">
@@ -59,79 +71,87 @@
                         <button onclick="format('justifyFull')">Justify</button>
                     </div>
                 </div>
-
-                <!-- Media Insert Dropdown -->
-                <div class="dropdown">
-                    <button class="dropbtn">➕ Insert ▼</button>
-                    <div class="dropdown-content insert-menu">
-                        <button onclick="toggleTableGridMenu()" id="table-btn">📊 Table Grid</button>
-                        <button onclick="triggerImageUpload()">图片 🖼️ Image File</button>
-                    </div>
-                    <!-- Nested Table Floating Selector Matrix -->
-                    <div id="table-grid-menu" class="grid-menu hidden">
-                        <div class="grid-matrix" id="grid-matrix"></div>
-                        <div class="grid-label" id="grid-label">1 x 1 Table</div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Group 5: Productivity Utilities & View States -->
+            <!-- Dynamic Media Elements Insertion Submenu -->
+            <div class="tool-group" style="position: relative;">
+                <div class="dropdown">
+                    <button class="dropbtn" id="table-btn" onclick="toggleTableGridMenu(); event.stopPropagation();">➕ Insert ▼</button>
+                    <div class="dropdown-content insert-menu">
+                        <button onclick="toggleTableGridMenu(); event.stopPropagation();">📊 Table Grid</button>
+                        <button onclick="triggerImageUpload()">🖼️ Image File</button>
+                    </div>
+                </div>
+
+                <!-- Hidden Floating Hover Table Insertion Matrix Layout Block -->
+                <div id="table-grid-menu" class="grid-menu hidden">
+                    <div id="grid-matrix" class="grid-matrix"></div>
+                    <div id="grid-label" class="grid-label">1 x 1 Table</div>
+                </div>
+                <!-- Invisible Native HTML File Upload Node Pipeline -->
+                <input type="file" id="image-file-input" style="display: none;" accept="image/*" onchange="handleImageFileSelect(this)">
+            </div>
+
+            <!-- Global Display Layout Modes Swithing Options Group -->
             <div class="tool-group">
-                <select id="layout-view" onchange="changeLayoutView(this.value)" title="Document Layout">
+                <select id="layout-view-select" onchange="changeLayoutView(this.value)">
                     <option value="notepad">Notepad Style</option>
                     <option value="page">Letter Page Style</option>
                 </select>
-                <button onclick="toggleDarkMode()" id="dark-btn">🌙 Dark Mode</button>
-                <button onclick="toggleMarkdown()" id="md-btn">📝 Markdown View</button>
-                <button onclick="toggleSpellcheck()" id="spell-btn" class="active-toggle">✔️ Spellcheck: ON</button>
-                <button onclick="speakText()" title="Read Document Aloud">🔊 Read</button>
             </div>
 
-            <!-- Group 6: File Actions & Clean Exports -->
+            <!-- Core App System Layout and Utility Toggles Block Group -->
+            <div class="tool-group">
+                <button id="dark-btn" onclick="toggleDarkMode()">🌙 Dark Mode</button>
+                <button id="md-btn" onclick="toggleMarkdown()">📝 Markdown View</button>
+                <button id="spell-btn" onclick="toggleSpellcheck()" class="active-toggle">✔️ Spellcheck: ON</button>
+                <button onclick="speakText()">🔊 Read</button>
+            </div>
+
+            <!-- Direct File Downloader Utilities Storage Processing Group -->
             <div class="tool-group download-group">
                 <button onclick="printDoc()" class="btn-action">🖨️ Print / PDF</button>
                 <button onclick="saveFile('txt')" class="btn-save">Save .txt</button>
                 <button onclick="saveFile('html')" class="btn-save">Save .html</button>
-                <button onclick="clearDoc()" class="btn-danger">🗑️ Clear</button>
+                <button onclick="clearDoc()" class="btn-danger" title="Clear Canvas State">🗑️ Clear</button>
             </div>
-        </div>
+        </header>
 
-        <!-- Hidden native file picker hook -->
-        <input type="file" id="image-file-input" accept="image/*" style="display: none;" onchange="handleImageFileSelect(this)">
-
-        <!-- Embedded Find and Replace Bar -->
-        <div class="find-replace-bar">
+        <!-- Dynamic Find and Replace Context Control Bar Layer -->
+        <section class="find-replace-bar">
             <input type="text" id="find-input" placeholder="Find text...">
             <input type="text" id="replace-input" placeholder="Replace with...">
-            <button onclick="findAndReplace()">Replace All</button>
+            <button onclick="findAndReplace()" class="btn-action">Replace All</button>
+            
+            <!-- Real-time Live Metrics Target Goal Tracking Indicator -->
             <div class="goal-group">
                 <label for="word-goal-input">Goal:</label>
-                <input type="number" id="word-goal-input" placeholder="e.g. 500" min="0" oninput="updateMetrics()">
+                <input type="number" id="word-goal-input" placeholder="Words" min="0" oninput="updateMetrics()">
             </div>
-        </div>
+        </section>
 
-        <!-- Progress Metrics Bar for Word Targets -->
+        <!-- Word Count Tracker Target Progress Bar Element -->
         <div id="goal-progress-container" class="hidden">
             <div id="goal-progress-bar"></div>
         </div>
 
-        <!-- Workspace Wrapper -->
-        <div class="workspace-wrapper bg-notepad" id="workspace-outer">
+        <!-- Primary Text Rendering and Physical Editing Document Workspace Canvas -->
+        <main id="workspace-outer" class="workspace-wrapper bg-notepad">
             <div class="workspace">
-                <div id="editor" contenteditable="true" spellcheck="true" placeholder="Start typing or drop files here..."></div>
+                <div id="editor" contenteditable="true" spellcheck="true" placeholder="Start typing your rich document here..."></div>
                 <div id="preview" class="hidden"></div>
             </div>
-        </div>
+        </main>
 
-        <!-- Status Tracking Bar -->
-        <div class="status-bar">
+        <!-- Application Footer Information Real-time Analytics Tracker Status Bar -->
+        <footer class="status-bar">
             <span id="save-status">💾 Auto-saved</span>
             <span id="goal-status"></span>
             <span id="word-count">Words: 0</span>
             <span id="char-count">Characters: 0</span>
-        </div>
+        </footer>
     </div>
 
-    <script src="app.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

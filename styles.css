@@ -1123,6 +1123,13 @@ body:not(.pdf-mode) [data-pdf-only], body.pdf-mode [data-doc-only] { display: no
 .pdf-stage[data-tool="select"] .pdf-textbox:hover:not(.editing) { outline: 1px dashed rgba(37, 99, 235, 0.6); outline-offset: 2px; }
 .pdf-item.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
 .pdf-textbox.sel:not(.editing) { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* text drawn from a scan: one line is several word boxes, so outline lightly */
+.pdf-stage[data-tool="select"] .pdf-conv, .pdf-stage[data-tool="edit"] .pdf-conv { cursor: text; }
+.pdf-stage[data-tool="select"] .pdf-conv:hover:not(.editing) { outline: none; }
+.pdf-stage[data-tool="edit"] .pdf-conv:hover { background: rgba(37, 99, 235, 0.1); }
+.pdf-conv-scan { color: transparent !important; }
+.pdf-conv-box { position: absolute; outline: 2px solid var(--accent); outline-offset: 2px; pointer-events: none; }
+body.pdf-show-original .pdf-conv { visibility: hidden; }
 .pdf-handle {
   position: absolute;
   right: -7px;

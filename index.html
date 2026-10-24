@@ -99,6 +99,9 @@
               <div class="menu-sep"></div>
               <button role="menuitem" data-action="pdf-ocr" data-arg="scanned"><span>Read text on scanned pages (OCR)</span></button>
               <button role="menuitem" data-action="pdf-ocr" data-arg="current"><span>Read text on this page</span></button>
+              <button role="menuitem" data-action="pdf-convert"><span>Make this page’s text editable</span></button>
+              <button role="menuitem" data-action="pdf-unconvert"><span>Keep this page as scanned</span></button>
+              <button role="menuitem" data-action="pdf-original"><span>Show or hide the original scan</span></button>
               <button role="menuitem" data-action="pdf-copy-text"><span>Copy text from this page</span></button>
               <div class="menu-note">These act on the page in view. Each page thumbnail has its own buttons too.</div>
             </div>
@@ -253,7 +256,8 @@
       <button class="tb" data-pdf-tool="box" data-icon="square" title="Box (B)" aria-label="Box"></button>
       <button class="tb" data-pdf="image" data-icon="image" title="Add an image" aria-label="Add an image"></button>
       <button class="tb tb-label" data-pdf="sign" data-icon="signature" title="Add your signature">Sign</button>
-      <button class="tb tb-label" data-pdf="ocr" data-icon="scan" title="Read the text on scanned pages (OCR), so you can edit, search and copy it">Read text</button>
+      <button class="tb tb-label" data-pdf="ocr" data-icon="scan" title="Read the text on scanned pages (OCR) and make it editable, searchable and copyable">Read text</button>
+      <button class="tb tb-label" data-pdf="original" hidden aria-pressed="false" title="Show the pages as they were scanned, to check what was read">Original</button>
       <span class="grow"></span>
       <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>
       <span class="pdf-zoom" id="pdf-zoom">100%</span>

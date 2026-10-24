@@ -30,7 +30,11 @@ and lets you edit and sign PDFs.
 - **The original font**: the app works out which font the words were set in (from the font's name in the PDF, or, on a scan, by comparing the letters with 31 common document fonts) and downloads it, so new words match. Paid fonts like Arial, Times New Roman and Calibri are matched with free fonts drawn to the same shapes and widths (Arimo, Tinos, Carlito).
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
-- **Read text on scanned pages (OCR)**: click Read text and the words on a scan become editable with Edit text, and the downloaded PDF can be searched and copied from. English only for now; needs the app opened from its web address, not from a file on disk.
+- **Scanned pages become editable text (OCR)**: click Read text and the app reads the page, takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
+  - Words the OCR was unsure of are left as the scan's own pixels until you change them, so a misread is never shown as if it were on the page.
+  - **Original** (toolbar) shows the page as it was scanned, to check what was read.
+  - **Pages → Keep this page as scanned** puts the scan back; Edit text then changes single words and leaves the rest of the scan exactly as it was.
+  - English only for now; needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
 - **Download** a new PDF with your changes. The original file is never touched.
@@ -38,7 +42,8 @@ and lets you edit and sign PDFs.
 What PDF editing cannot do, so nothing surprises you:
 - Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. That includes scanned pages and other pictures: the covered pixels are painted over inside the image itself. Only drawings (lines and shapes) under a white-out stay in the file, hidden. The app tells you when that happens.
 - A color scan you have erased part of is saved again as JPEG, so that page's file size can roughly double. Black-and-white scans stay small.
-- OCR can misread faint, tiny or handwritten text. Check what it read before relying on it.
+- OCR can misread faint, tiny or handwritten text. Check what it read (the Original button) before relying on it.
+- Redrawing a scanned page needs its fonts. Offline, the page stays as scanned and Edit text changes single words instead; choose Pages → Make this page's text editable when you are back online.
 - Font matching needs an internet connection the first time a font is used (font files come from the free Fontsource library through jsDelivr; nothing from your document is sent). Offline, or for a font it cannot find, the closest standard font is used.
 - A scan's font is matched to the closest of the common fonts the app knows. An unusual or custom typeface will be matched to something similar, not identical.
 - Password-protected PDFs cannot be changed.

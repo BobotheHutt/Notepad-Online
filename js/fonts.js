@@ -278,19 +278,29 @@
    * samples: [{ text, canvas, x, y, w, h }] — words cut from a high-resolution
    * render of the page. hints: { bold }. → { id, weight, style, score } or null.
    */
+  const prep = (samples) => samples.map((s) => Object.assign({ text: s.text }, normalize(s.canvas, s.x, s.y, s.w, s.h) || {})).filter((s) => s.ink);
+
+  async function scoreOf(norm, ref) {
+    let fam;
+    try { fam = await load(ref); } catch (e) { return -9; }
+    let total = 0;
+    for (const s of norm) {
+      const r = renderWord(s.text, fam, ref.weight, ref.style);
+      total += r ? similarity(s, r) : -1;
+    }
+    return total / norm.length;
+  }
+
+  // How well one font matches the samples (1 is a perfect match), or null.
+  async function score(samples, ref) {
+    const norm = prep(samples);
+    return norm.length ? scoreOf(norm, ref) : null;
+  }
+
   async function identify(samples, hints) {
-    const norm = samples.map((s) => Object.assign({ text: s.text }, normalize(s.canvas, s.x, s.y, s.w, s.h) || {})).filter((s) => s.ink);
+    const norm = prep(samples);
     if (!norm.length) return null;
-    const score = async (ref) => {
-      let fam;
-      try { fam = await load(ref); } catch (e) { return -9; }
-      let total = 0;
-      for (const s of norm) {
-        const r = renderWord(s.text, fam, ref.weight, ref.style);
-        total += r ? similarity(s, r) : -1;
-      }
-      return total / norm.length;
-    };
+    const score = (ref) => scoreOf(norm, ref);
     const w0 = hints && hints.bold ? 700 : 400;
     // first pass: every candidate at the likely weight
     const ids = Object.keys(CATALOG);
@@ -310,5 +320,5 @@
     return Object.assign({}, best.ref, { score: Math.round(best.s * 1000) / 1000, ranking: second.slice(0, 5).map((r) => r.ref.id + ' ' + r.ref.weight + ' ' + r.s.toFixed(3)) });
   }
 
-  window.NpFonts = { CATALOG, load, bytes, label, cssFamily, fromName, identify, parseName };
+  window.NpFonts = { CATALOG, load, bytes, label, cssFamily, fromName, identify, score, parseName };
 })();

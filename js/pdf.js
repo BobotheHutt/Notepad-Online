@@ -1311,6 +1311,372 @@
     return false;
   }
 
+  /* ============================================================ erasing text */
+
+  // Covering text only hides it: the words stay in the file and can be
+  // copied out. On download, every glyph whose center falls inside a cover
+  // (edited text, white-out) is removed from the page's content stream, and
+  // the glyphs after it are shifted back into their original places with TJ
+  // spacing, so the rest of the line does not move.
+
+  const WINANSI_HIGH = [0x20ac, 0, 0x201a, 0x192, 0x201e, 0x2026, 0x2020, 0x2021, 0x2c6, 0x2030, 0x160, 0x2039, 0x152, 0, 0x17d, 0,
+    0, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x2dc, 0x2122, 0x161, 0x203a, 0x153, 0, 0x17e, 0x178];
+  const STD14 = ['Courier', 'Courier-Bold', 'Courier-Oblique', 'Courier-BoldOblique', 'Helvetica', 'Helvetica-Bold', 'Helvetica-Oblique',
+    'Helvetica-BoldOblique', 'Times-Roman', 'Times-Bold', 'Times-Italic', 'Times-BoldItalic', 'Symbol', 'ZapfDingbats'];
+
+  /* ----- content stream tokenizer ----- */
+
+  const isWs = (c) => c === 0 || c === 9 || c === 10 || c === 12 || c === 13 || c === 32;
+  const isDelim = (c) => c === 40 || c === 41 || c === 60 || c === 62 || c === 91 || c === 93 || c === 123 || c === 125 || c === 47 || c === 37;
+
+  // → [{ op, args, start, end }] with byte offsets into the stream
+  function parseContent(b) {
+    const ops = [];
+    const stack = [[]];
+    let i = 0;
+    let opStart = -1;
+    const n = b.length;
+    const push = (v, at) => { if (stack.length === 1 && opStart < 0) opStart = at; stack[stack.length - 1].push(v); };
+    while (i < n) {
+      const c = b[i];
+      if (isWs(c)) { i++; continue; }
+      if (c === 37) { while (i < n && b[i] !== 10 && b[i] !== 13) i++; continue; }
+      const at = i;
+      if (c === 40) { // (literal string)
+        const out = [];
+        let depth = 1;
+        i++;
+        while (i < n && depth) {
+          let ch = b[i++];
+          if (ch === 92) {
+            const e = b[i++];
+            if (e === 110) out.push(10); else if (e === 114) out.push(13); else if (e === 116) out.push(9);
+            else if (e === 98) out.push(8); else if (e === 102) out.push(12);
+            else if (e === 13) { if (b[i] === 10) i++; }
+            else if (e === 10) { /* line continuation */ }
+            else if (e >= 48 && e <= 55) {
+              let v = e - 48;
+              for (let k = 0; k < 2 && b[i] >= 48 && b[i] <= 55; k++) v = v * 8 + (b[i++] - 48);
+              out.push(v & 255);
+            } else out.push(e);
+            continue;
+          }
+          if (ch === 40) depth++;
+          if (ch === 41 && --depth === 0) break;
+          out.push(ch);
+        }
+        push({ t: 'str', v: Uint8Array.from(out) }, at);
+        continue;
+      }
+      if (c === 60 && b[i + 1] === 60) { stack.push([]); if (stack.length === 2 && opStart < 0) opStart = at; i += 2; continue; }
+      if (c === 62 && b[i + 1] === 62) { const d = stack.pop(); i += 2; push({ t: 'dict', v: d }, at); continue; }
+      if (c === 60) {
+        let j = i + 1;
+        let hex = '';
+        while (j < n && b[j] !== 62) { if (!isWs(b[j])) hex += String.fromCharCode(b[j]); j++; }
+        if (hex.length % 2) hex += '0';
+        const out = new Uint8Array(hex.length / 2);
+        for (let k = 0; k < out.length; k++) out[k] = parseInt(hex.substr(k * 2, 2), 16) || 0;
+        i = j + 1;
+        push({ t: 'str', v: out }, at);
+        continue;
+      }
+      if (c === 91) { stack.push([]); if (stack.length === 2 && opStart < 0) opStart = at; i++; continue; }
+      if (c === 93) { const a = stack.pop(); i++; push({ t: 'arr', v: a }, at); continue; }
+      if (c === 47) {
+        let j = i + 1;
+        while (j < n && !isWs(b[j]) && !isDelim(b[j])) j++;
+        push({ t: 'name', v: String.fromCharCode.apply(null, b.subarray(i + 1, j)) }, at);
+        i = j;
+        continue;
+      }
+      let j = i;
+      while (j < n && !isWs(b[j]) && !isDelim(b[j])) j++;
+      if (j === i) { i++; continue; } // stray delimiter
+      const word = String.fromCharCode.apply(null, b.subarray(i, j));
+      i = j;
+      if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(word)) { push({ t: 'num', v: parseFloat(word) }, at); continue; }
+      if (word === 'true' || word === 'false' || word === 'null') { push({ t: 'kw', v: word }, at); continue; }
+      if (stack.length > 1) { push({ t: 'kw', v: word }, at); continue; }
+      // an operator ends the current operation
+      if (word === 'ID') {
+        // inline image data runs to the next whitespace-delimited EI
+        let k = i + 1;
+        while (k < n - 1 && !(isWs(b[k - 1]) && b[k] === 69 && b[k + 1] === 73 && (k + 2 >= n || isWs(b[k + 2]) || isDelim(b[k + 2])))) k++;
+        i = Math.min(n, k + 2);
+        const bi = ops.length && ops[ops.length - 1].op === 'BI' ? ops.pop() : null;
+        ops.push({ op: 'INLINE', args: [], start: bi ? bi.start : (opStart < 0 ? at : opStart), end: i });
+        stack[0] = [];
+        opStart = -1;
+        continue;
+      }
+      ops.push({ op: word, args: stack[0], start: opStart < 0 ? at : opStart, end: i });
+      stack[0] = [];
+      opStart = -1;
+    }
+    return ops;
+  }
+
+  /* ----- fonts: code lengths and widths ----- */
+
+  function num(o) { return o && typeof o.asNumber === 'function' ? o.asNumber() : 0; }
+
+  function fontMetrics(dict) {
+    const L = PDFLib;
+    const N = (k) => L.PDFName.of(k);
+    const subtype = dict.lookup(N('Subtype'));
+    const sub = subtype ? subtype.decodeText() : '';
+    if (sub === 'Type0') {
+      const descs = dict.lookup(N('DescendantFonts'));
+      const desc = descs && descs.lookup(0);
+      const dw = desc && desc.lookup(N('DW')) ? num(desc.lookup(N('DW'))) : 1000;
+      const widths = new Map();
+      const W = desc && desc.lookup(N('W'));
+      if (W) {
+        const a = W.asArray().map((x, k) => W.lookup(k));
+        for (let k = 0; k < a.length;) {
+          const first = num(a[k]);
+          const next = a[k + 1];
+          if (next && typeof next.asArray === 'function') {
+            next.asArray().forEach((_, m) => widths.set(first + m, num(next.lookup(m))));
+            k += 2;
+          } else {
+            const last = num(a[k + 1]);
+            const w = num(a[k + 2]);
+            for (let c = first; c <= last && c - first < 65536; c++) widths.set(c, w);
+            k += 3;
+          }
+        }
+      }
+      return { bytes: 2, width: (code) => (widths.has(code) ? widths.get(code) : dw), space: -1 };
+    }
+    const first = dict.lookup(N('FirstChar')) ? num(dict.lookup(N('FirstChar'))) : 0;
+    const Warr = dict.lookup(N('Widths'));
+    let scale = 1;
+    if (sub === 'Type3') {
+      const fm = dict.lookup(N('FontMatrix'));
+      scale = fm ? num(fm.lookup(0)) * 1000 : 1;
+    }
+    let std = null;
+    if (!Warr) {
+      const base = dict.lookup(N('BaseFont'));
+      let name = base ? base.decodeText().replace(/^[A-Z]{6}\+/, '') : 'Helvetica';
+      if (!STD14.includes(name)) {
+        const bold = /bold|black|heavy/i.test(name);
+        const ital = /italic|oblique/i.test(name);
+        if (/times|serif|roman|georgia|garamond/i.test(name)) name = 'Times-' + (bold && ital ? 'BoldItalic' : bold ? 'Bold' : ital ? 'Italic' : 'Roman');
+        else if (/courier|mono/i.test(name)) name = 'Courier' + (bold && ital ? '-BoldOblique' : bold ? '-Bold' : ital ? '-Oblique' : '');
+        else name = 'Helvetica' + (bold && ital ? '-BoldOblique' : bold ? '-Bold' : ital ? '-Oblique' : '');
+      }
+      try { std = L.StandardFontEmbedder.for(name); } catch (e) { std = null; }
+    }
+    const cache = new Map();
+    return {
+      bytes: 1,
+      space: 32,
+      width: (code) => {
+        if (Warr) {
+          const k = code - first;
+          return k >= 0 && k < Warr.size() ? num(Warr.lookup(k)) * scale : 0;
+        }
+        if (cache.has(code)) return cache.get(code);
+        let w = 500;
+        if (std) {
+          const u = code >= 128 && code < 160 ? WINANSI_HIGH[code - 128] : code;
+          try { if (u) w = std.widthOfTextAtSize(String.fromCharCode(u), 1000); } catch (e) { w = 500; }
+        }
+        cache.set(code, w);
+        return w;
+      }
+    };
+  }
+
+  /* ----- walking a content stream ----- */
+
+  const mul = (m, n) => [m[0] * n[0] + m[1] * n[2], m[0] * n[1] + m[1] * n[3], m[2] * n[0] + m[3] * n[2], m[2] * n[1] + m[3] * n[3], m[4] * n[0] + m[5] * n[2] + n[4], m[4] * n[1] + m[5] * n[3] + n[5]];
+  const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+  const fmtNum = (v) => String(Math.round(v * 1000) / 1000);
+  const hexOf = (u8) => Array.from(u8, (x) => x.toString(16).padStart(2, '0')).join('');
+
+  function contentBytes(obj) {
+    const L = PDFLib;
+    if (obj instanceof L.PDFRawStream) return L.decodePDFRawStream(obj).decode();
+    if (typeof obj.getUnencodedContents === 'function') return obj.getUnencodedContents();
+    if (typeof obj.getContents === 'function') return obj.getContents();
+    return new Uint8Array(0);
+  }
+
+  // Remove glyphs inside regions from one content stream. Returns new bytes or
+  // null when nothing was removed; `count` totals removed glyphs.
+  function eraseIn(bytes, resources, ctm0, regions, ctx, count, depth) {
+    const L = PDFLib;
+    const N = (k) => L.PDFName.of(k);
+    const ops = parseContent(bytes);
+    const fonts = resources && resources.lookup(N('Font'));
+    const xobjs = resources && resources.lookup(N('XObject'));
+    const fontCache = new Map();
+    const getFont = (name) => {
+      if (fontCache.has(name)) return fontCache.get(name);
+      let f = null;
+      try { const d = fonts && fonts.lookup(N(name)); if (d) f = fontMetrics(d); } catch (e) { f = null; }
+      fontCache.set(name, f);
+      return f;
+    };
+    let gs = { ctm: ctm0, font: null, fs: 0, tc: 0, tw: 0, th: 1, tl: 0, rise: 0 };
+    const stack = [];
+    let tm = [1, 0, 0, 1, 0, 0];
+    let tlm = [1, 0, 0, 1, 0, 0];
+    const edits = [];
+    const inside = (x, y) => regions.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height);
+
+    // Lay out one string; returns the TJ parts with erased glyphs replaced by spacing.
+    const show = (str, parts) => {
+      const f = gs.font;
+      const per = f ? f.bytes : 1;
+      let removedHere = 0;
+      let keep = [];
+      const flushKeep = () => { if (keep.length) { parts.push({ s: Uint8Array.from(keep) }); keep = []; } };
+      for (let k = 0; k + per <= str.length; k += per) {
+        const code = per === 2 ? (str[k] << 8) | str[k + 1] : str[k];
+        const w0 = f ? f.width(code) : 500;
+        const adv = (w0 / 1000) * gs.fs + gs.tc + (f && code === f.space ? gs.tw : 0);
+        const trm = mul(mul([gs.fs * gs.th, 0, 0, gs.fs, 0, gs.rise], tm), gs.ctm);
+        const [cx, cy] = apply(trm, (w0 / 1000) * 0.5, 0.3);
+        if (gs.fs && inside(cx, cy)) {
+          flushKeep();
+          // keep the following glyphs where they were: move by this glyph's advance
+          parts.push({ n: -(adv / gs.fs) * 1000 });
+          removedHere++;
+        } else {
+          for (let m = 0; m < per; m++) keep.push(str[k + m]);
+        }
+        tm = mul([1, 0, 0, 1, adv * gs.th, 0], tm);
+      }
+      flushKeep();
+      return removedHere;
+    };
+
+    for (const o of ops) {
+      const a = o.args;
+      const v = (k) => (a[k] && a[k].t === 'num' ? a[k].v : 0);
+      switch (o.op) {
+        case 'q': stack.push(Object.assign({}, gs)); break;
+        case 'Q': if (stack.length) gs = stack.pop(); break;
+        case 'cm': gs.ctm = mul([v(0), v(1), v(2), v(3), v(4), v(5)], gs.ctm); break;
+        case 'BT': tm = [1, 0, 0, 1, 0, 0]; tlm = [1, 0, 0, 1, 0, 0]; break;
+        case 'Tc': gs.tc = v(0); break;
+        case 'Tw': gs.tw = v(0); break;
+        case 'Tz': gs.th = v(0) / 100; break;
+        case 'TL': gs.tl = v(0); break;
+        case 'Ts': gs.rise = v(0); break;
+        case 'Tf': gs.font = a[0] && a[0].t === 'name' ? getFont(a[0].v) : null; gs.fs = v(1); break;
+        case 'Td': tlm = mul([1, 0, 0, 1, v(0), v(1)], tlm); tm = tlm.slice(); break;
+        case 'TD': gs.tl = -v(1); tlm = mul([1, 0, 0, 1, v(0), v(1)], tlm); tm = tlm.slice(); break;
+        case 'Tm': tlm = [v(0), v(1), v(2), v(3), v(4), v(5)]; tm = tlm.slice(); break;
+        case 'T*': tlm = mul([1, 0, 0, 1, 0, -gs.tl], tlm); tm = tlm.slice(); break;
+        case 'Tj': case "'": case '"': case 'TJ': {
+          let prefix = '';
+          if (o.op === "'" || o.op === '"') {
+            if (o.op === '"') { gs.tw = v(0); gs.tc = v(1); prefix = fmtNum(v(0)) + ' Tw ' + fmtNum(v(1)) + ' Tc '; }
+            tlm = mul([1, 0, 0, 1, 0, -gs.tl], tlm);
+            tm = tlm.slice();
+            prefix += 'T* ';
+          }
+          const parts = [];
+          let removed = 0;
+          if (o.op === 'TJ') {
+            const arr = a[0] && a[0].t === 'arr' ? a[0].v : [];
+            for (const el2 of arr) {
+              if (el2.t === 'str') removed += show(el2.v, parts);
+              else if (el2.t === 'num') {
+                parts.push({ n: el2.v });
+                tm = mul([1, 0, 0, 1, (-el2.v / 1000) * gs.fs * gs.th, 0], tm);
+              }
+            }
+          } else {
+            const s = a[a.length - 1];
+            if (s && s.t === 'str') removed += show(s.v, parts);
+          }
+          if (removed) {
+            count.n += removed;
+            const body = parts.map((p) => (p.s ? '<' + hexOf(p.s) + '>' : fmtNum(p.n))).join(' ');
+            edits.push({ start: o.start, end: o.end, text: prefix + '[' + body + '] TJ' });
+          }
+          break;
+        }
+        case 'Do': {
+          if (depth > 4 || !xobjs || !a[0] || a[0].t !== 'name') break;
+          let form = null;
+          try { form = xobjs.lookup(N(a[0].v)); } catch (e) { form = null; }
+          if (!form || !form.dict) break;
+          const st = form.dict.lookup(N('Subtype'));
+          if (!st || st.decodeText() !== 'Form') break;
+          const fm = form.dict.lookup(N('Matrix'));
+          const m = fm ? [0, 1, 2, 3, 4, 5].map((k) => num(fm.lookup(k))) : [1, 0, 0, 1, 0, 0];
+          const fres = form.dict.lookup(N('Resources')) || resources;
+          let inner;
+          try { inner = contentBytes(form); } catch (e) { break; }
+          const out = eraseIn(inner, fres, mul(m, gs.ctm), regions, ctx, count, depth + 1);
+          if (out) {
+            // a fresh copy of the form, so other pages that share it are untouched
+            const copy = ctx.flateStream(out);
+            for (const [k, val] of form.dict.entries()) {
+              const key = k.asString();
+              if (key !== '/Length' && key !== '/Filter' && key !== '/DecodeParms') copy.dict.set(k, val);
+            }
+            const newName = a[0].v + '_np' + Math.random().toString(36).slice(2, 7);
+            xobjs.set(N(newName), ctx.register(copy));
+            edits.push({ start: o.start, end: o.end, text: '/' + newName + ' Do' });
+          }
+          break;
+        }
+        default: break;
+      }
+    }
+    if (!edits.length) return null;
+    const enc = new TextEncoder();
+    const chunks = [];
+    let pos = 0;
+    for (const e of edits) {
+      chunks.push(bytes.subarray(pos, e.start), enc.encode(e.text));
+      pos = e.end;
+    }
+    chunks.push(bytes.subarray(pos));
+    const total = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(total);
+    let at = 0;
+    for (const c of chunks) { out.set(c, at); at += c.length; }
+    return out;
+  }
+
+  // Erase the text under regions (page space) from a page. Returns glyphs removed.
+  function eraseText(doc, page, regions) {
+    const L = PDFLib;
+    const N = (k) => L.PDFName.of(k);
+    const ctx = doc.context;
+    page.node.normalize();
+    const contents = page.node.Contents();
+    if (!contents) return 0;
+    const streams = contents instanceof L.PDFArray ? contents.asArray().map((r, k) => contents.lookup(k)) : [contents];
+    const parts = [];
+    for (const s of streams) { try { parts.push(contentBytes(s)); } catch (e) { return 0; } }
+    const len = parts.reduce((t, p) => t + p.length + 1, 0);
+    const bytes = new Uint8Array(len);
+    let at = 0;
+    for (const p of parts) { bytes.set(p, at); at += p.length; bytes[at++] = 10; }
+    // Resources may be shared with other pages: work on this page's own copy.
+    const res = page.node.Resources() ? page.node.Resources().clone(ctx) : ctx.obj({});
+    const xo = res.lookup(N('XObject'));
+    if (xo) res.set(N('XObject'), xo.clone(ctx));
+    const count = { n: 0 };
+    const out = eraseIn(bytes, res, [1, 0, 0, 1, 0, 0], regions, ctx, count, 0);
+    if (!out) return 0;
+    page.node.set(N('Resources'), res);
+    // an array, as normalize() left it, so later wrapping can add to it
+    page.node.set(N('Contents'), ctx.obj([ctx.register(ctx.flateStream(out))]));
+    return count.n;
+  }
+
   /* ============================================================ export */
 
   function hexRgb(hex) {
@@ -1384,6 +1750,8 @@
     };
     const images = new Map();
     let replaced = 0;
+    let erased = 0;
+    let coveredNothing = 0;
 
     for (const { entry, page, baseRot } of final) {
       const R = ((baseRot + entry.rotate) % 360 + 360) % 360;
@@ -1391,6 +1759,18 @@
       const items = (rec.items || []).filter((i) => i.page === entry.uid);
       if (!items.length) continue;
       const box = page.getCropBox();
+      // Text under edits and white-out is removed from the file, not just hidden.
+      const regions = [];
+      for (const it of items) {
+        if (it.cover) regions.push(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h));
+        if (it.type === 'whiteout') regions.push(rectToPdf(R, box, it.x, it.y, it.w, it.h));
+      }
+      if (regions.length) {
+        let n = 0;
+        try { n = eraseText(base, page, regions); } catch (e) { n = 0; }
+        erased += n;
+        if (!n) coveredNothing++;
+      }
       // Keep the page's own drawing state from leaking into ours.
       page.node.normalize();
       const ctx = base.context;
@@ -1437,6 +1817,7 @@
     }
     const bytes = await base.save({ updateFieldAppearances: false });
     if (replaced) api.toast(replaced + ' character' + (replaced === 1 ? '' : 's') + ' could not be written with the PDF’s standard fonts and became “?”.', 6000);
+    if (coveredNothing) api.toast('Some covered areas had no text in them to remove (a scanned page, or a picture). Those are hidden, but still inside the file.', 7000);
     if (warnings.length) api.toast('Some form fields could not be filled: ' + warnings.slice(0, 3).join(', '), 6000);
     return new Blob([bytes], { type: 'application/pdf' });
   }

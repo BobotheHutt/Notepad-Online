@@ -34,7 +34,7 @@ and lets you edit and sign PDFs.
 - **Download** a new PDF with your changes. The original file is never touched.
 
 What PDF editing cannot do, so nothing surprises you:
-- Changed or whited-out text is **covered, not erased**. The old words are still inside the file and can be copied out, so do not use this to hide private information.
+- Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. Pictures and drawings under a white-out are only covered, though. That includes scanned pages, which are pictures, so they still hold what is underneath. The app tells you when a white-out had no text to erase.
 - Replacement text uses standard PDF fonts (Helvetica, Times, Courier), so it can look slightly different from the original font. Characters outside Western European alphabets cannot be written yet.
 - Scanned pages are pictures, so their words cannot be edited (but you can white-out and type over them).
 - Password-protected PDFs cannot be changed.

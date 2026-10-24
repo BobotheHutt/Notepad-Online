@@ -33,7 +33,8 @@ and lets you edit and sign PDFs.
 - **Scanned pages become editable text (OCR)**: click Read text and the app reads the page, takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page that went through the scanner crooked is straightened first, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
-  - Words the OCR was unsure of are left as the scan's own pixels until you change them, so a misread is never shown as if it were on the page.
+  - Every word of a line is redrawn together, so a line looks of a piece; words OCR was unsure of are underlined to check.
+  - **Handwriting is left alone**: writing that fits no font, and marks like check boxes, stay exactly as scanned. To clear a filled-in form, click a piece of handwriting with Edit text and choose Erase handwriting, or use Pages → Erase handwriting on this page. The paper (or the dotted shading of a black-and-white scan) is filled in behind it.
   - **Fixing a misread**: words OCR may have got wrong are underlined in orange; click one to see the scanned word enlarged next to what was read, and type the correction (Tab goes on to the next one). Right-click any word read from the scan to do the same. A correction is redrawn in place, and searching and copying use it.
   - **Original** (toolbar) shows the page as it was scanned, to check what was read: every word is clickable to correct it, and words OCR was unsure of are shaded.
   - **Pages → Keep this page as scanned** puts the scan back; Edit text then changes single words and leaves the rest of the scan exactly as it was.

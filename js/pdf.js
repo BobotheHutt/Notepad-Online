@@ -549,6 +549,15 @@
     }
     let svg = null;
     for (const it of mine) {
+      if (it.type === 'hand') {
+        const b = handBox(it);
+        layer.append(el('div', {
+          class: 'pdf-hand' + (it.erased ? ' erased' : '') + (it.id === S.sel ? ' sel' : ''), 'data-id': it.id,
+          title: it.erased ? 'Erased handwriting. Select it and choose Put back to restore it.' : 'Handwriting, left as it was scanned. Select it to erase it.',
+          style: 'left:' + px(b.x) + ';top:' + px(b.y) + ';width:' + px(b.w) + ';height:' + px(b.h)
+        }));
+        continue;
+      }
       if (it.type === 'ink') {
         if (!svg) {
           svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -582,7 +591,7 @@
         }
       }
       // lines left as scanned: what OCR read is only in the searchable text, but can be wrong too
-      const used = new Set(mine.filter((i) => i.origKey).map((i) => i.origKey));
+      const used = new Set(mine.filter((i) => i.conv).map((i) => i.origKey));
       for (const t of info.text || []) {
         if (!t.scan || used.has(t.key)) continue;
         const li = +t.key.split(':ocr')[1].split('.')[0];
@@ -619,7 +628,7 @@
       }
       for (const r of lay) {
         const d = el('div', {
-          class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.scan ? ' pdf-conv-scan' : '') + (r.o && doubtful(r.o) ? ' pdf-doubt' : ''), 'data-id': it.id,
+          class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.o && doubtful(r.o) ? ' pdf-doubt' : ''), 'data-id': it.id,
           'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'Check this word: click to compare it with the scan' : null,
           style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(r.st).replace(/"/g, "'") +
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
@@ -993,7 +1002,7 @@
   }
 
   async function rotatePage(uidv, dir) {
-    if (S.rec.items.some((i) => i.page === uidv && (i.anchored || i.conv))) {
+    if (S.rec.items.some((i) => i.page === uidv && (i.anchored || i.conv || i.type === 'hand'))) {
       api.toast('This page has text edits tied to its original lines. Rotate it before editing text, or undo the edits first.', 6000);
       return;
     }
@@ -1135,6 +1144,7 @@
       return;
     }
     if (t === 'edit') {
+      if (item && item.type === 'hand') { e.preventDefault(); select(item.id); return; }
       const target = e.target.closest('.pdf-target');
       if (item && item.type === 'text') { e.preventDefault(); startEditing(item.id); return; }
       if (target) { e.preventDefault(); editOriginal(info, target.dataset.key); return; }
@@ -1169,7 +1179,7 @@
       const [x, y] = pointIn(ev, info);
       const dx = x - sx;
       const dy = y - sy;
-      if (item.anchored || item.conv || (!moved && Math.hypot(dx, dy) * S.scale < 3)) return;
+      if (item.anchored || item.conv || item.type === 'hand' || (!moved && Math.hypot(dx, dy) * S.scale < 3)) return;
       moved = true;
       if (item.type === 'ink') item.points = orig.points.map(([px0, py0]) => [px0 + dx, py0 + dy]);
       else { item.x = orig.x + dx; item.y = orig.y + dy; }
@@ -1277,6 +1287,8 @@
     const node = info.layer.querySelector('.pdf-textbox[data-id="' + id + '"]');
     if (!node) return;
     node.classList.add('editing');
+    // the page's own text: the paper shows through, whatever its color
+    if (it.conv || it.anchored) node.classList.add('pdf-own');
     try { node.contentEditable = 'plaintext-only'; } catch (e) { node.contentEditable = 'true'; }
     if (node.contentEditable !== 'plaintext-only') node.contentEditable = 'true';
     node.spellcheck = true;
@@ -2033,7 +2045,12 @@
   function convertible(words) {
     if (!words.some((w) => /[\p{L}\p{N}]/u.test(w.t))) return false;
     const cs = words.map((w) => w.c).filter((c) => c != null);
-    return !cs.length || cs.reduce((a, b) => a + b, 0) / cs.length >= 55;
+    // handwriting and specks read as letters come back with low confidence;
+    // a mark read as a lone character or two (a box's rounded corner as "7",
+    // a check box as "[1") needs to be read surely before it is retyped
+    const avg = cs.length ? cs.reduce((a, b) => a + b, 0) / cs.length : 100;
+    const chars = words.map((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
+    return avg >= (chars < 3 ? 92 : 70);
   }
 
   // How far right a line may grow: up to the next text on the same line, a
@@ -2065,7 +2082,7 @@
     const samples = [];
     // only words whose strokes agree with the weight being matched: a bold
     // label inside a regular line would pull the match toward a heavier font
-    const agree = (w) => w.sw == null || (w.sw > S.boldStroke) === bold;
+    const agree = (w) => w.sw == null || (w.sw > S.boldCut) === bold;
     for (const ws of pick) samples.push(...samplesOf(ws.filter(agree), 3));
     let ref = null;
     try { ref = samples.length ? await NpFonts.identify(samples.slice(0, 24), { bold }) : null; } catch (e) { ref = null; }
@@ -2181,19 +2198,25 @@
     for (const weight of [...new Set([ref.weight, near(400), near(700)])]) for (const style of ['normal', 'italic']) vars.push({ weight, style });
     const same = (a, b) => a.weight === b.weight && a.style === b.style;
     // a heavier or lighter weight only where the strokes say so too
-    const allowed = (v, from, sw) => v.weight === from.weight || (sw != null && (v.weight > from.weight) === (sw > S.boldStroke));
-    const best = async (sm, from, sw) => {
+    // a line's weight against the page's strokes; a word's against its own line's
+    const lineSw = median(words.map((w) => w.sw));
+    const allowed = (v, from, sw, word) => v.weight === from.weight || (sw != null && (word
+      // (a line half in bold has a middling median, so the page's measure counts too)
+      ? lineSw != null && (v.weight > from.weight ? sw > Math.min(lineSw * 1.25, S.boldCut) : sw < Math.max(lineSw / 1.25, S.boldCut))
+      // near the line between regular and bold, how the letters look decides
+      : v.weight > from.weight ? sw > S.boldCut * 0.9 : sw < S.boldCut * 1.1));
+    const best = async (sm, from, sw, word) => {
       let top = null;
       let base = null;
       for (const v of vars) {
-        if (!allowed(v, from, sw)) continue;
+        if (!allowed(v, from, sw, word)) continue;
         const sc = await NpFonts.score(sm, { id: ref.id, weight: v.weight, style: v.style });
         if (sc == null) continue;
         if (same(v, from)) base = sc;
         if (!top || sc > top.sc) top = { v, sc };
       }
       if (!top || base == null || same(top.v, from)) return from;
-      return top.sc - base >= (top.v.style !== from.style ? 0.05 : 0.03) ? top.v : from;
+      return top.sc - base >= (top.v.style !== from.style && !word ? 0.05 : 0.03) ? top.v : from;
     };
     // the line as a whole first, then each word against the line
     const all = samplesOf(words, 8);
@@ -2201,30 +2224,49 @@
     const pickOf = [];
     for (const w of words) {
       const sm = w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2 ? samplesOf([w], 1) : [];
-      pickOf.push(sm.length ? await best(sm, line, w.sw) : undefined);
-    }
-    for (let i = 0; i < pickOf.length; i++) {
-      if (pickOf[i] !== undefined) continue;
-      let j = i - 1;
-      while (j >= 0 && pickOf[j] === undefined) j--;
-      let k = i + 1;
-      while (k < pickOf.length && pickOf[k] === undefined) k++;
-      pickOf[i] = j >= 0 ? pickOf[j] : k < pickOf.length ? pickOf[k] : line;
+      pickOf.push(sm.length ? await best(sm, line, w.sw, true) : undefined);
     }
     // A slant or weight on one word alone is more likely a misjudged word than
-    // emphasis, except a lead-in at the start of a line ("Note:").
-    const alone = (i, k) => words.length > 1 && pickOf[i][k] !== line[k] && !(pickOf[i - 1] && pickOf[i - 1][k] === pickOf[i][k]) && !(pickOf[i + 1] && pickOf[i + 1][k] === pickOf[i][k]);
-    const out = pickOf.map((v, i) => ({
-      weight: alone(i, 'weight') && i > 0 ? line.weight : v.weight,
-      style: alone(i, 'style') ? line.style : v.style
-    }));
-    return out.map((v) => (same(v, ref) ? null : v));
+    // emphasis, except a lead-in at the start of a line ("Note:"). Words too
+    // short to judge do not count either way.
+    const alone = (i, k) => words.length > 1 && i > 0 && pickOf[i] && pickOf[i][k] !== line[k] &&
+      !(pickOf[i - 1] && pickOf[i - 1][k] === pickOf[i][k]) && !(pickOf[i + 1] && pickOf[i + 1][k] === pickOf[i][k]);
+    const judged = pickOf.map((v, i) => (v ? { weight: alone(i, 'weight') ? line.weight : v.weight, style: alone(i, 'style') ? line.style : v.style } : undefined));
+    // short words: like the words either side when those agree, else like the line
+    const out = judged.map((v, i) => {
+      if (v) return v;
+      let j = i - 1;
+      while (j >= 0 && !judged[j]) j--;
+      let k = i + 1;
+      while (k < judged.length && !judged[k]) k++;
+      const a = judged[j];
+      const b = judged[k];
+      return a && b && same(a, b) ? a : a && !b ? a : b && !a ? b : line;
+    });
+    return out.map((v) => (v.weight === ref.weight && v.style === ref.style ? null : v));
   }
   const CATALOGW = (id) => (NpFonts.CATALOG[id] && NpFonts.CATALOG[id][2]) || [400, 700];
 
   async function convertPage(info) {
     if (!info.page || isConv(info.entry.uid)) return 0;
-    const phrases = (await textItems(info)).filter((t) => t.scan && t.words && t.words.length && convertible(t.words));
+    // A check box or other mark at the start or end of a line is often read
+    // as a bracket and a character ("[1"): left as scanned, the line without it.
+    const mark = (w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length <= 1 && /[^\p{L}\p{N}\s.,:;'"’!?-]/u.test(w.t) && (w.c == null ? 100 : w.c) < 85;
+    const trim = (t) => {
+      const ws = t.words.slice();
+      while (ws.length > 1 && mark(ws[0])) ws.shift();
+      while (ws.length > 1 && mark(ws[ws.length - 1])) ws.pop();
+      return ws.length === t.words.length ? t : Object.assign({}, t, { words: ws, x: ws[0].x0, w: ws[ws.length - 1].x1 - ws[0].x0, str: ws.map((w) => w.t).join(' ') });
+    };
+    const all = (await textItems(info)).filter((t) => t.scan && t.words && t.words.length).map(trim);
+    const phrases = all.filter((t) => convertible(t.words));
+    // what is not converted is left as scanned: handwriting, mostly, which
+    // can be erased to clear a filled-in form
+    const left = all.filter((t) => !phrases.includes(t) && t.words.some((w) => /[\p{L}\p{N}]/u.test(w.t)));
+    // Bold is judged against the page's own strokes: a black-and-white scan
+    // thickens every letter, so a fixed measure would call it all bold.
+    const sws = phrases.flatMap((t) => t.words.map((w) => w.sw)).filter((v) => v > 0).sort((a, b) => a - b);
+    S.boldCut = Math.max(S.boldStroke, sws.length ? sws[sws.length >> 1] * 1.22 : 0);
     if (!phrases.length) return 0;
     // one fresh render at 300 dpi, for colors and for comparing letters with fonts
     const K = Math.min(300 / 72, 3400 / Math.max(info.w, info.h));
@@ -2246,7 +2288,7 @@
       const y0 = Math.min(...ws.map((w) => w.y0));
       const ink = sampleInk(view, { x: ws[0].x0, y: y0, w: ws[ws.length - 1].x1 - ws[0].x0, h: Math.max(...ws.map((w) => w.y1)) - y0 });
       const sw = median(ws.map((w) => w.sw));
-      return { t, ink, bold: sw != null ? sw > S.boldStroke : ink.density > 0.3, n: ws.length };
+      return { t, ink, bold: sw != null ? sw > S.boldCut : ink.density > 0.3, n: ws.length };
     });
     // small caps: OCR reads them as capitals, so the letters are measured
     const cd = g.getImageData(0, 0, c.width, c.height).data;
@@ -2272,13 +2314,14 @@
       if (main && NpFonts.score) {
         for (const q of mine) {
           q.samp = samplesOf(q.t.words, 6);
-          q.sc = q.samp.length >= 4 ? await NpFonts.score(q.samp, main) : null;
+          q.sc = q.samp.length ? await NpFonts.score(q.samp, main) : null;
         }
-        const typical = median(mine.map((q) => q.sc));
+        // how well the page's font fits its lines, from lines with enough words to say
+        const typical = median(mine.filter((q) => q.samp.length >= 4).map((q) => q.sc)) ?? median(mine.map((q) => q.sc));
         const known = [main];
         let looked = 0;
         for (const q of mine) {
-          if (q.sc == null || typical == null || q.sc >= typical - 0.08) continue;
+          if (q.sc == null || typical == null || q.sc >= typical - 0.08 || q.samp.length < 4) continue;
           let best = null;
           for (const f of known.slice(1)) {
             const sc = await NpFonts.score(q.samp, f);
@@ -2292,7 +2335,20 @@
           // taken when it fits this line about as well as the page's font fits the rest
           if (r && r.score > q.sc + 0.04 && r.score >= typical - 0.06) { await NpFonts.load(r); known.push(r); q.ref = r; }
         }
+        // Writing by hand fits no font: a line whose letters match nothing
+        // found on the page (nor its italic) is left as it was scanned,
+        // rather than have its letters half erased and typed over.
+        for (const q of mine) {
+          if (q.ref || q.sc == null || typical == null || q.sc >= typical - 0.15) continue;
+          let best = q.sc;
+          for (const f of known.slice(1).concat([{ id: main.id, weight: main.weight, style: 'italic' }])) {
+            const sc = await NpFonts.score(q.samp, f);
+            if (sc != null) best = Math.max(best, sc);
+          }
+          if (best < typical - 0.15) q.skip = true;
+        }
       }
+      for (let i = mine.length - 1; i >= 0; i--) if (mine[i].skip) { left.push(mine[i].t); mine.splice(i, 1); }
       const byFont = new Map();
       for (const q of mine) {
         const ref = q.ref || main;
@@ -2338,6 +2394,11 @@
     }
     if (S.rec.items.some((i) => i.page === info.entry.uid && i.conv)) return 0;
     S.rec.items.push(...out);
+    if (out.length) {
+      for (const t of left) {
+        S.rec.items.push({ id: uid(), type: 'hand', page: info.entry.uid, origKey: t.key, words: t.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 })), erased: false });
+      }
+    }
     return out.length;
   }
 
@@ -2363,12 +2424,33 @@
     const info = currentPage();
     if (!info || !isConv(info.entry.uid)) { api.toast('This page is shown as it was scanned already.'); return; }
     const before = snap();
-    S.rec.items = S.rec.items.filter((i) => !(i.page === info.entry.uid && i.conv));
+    S.rec.items = S.rec.items.filter((i) => !(i.page === info.entry.uid && (i.conv || i.type === 'hand')));
     S.sel = null;
     commit(before);
     renderOverlay(info);
     renderStyleBar();
     api.toast('This page is back to the original scan. Edit text now changes single words and leaves the rest of the scan as it is.', 7000);
+  }
+
+  function setHand(list, erased) {
+    if (!list.length) return;
+    const before = snap();
+    for (const it of list) it.erased = erased;
+    commit(before);
+    for (const uidv of new Set(list.map((i) => i.page))) renderOverlay(S.info.get(uidv));
+    renderStyleBar();
+  }
+
+  // To clear a filled-in form: take all handwriting off the page in view.
+  function clearHandwriting() {
+    const info = currentPage();
+    const list = info ? S.rec.items.filter((i) => i.page === info.entry.uid && i.type === 'hand' && !i.erased) : [];
+    if (!list.length) {
+      api.toast(isConv(info && info.entry.uid) ? 'No handwriting was found on this page.' : 'Click “Read text” first; handwriting is found while the page is read.', 5000);
+      return;
+    }
+    setHand(list, true);
+    api.toast('Erased ' + list.length + ' piece' + (list.length === 1 ? '' : 's') + ' of handwriting. Undo puts them back; so does selecting one and choosing Put back.', 6000);
   }
 
   // Proofreading: the page as scanned, with the text drawn from it hidden.
@@ -2540,16 +2622,11 @@
     return q && !q.me ? q : rest[0];
   }
 
-  // OCR's confidence in a word, below which an unchanged word is left as the
-  // scan's own pixels rather than retyped: a misread (a lost accent, say) is
-  // then never shown as text the page did not have.
-  const SURE = 88;
-
   // The words of a converted line, placed: unchanged words where they were
   // on the scan (so columns stay lined up), changed words set naturally
   // after the ones before them, and the line narrowed a little if it would
-  // run past its cell. A run marked scan is an unchanged word OCR was unsure
-  // of, left on the page as scanned.
+  // run past its cell. Every word is redrawn, so a line looks of a piece;
+  // words OCR was unsure of are marked to check instead.
   function convLayout(it) {
     const orig = it.words;
     const neu = it.text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
@@ -2574,9 +2651,8 @@
       const x0 = i < p ? o.x0 : flow;
       // an unchanged word never grows past the room it had on the page
       const sx = o ? Math.max(0.85, Math.min(1, ((o.x1 - o.x0) * 1.02) / (ink.w || 1))) : 1;
-      runs.push({ text: t, x0, w: ink.w * sx, lsb: ink.lsb, sx, o, v, scan: !!o && o.c != null && o.c < SURE && x0 === o.x0 });
-      // a word left as scanned keeps its own width
-      end = runs[runs.length - 1].scan ? o.x1 : x0 + ink.w * sx;
+      runs.push({ text: t, x0, w: ink.w * sx, lsb: ink.lsb, sx, o, v });
+      end = x0 + ink.w * sx;
     });
     let scaleX = 1;
     let overflow = false;
@@ -2586,21 +2662,18 @@
       const f = Math.max(0.8, (limit - from) / (end - from));
       overflow = from + (end - from) * f > limit + it.size * 0.1;
       scaleX = f;
-      for (let i = p; i < runs.length; i++) { runs[i].x0 = from + (runs[i].x0 - from) * f; runs[i].w *= f; runs[i].sx *= f; runs[i].scan = false; }
+      for (let i = p; i < runs.length; i++) { runs[i].x0 = from + (runs[i].x0 - from) * f; runs[i].w *= f; runs[i].sx *= f; }
     }
-    return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, scan: r.scan, o: r.o, st: runStyle(it, r.v) }));
+    return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, o: r.o, st: runStyle(it, r.v) }));
   }
 
-  // The original words that come off the page: all but those left as scanned.
-  function convErased(it) {
-    const left = new Set(convLayout(it).filter((r) => r.scan).map((r) => r.o));
-    return it.words.filter((w) => !left.has(w));
-  }
+  // The original words that come off the page: all of them.
+  const convErased = (it) => it.words;
 
   // What cleanCanvas would take off a page, to know when to draw it again.
   function cleanSig(info) {
     if (S.showOriginal || !S.rec) return '';
-    return S.rec.items.filter((i) => i.page === info.entry.uid && i.conv).map((i) => i.id + ':' + convErased(i).length + ':' + (convErased(i)[0] || {}).x0).join('|');
+    return S.rec.items.filter((i) => i.page === info.entry.uid && (i.conv || (i.type === 'hand' && i.erased))).map((i) => i.id + ':' + (i.conv ? convErased(i).length + ':' + (convErased(i)[0] || {}).x0 : 'x')).join('|');
   }
 
   // What comes off the page for a converted line, in points: one rectangle
@@ -2628,6 +2701,22 @@
     }
     flush();
     return { rects, keep };
+  }
+
+  // Handwriting: the whole of it, and the pieces erased to clear it.
+  function handBox(it) {
+    const x0 = Math.min(...it.words.map((w) => w.x0));
+    const y0 = Math.min(...it.words.map((w) => w.y0));
+    const x1 = Math.max(...it.words.map((w) => w.x1));
+    const y1 = Math.max(...it.words.map((w) => w.y1));
+    const pad = Math.max(1.5, (y1 - y0) * 0.15);
+    return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + pad * 2, h: y1 - y0 + pad * 2 };
+  }
+  function handRects(it) {
+    if (!it.erased) return [];
+    // one piece, gaps included: a pen stroke often runs between the words OCR found
+    const b = handBox(it);
+    return [{ x: b.x, y: b.y, w: b.w, h: b.h, em: Math.max(4, b.h * 0.8) }];
   }
 
   // Paint the given rectangles (pixels, each with its text's em in pixels)
@@ -2678,11 +2767,13 @@
       const y1 = Math.min(H, Math.ceil(r.y1));
       if (x1 - x0 < 1 || y1 - y0 < 1) continue;
       const em = Math.max(4, r.em || y1 - y0);
-      // the paper: the usual color of a thin ring just outside
+      // the paper: the usual color of a band just outside
       const ring = [];
       const at = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) ring.push((y * W + x) * 4); };
-      for (let x = x0 - 2; x <= x1 + 1; x++) { at(x, y0 - 2); at(x, y1 + 1); }
-      for (let y = y0 - 1; y <= y1; y++) { at(x0 - 2, y); at(x1 + 1, y); }
+      for (let g = 2; g <= 5; g++) {
+        for (let x = x0 - g; x < x1 + g; x++) { at(x, y0 - g); at(x, y1 - 1 + g); }
+        for (let y = y0 - g + 1; y < y1 + g - 1; y++) { at(x0 - g, y); at(x1 - 1 + g, y); }
+      }
       if (!ring.length) continue;
       const ls = ring.map(lum).sort((a, b) => a - b);
       const mid = ls[ls.length >> 1];
@@ -2692,6 +2783,7 @@
       if (!n) continue;
       bg[0] /= n; bg[1] /= n; bg[2] /= n;
       const bgL = bg[0] * 0.299 + bg[1] * 0.587 + bg[2] * 0.114;
+
       const isDark = (x, y) => bgL - lum((y * W + x) * 4) > 60;
       // the area worked on: the rectangle and room around it for shapes that cross its edge
       const wx0 = Math.max(0, x0 - Math.ceil(em * 0.6));
@@ -2740,6 +2832,20 @@
           y = b;
         }
       }
+      // Shading in a black-and-white scan is a pattern of dots, and paper has
+      // grain: when the band around (less any border line running through
+      // it) is not one even color, the hole is filled with pixels taken from
+      // it, so the pattern carries on (a flat fill there reads as a white patch).
+      const pool = ring.filter((q) => {
+        const x = (q >> 2) % W;
+        const y = Math.floor((q >> 2) / W);
+        return !(x >= wx0 && x < wx1 && y >= wy0 && y < wy1 && prot[idx(x, y)]);
+      });
+      const even = pool.filter((q) => Math.abs(lum(q) - mid) <= 14).length;
+      const textured = pool.length > 20 && even < pool.length * 0.7;
+      const src = textured ? pool.map((q) => [d[q], d[q + 1], d[q + 2]]) : null;
+      let seed = (x0 * 73856093) ^ (y0 * 19349663);
+      const pick = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return src[seed % src.length]; };
       const erase = new Uint8Array(ww * wh);
       const queue = [];
       for (let y = y0; y < y1; y++) {
@@ -2760,6 +2866,8 @@
           if (nx < wx0 || ny < wy0 || nx >= wx1 || ny >= wy1) continue;
           const i = idx(nx, ny);
           if (erase[i] || prot[i] || !dark[i]) continue;
+          // never along the soft edge of a line that stays, into what it joins
+          if ((nx > wx0 && prot[i - 1]) || (nx < wx1 - 1 && prot[i + 1]) || (ny > wy0 && prot[i - ww]) || (ny < wy1 - 1 && prot[i + ww])) continue;
           erase[i] = 2;
           queue.push(nx, ny);
         }
@@ -2778,7 +2886,8 @@
             if (nb) continue;
           }
           if (inSkip(x, y)) continue;
-          d[p] = bg[0]; d[p + 1] = bg[1]; d[p + 2] = bg[2];
+          if (textured) { const q = pick(); d[p] = q[0]; d[p + 1] = q[1]; d[p + 2] = q[2]; }
+          else { d[p] = bg[0]; d[p + 1] = bg[1]; d[p + 2] = bg[2]; }
         }
       }
     }
@@ -2791,6 +2900,7 @@
     const skip = [];
     const toPx = (b) => ({ x0: b.x * k, y0: b.y * k, x1: (b.x + b.w) * k, y1: (b.y + b.h) * k, em: (b.em || 0) * k });
     for (const it of S.rec.items) {
+      if (it.page === info.entry.uid && it.type === 'hand') rects.push(...handRects(it).map(toPx));
       if (it.page !== info.entry.uid || !it.conv) continue;
       const cr = convRects(it);
       rects.push(...cr.rects.map(toPx));
@@ -2873,6 +2983,14 @@
       color.addEventListener('change', () => { st[prop] = color.value; update((i) => { i.color = color.value; }); });
       parts.push(color);
     }
+    if (it && it.type === 'hand') {
+      const b = el('button', { type: 'button', class: 'btn btn-sm', title: it.erased ? 'Show this handwriting again' : 'Take this handwriting off the page (Del)' }, it.erased ? 'Put back' : 'Erase handwriting');
+      b.addEventListener('mousedown', (e) => e.preventDefault());
+      b.addEventListener('click', () => setHand([it], !it.erased));
+      bar.replaceChildren(b);
+      bar.hidden = false;
+      return;
+    }
     if (it) {
       if (it.cover) {
         const restore = el('button', { type: 'button', class: 'btn btn-sm', title: 'Remove this change and show the original text again' }, 'Restore original');
@@ -2903,6 +3021,7 @@
     const before = node0Before(it) || snap();
     S.editing = null;
     if (it.conv) it.text = '';
+    else if (it.type === 'hand') it.erased = true;
     else S.rec.items = S.rec.items.filter((i) => i.id !== it.id);
     S.sel = null;
     commit(before);
@@ -2930,7 +3049,7 @@
     }
     if (!inField && S.sel && e.key.startsWith('Arrow')) {
       const it = itemById(S.sel);
-      if (it.anchored || it.conv) return false;
+      if (it.anchored || it.conv || it.type === 'hand') return false;
       const step = (e.shiftKey ? 10 : 1);
       const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0;
       const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0;
@@ -3659,6 +3778,7 @@
       for (const it of items) {
         if (it.cover) regions.push(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: it.cover.color }));
         if (it.type === 'whiteout') regions.push(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: it.color }));
+        if (it.type === 'hand') for (const b of handRects(it)) regions.push(Object.assign(rectToPdf(R, box, b.x, b.y, b.w, b.h), { color: '#ffffff', inpaint: true, em: b.em }));
         if (it.conv) {
           const cr = convRects(it);
           const keep = cr.keep.map((b) => rectToPdf(R, box, b.x, b.y, b.w, b.h));
@@ -3667,7 +3787,7 @@
         if (it.anchored) {
           const lay = layoutEdit(it);
           layouts.set(it.id, lay);
-          for (const c of lay.covers) regions.push(Object.assign(rectToPdf(R, box, c.x, c.y, c.w, c.h), { color: it.bg }));
+          for (const c of lay.covers) regions.push(Object.assign(rectToPdf(R, box, c.x, c.y, c.w, c.h), { color: it.bg, inpaint: true, em: it.size }));
           if (lay.shift) {
             const sh = lay.shift;
             const a0 = toPdf(R, box, sh.x0, sh.y0);
@@ -3767,7 +3887,6 @@
         if (!erasedHere) for (const b of convRects(it).rects) { page.drawRectangle(Object.assign(rectToPdf(R, box, b.x, b.y, b.w, b.h), { color: hexRgb(it.bg) })); }
         let over = false;
         for (const r of convLayout(it)) {
-          if (r.scan) continue;
           const matched = await fontFor(r.st);
           const charset = r.st.font && matched && matched.getCharacterSet ? new Set(matched.getCharacterSet()) : null;
           const font = charset && [...r.text].some((ch) => !charset.has(ch.codePointAt(0)))
@@ -3896,6 +4015,7 @@
     ocr: (scope) => runOcr(scope),
     convert: convertCurrent,
     unconvert: unconvertCurrent,
+    clearHandwriting,
     showOriginal: () => toggleOriginal(),
     copyText: copyPageText,
     addPages: () => $('#pdf-add-input').click(),

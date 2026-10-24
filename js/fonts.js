@@ -312,7 +312,10 @@
     // second pass: the best few at every weight they come in
     const top = first.slice(0, 3);
     const tries = [];
-    for (const t of top) for (const w of CATALOG[t.ref.id][2]) if (w >= 300 && w <= 800) tries.push({ id: t.ref.id, weight: w, style: 'normal' });
+    // within the weight the strokes say (a scan thickens letters, so left
+    // free a regular line drifts heavier)
+    const [lo, hi] = hints && hints.bold === true ? [600, 800] : hints && hints.bold === false ? [300, 500] : [300, 800];
+    for (const t of top) for (const w of CATALOG[t.ref.id][2]) if (w >= lo && w <= hi) tries.push({ id: t.ref.id, weight: w, style: 'normal' });
     const second = await pool(tries, 6, async (ref) => ({ ref, s: await score(ref) }));
     second.sort((a, b) => b.s - a.s);
     const best = second[0] || first[0];

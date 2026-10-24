@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.24-14';
+  const APP_VERSION = '2026.10.24-15';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1230,6 +1230,7 @@
     'pdf-convert': () => NpPdf.convert(),
     'pdf-unconvert': () => NpPdf.unconvert(),
     'pdf-original': () => NpPdf.showOriginal(),
+    'pdf-clear-hand': () => NpPdf.clearHandwriting(),
     'pdf-copy-text': () => NpPdf.copyText()
   };
 
@@ -2160,7 +2161,7 @@
   function restoredPdf(raw, id) {
     const num = (v) => (Number.isFinite(+v) ? +v : 0);
     const items = (Array.isArray(raw.items) ? raw.items : []).filter((it) => it && typeof it === 'object' && typeof it.page === 'string' &&
-      ['text', 'image', 'highlight', 'whiteout', 'box', 'ink'].includes(it.type) && (it.type !== 'image' || /^data:image\/(png|jpeg);base64,/.test(it.src)));
+      ['text', 'image', 'highlight', 'whiteout', 'box', 'ink', 'hand'].includes(it.type) && (it.type !== 'image' || /^data:image\/(png|jpeg);base64,/.test(it.src)));
     return Object.assign(newDocRecord('', String(raw.title || 'PDF')), {
       id, type: 'pdf', titleAuto: false, text: String(raw.text || ''),
       created: num(raw.created) || Date.now(), updated: num(raw.updated) || Date.now(),

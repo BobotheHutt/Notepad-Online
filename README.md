@@ -1,42 +1,71 @@
 # Notepad Online
 
-A blazing-fast, distraction-free web word processor built entirely using native vanilla web standards. Designed as a lightweight, zero-cost alternative to heavy office suites for day-to-day writing, formatting, and proofreading.
+A fast, private word processor that runs entirely in your browser. No
+account, no server, no tracking. What you write stays on your device. It
+saves as you type, works offline, and opens and saves Word documents.
 
-## 🚀 Key Features
+## Features
 
-- **Session Continuity (Auto-Save):** Automatically backs up your current layout to your browser's internal Local Storage every second.
-- **Flexible Document Layouts:** 
-  - *Notepad Style:* Full-screen seamless window configuration.
-  - *Letter Page Style:* Virtual physical A4/Letter paper canvas setup with margins.
-- **Typography & Aesthetics:** Real-time font-family switching, native font scaling, text color palettes, text highlighting tools, and a global Dark Mode layout toggle.
-- **Advanced Editing Utilities:** Inline global text find and replace tool, real-time live character/word analytics, and a custom Word Target Goal tracker with a visual progress indicator bar.
-- **Accessibility & Media Exports:** Built-in Speech Synthesis audio text reader, standard clean print styles optimize formatting for direct physical printer/PDF saving, alongside traditional `.txt` and formatting-safe `.html` direct file downloads.
-- **Developer Markdown Tooling:** Real-time side-by-side split pane live Markdown parser rendering engine.
+**Writing**
+- Headings, quotes, code blocks, bulleted, numbered and **check** lists
+- Bold, italic, underline, strikethrough, superscript, subscript, inline code
+- Any font size and font for selected text, a text color and highlight palette
+- Alignment, indent, links, horizontal lines, page breaks, special characters
+- Tables: insert from a size grid, add or delete rows and columns, header row, Tab between cells
+- Images: insert, paste or drag in; resize by dragging or by preset; center or wrap text; alt text
+- **Markdown shortcuts** while you type: `#` heading, `-` bullet, `1.` numbers, `[ ]` checklist, `>` quote, ```` ``` ```` code, `---` line
 
----
+**Documents**
+- Unlimited documents, with a searchable sidebar
+- Autosave plus **version history**: browse earlier versions and restore any of them
+- **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window
+- **Download** as Word (`.docx`), PDF, Markdown, web page or plain text
+- Page setup per document: font, size, line spacing, Letter or A4, margins
+- Back up every document to one file and restore it anywhere
 
-## 💾 Starting a New Writing Session
+**Tools**
+- Find and replace with highlighting, match case, whole words and regex
+- Word count details, reading time, selection count, and a word goal with a progress bar
+- Read aloud with word highlighting, a choice of voice and speed
+- Spell check toggle, focus mode, zoom, light and dark themes
+- Full keyboard shortcuts (press **Ctrl+/** to see them all)
+- Works on phones and tablets, works offline, installable as an app
 
-Because this application uses continuous Local Storage session backups to prevent accidental loss of text if the page refreshes or crashes, it will always automatically pull up your most recent draft when launched.
+## Where your writing is kept
 
-When you are ready to completely wipe the current canvas state and spin up a **clean new document session**, use these steps:
+Documents are stored in your browser's IndexedDB on this device. They are
+never uploaded. Clearing your browser's site data deletes them, and they
+don't follow you to other browsers or computers. Use **File → Back up all
+documents** to keep a copy, or to move them.
 
-1. **Click the Red Trash Icon (🗑️ Clear)** located on the far right end of the top app toolbar.
-2. A browser dialog alert will appear asking: *"Are you sure you want to permanently clear this document?"*
-3. Click **OK / Confirm**.
-4. The canvas text and word metric trackers will reset completely, and the local backup memory partition for that specific browser will be entirely wiped, establishing a fresh session canvas instantly.
+Upgrading from the first version? Your old draft is moved into the
+documents list automatically the first time you open the new version.
 
----
+## Running it
 
-## 🛠️ Local Development & Deployment
+It is a static site with no build step and no dependencies.
 
-### Quick Run Local
-1. Download or clone this repository to your machine.
-2. Double-click `index.html` to launch the app instantly in any modern desktop or mobile browser.
+- **Locally:** open `index.html` in a browser. Offline install needs it
+  served over http(s), for example `python3 -m http.server`.
+- **GitHub Pages:** Settings → Pages → Deploy from a branch → `main`, root folder.
+  It will be live at `https://<your-username>.github.io/Notepad-Online/`.
 
-### Publishing to GitHub Pages
-1. Go to your repository settings page on GitHub.
-2. Click **Pages** in the left sidebar menu.
-3. Under *Build and deployment*, set the deployment source to **Deploy from a branch**.
-4. Choose the `main` or `master` branch, select the root `/` folder, and click **Save**.
-5. Your application will be live globally at: `https://<your-username>.github.io/Notepad-Online/`
+## Files
+
+```
+index.html             page structure, menus and toolbar
+styles.css             all styling: light and dark themes, phone layout, print
+js/app.js              the editor and the rest of the app
+js/store.js            document storage (IndexedDB)
+js/sanitize.js         cleans pasted and opened content
+js/markdown.js         Markdown import and export
+js/docx.js             Word .docx import and export
+js/zip.js              the zip reading and writing .docx needs
+js/icons.js            toolbar icons
+sw.js                  offline support
+manifest.webmanifest   app install details
+AUDIT.md               what was wrong with the first version, and what changed
+```
+
+After changing any file, bump `CACHE` in `sw.js` so installed copies pick up
+the update.

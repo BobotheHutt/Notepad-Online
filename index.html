@@ -1,143 +1,287 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="system">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notepad Online - Advanced Text Editor</title>
-    <link rel="stylesheet" href="styles.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Notepad Online</title>
+  <meta name="description" content="A fast, private word processor that runs in your browser. Works offline, saves as you type, opens and saves Word files.">
+  <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#16181c" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    // Apply the saved theme before first paint so there is no flash.
+    try { var s = JSON.parse(localStorage.getItem('np.settings') || '{}'); if (s.theme) document.documentElement.dataset.theme = s.theme; } catch (e) {}
+  </script>
+  <style id="page-rule"></style>
 </head>
-<body>
+<body class="view-page">
+<div class="app" id="app">
 
-    <div class="editor-container">
-        <!-- Main Desktop Style Menu & Toolbar Wrapper -->
-        <header class="toolbar">
-            
-            <!-- ====== 1. FILE MENU ====== -->
-            <div class="dropdown">
-                <button class="menu-trigger-btn">File ▾</button>
-                <div class="dropdown-content menu-panel">
-                    <button onclick="saveFile('txt')">💾 Save as .txt</button>
-                    <button onclick="saveFile('html')">🌐 Save as .html</button>
-                    <hr class="menu-divider">
-                    <button onclick="printDoc()">🖨️ Print / PDF</button>
-                    <hr class="menu-divider">
-                    <button onclick="clearDoc()" class="text-danger">🗑️ Wiped / Clear Session</button>
-                </div>
+  <!-- ===================== Documents panel ===================== -->
+  <aside class="sidebar" id="sidebar" aria-label="Documents">
+    <div class="sb-head">
+      <span class="brand"><img src="icon.svg" alt="" width="22" height="22"> Notepad</span>
+      <button class="btn btn-primary btn-sm" data-action="new" title="New document (Ctrl+Alt+N)"><span data-icon="plus"></span>New</button>
+    </div>
+    <div class="sb-search">
+      <span data-icon="search" class="sb-search-icon"></span>
+      <input id="doc-search" type="search" placeholder="Search documents" aria-label="Search documents" autocomplete="off">
+    </div>
+    <ul class="doc-list" id="doc-list"></ul>
+    <div class="sb-foot" id="sb-foot">
+      <span id="storage-note">Saved in this browser</span>
+      <button class="link-btn" data-action="backup">Back up</button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" data-action="toggle-sidebar"></div>
+
+  <!-- ===================== Main column ===================== -->
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn" data-action="toggle-sidebar" data-icon="sidebar" title="Documents" aria-label="Show or hide documents"></button>
+      <div class="title-block">
+        <input id="doc-title" class="doc-title" type="text" spellcheck="false" placeholder="Untitled document" aria-label="Document title" maxlength="120">
+        <nav class="menubar" id="menubar" role="menubar" aria-label="Main menu">
+
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">File</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="new"><span>New document</span><kbd>Ctrl+Alt+N</kbd></button>
+              <button role="menuitem" data-action="open"><span>Open file…</span><kbd>Ctrl+O</kbd></button>
+              <button role="menuitem" data-action="duplicate"><span>Make a copy</span></button>
+              <button role="menuitem" data-action="rename"><span>Rename</span></button>
+              <button role="menuitem" data-action="history"><span>Version history</span></button>
+              <div class="menu-sep"></div>
+              <div class="menu-label">Download as</div>
+              <button role="menuitem" data-action="export" data-arg="docx"><span>Word document (.docx)</span></button>
+              <button role="menuitem" data-action="export" data-arg="pdf"><span>PDF (.pdf)</span></button>
+              <button role="menuitem" data-action="export" data-arg="md"><span>Markdown (.md)</span></button>
+              <button role="menuitem" data-action="export" data-arg="html"><span>Web page (.html)</span></button>
+              <button role="menuitem" data-action="export" data-arg="txt"><span>Plain text (.txt)</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="page-setup"><span>Page setup…</span></button>
+              <button role="menuitem" data-action="print"><span>Print</span><kbd>Ctrl+P</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="backup"><span>Back up all documents</span></button>
+              <button role="menuitem" data-action="restore-backup"><span>Restore from backup…</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="delete" class="danger"><span>Delete document</span></button>
             </div>
+          </div>
 
-            <!-- ====== 2. EDIT MENU ====== -->
-            <div class="dropdown">
-                <button class="menu-trigger-btn">Edit ▾</button>
-                <div class="dropdown-content menu-panel">
-                    <button onclick="format('undo')">↩ Undo</button>
-                    <button onclick="format('redo')">↪ Redo</button>
-                    <hr class="menu-divider">
-                    <button onclick="format('bold')" style="font-weight: bold;">B Bold</button>
-                    <button onclick="format('italic')" style="font-style: italic;">I Italic</button>
-                    <button onclick="format('underline')" style="text-decoration: underline;">U Underline</button>
-                    <button onclick="format('strikeThrough')" style="text-decoration: line-through;">~~ Strikethrough</button>
-                </div>
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Edit</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="cmd" data-arg="undo"><span>Undo</span><kbd>Ctrl+Z</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="redo"><span>Redo</span><kbd>Ctrl+Y</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="select-all"><span>Select all</span><kbd>Ctrl+A</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="find"><span>Find</span><kbd>Ctrl+F</kbd></button>
+              <button role="menuitem" data-action="replace"><span>Find and replace</span><kbd>Ctrl+H</kbd></button>
+              <div class="menu-sep"></div>
+              <div class="menu-note">Paste without formatting: <kbd>Ctrl+Shift+V</kbd></div>
             </div>
+          </div>
 
-            <!-- ====== 3. VIEW MENU ====== -->
-            <div class="dropdown">
-                <button class="menu-trigger-btn">View ▾</button>
-                <div class="dropdown-content menu-panel">
-                    <button onclick="changeLayoutView('notepad')">🗔 Fullscreen Notepad Style</button>
-                    <button onclick="changeLayoutView('page')">📄 Letter Page A4 Layout</button>
-                    <hr class="menu-divider">
-                    <button id="dark-btn" onclick="toggleDarkMode()">🌙 Dark Mode Toggle</button>
-                    <button id="md-btn" onclick="toggleMarkdown()">📝 Split Markdown View</button>
-                </div>
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Insert</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="image"><span>Image from your device…</span></button>
+              <button role="menuitem" data-action="image-url"><span>Image from a link…</span></button>
+              <button role="menuitem" data-action="table-menu"><span>Table…</span></button>
+              <button role="menuitem" data-action="link"><span>Link…</span><kbd>Ctrl+K</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="checklist"><span>Checklist</span><kbd>Ctrl+Shift+9</kbd></button>
+              <button role="menuitem" data-action="hr"><span>Horizontal line</span></button>
+              <button role="menuitem" data-action="page-break"><span>Page break</span><kbd>Ctrl+Enter</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="date"><span>Today's date</span></button>
+              <button role="menuitem" data-action="symbols"><span>Special character…</span></button>
             </div>
+          </div>
 
-            <!-- ====== 4. TOOLS MENU ====== -->
-            <div class="dropdown">
-                <button class="menu-trigger-btn">Tools ▾</button>
-                <div class="dropdown-content menu-panel">
-                    <button id="spell-btn" onclick="toggleSpellcheck()" class="active-toggle">✔️ Spellcheck Switcher</button>
-                    <button onclick="speakText()">🔊 Speech Synthesis Reader</button>
-                </div>
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Format</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="cmd" data-arg="bold"><span>Bold</span><kbd>Ctrl+B</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="italic"><span>Italic</span><kbd>Ctrl+I</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="underline"><span>Underline</span><kbd>Ctrl+U</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="strikeThrough"><span>Strikethrough</span><kbd>Ctrl+Shift+X</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="superscript"><span>Superscript</span><kbd>Ctrl+.</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="subscript"><span>Subscript</span><kbd>Ctrl+,</kbd></button>
+              <button role="menuitem" data-action="inline-code"><span>Inline code</span><kbd>Ctrl+E</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="block" data-arg="p"><span>Normal text</span><kbd>Ctrl+Alt+0</kbd></button>
+              <button role="menuitem" data-action="block" data-arg="h1"><span>Heading 1</span><kbd>Ctrl+Alt+1</kbd></button>
+              <button role="menuitem" data-action="block" data-arg="h2"><span>Heading 2</span><kbd>Ctrl+Alt+2</kbd></button>
+              <button role="menuitem" data-action="block" data-arg="h3"><span>Heading 3</span><kbd>Ctrl+Alt+3</kbd></button>
+              <button role="menuitem" data-action="block" data-arg="blockquote"><span>Quote</span></button>
+              <button role="menuitem" data-action="block" data-arg="pre"><span>Code block</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="cmd" data-arg="justifyLeft"><span>Align left</span><kbd>Ctrl+Shift+L</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="justifyCenter"><span>Align center</span><kbd>Ctrl+Shift+E</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="justifyRight"><span>Align right</span><kbd>Ctrl+Shift+R</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="justifyFull"><span>Justify</span><kbd>Ctrl+Shift+J</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="cmd" data-arg="insertUnorderedList"><span>Bulleted list</span><kbd>Ctrl+Shift+8</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="insertOrderedList"><span>Numbered list</span><kbd>Ctrl+Shift+7</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="indent"><span>Increase indent</span><kbd>Tab</kbd></button>
+              <button role="menuitem" data-action="cmd" data-arg="outdent"><span>Decrease indent</span><kbd>Shift+Tab</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="clear-format"><span>Clear formatting</span><kbd>Ctrl+\</kbd></button>
             </div>
+          </div>
 
-            <!-- ====== QUICK FORMAT BAR ELEMENT ATTACHMENTS ====== -->
-            <div class="inline-quick-tools">
-                <select id="font-family-select" onchange="changeFontFamily(this.value)">
-                    <option value="-apple-system, BlinkMacSystemFont, sans-serif">System Default</option>
-                    <option value="Arial, sans-serif">Arial</option>
-                    <option value="'Times New Roman', serif">Times New Roman</option>
-                    <option value="'Courier New', monospace">Courier New</option>
-                    <option value="Georgia, serif">Georgia</option>
-                </select>
-
-                <button onclick="changeFontSize('increase')" title="Increase font size">A+</button>
-                <button onclick="changeFontSize('decrease')" title="Decrease font size">A-</button>
-
-                <!-- Color Palette Context Menu Trigger -->
-                <div class="dropdown">
-                    <button class="menu-trigger-btn inner-tool">🎨 Colors</button>
-                    <div class="dropdown-content color-menu">
-                        <label>
-                            <span>Text Color:</span>
-                            <input type="color" id="text-color-picker" value="#333333" oninput="changeTextColor(this.value)">
-                        </label>
-                        <label>
-                            <span>Highlight:</span>
-                            <input type="color" id="highlight-color-picker" value="#ffffff" oninput="changeHighlightColor(this.value)">
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Rich Element Insert Submenu Context -->
-                <div class="dropdown" style="position: relative;">
-                    <button class="menu-trigger-btn inner-tool" id="table-btn" onclick="toggleTableGridMenu(); event.stopPropagation();">➕ Insert Element</button>
-                    <div class="dropdown-content insert-menu">
-                        <button onclick="toggleTableGridMenu(); event.stopPropagation();">📊 Interactive Table Grid</button>
-                        <button onclick="triggerImageUpload()">🖼️ Inline Image File</button>
-                    </div>
-                    <div id="table-grid-menu" class="grid-menu hidden">
-                        <div id="grid-matrix" class="grid-matrix"></div>
-                        <div id="grid-label" class="grid-label">1 x 1 Table</div>
-                    </div>
-                </div>
-                <input type="file" id="image-file-input" style="display: none;" accept="image/*" onchange="handleImageFileSelect(this)">
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">View</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitemradio" data-action="view" data-arg="page" data-check="view:page"><span>Page layout</span></button>
+              <button role="menuitemradio" data-action="view" data-arg="full" data-check="view:full"><span>Full width</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitemradio" data-action="theme" data-arg="light" data-check="theme:light"><span>Light</span></button>
+              <button role="menuitemradio" data-action="theme" data-arg="dark" data-check="theme:dark"><span>Dark</span></button>
+              <button role="menuitemradio" data-action="theme" data-arg="system" data-check="theme:system"><span>Match my device</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="zoom" data-arg="in"><span>Zoom in</span></button>
+              <button role="menuitem" data-action="zoom" data-arg="out"><span>Zoom out</span></button>
+              <button role="menuitem" data-action="zoom" data-arg="reset"><span>Actual size</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitemcheckbox" data-action="toggle-sidebar" data-check="sidebar"><span>Documents panel</span></button>
+              <button role="menuitem" data-action="focus"><span>Focus mode</span><kbd>Ctrl+Shift+F</kbd></button>
             </div>
-        </header>
+          </div>
 
-        <!-- Dynamic Utility Find and Replace Action Control Workspace Layer -->
-        <section class="find-replace-bar">
-            <input type="text" id="find-input" placeholder="Find text...">
-            <input type="text" id="replace-input" placeholder="Replace with...">
-            <button onclick="findAndReplace()" class="btn-action">Replace All</button>
-            
-            <div class="goal-group">
-                <label for="word-goal-input">Goal:</label>
-                <input type="number" id="word-goal-input" placeholder="Words" min="0" oninput="updateMetrics()">
+          <div class="menu">
+            <button class="menu-btn" role="menuitem" aria-haspopup="true" aria-expanded="false">Tools</button>
+            <div class="menu-pop" role="menu">
+              <button role="menuitem" data-action="word-count"><span>Word count</span><kbd>Ctrl+Shift+C</kbd></button>
+              <button role="menuitem" data-action="goal"><span>Word goal…</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="speak"><span id="speak-label">Read aloud</span></button>
+              <button role="menuitem" data-action="voice"><span>Voice settings…</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitemcheckbox" data-action="spellcheck" data-check="spellcheck"><span>Spell check</span></button>
+              <button role="menuitemcheckbox" data-action="smart-md" data-check="smartMd"><span>Markdown shortcuts</span></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="shortcuts"><span>Keyboard shortcuts</span><kbd>Ctrl+/</kbd></button>
+              <button role="menuitem" data-action="about"><span>About and storage</span></button>
             </div>
-        </section>
+          </div>
+        </nav>
+      </div>
+      <div class="top-right">
+        <span class="save-status" id="save-status" role="status" aria-live="polite">Saved</span>
+        <button class="icon-btn" data-action="toggle-theme" id="theme-btn" title="Switch light or dark" aria-label="Switch light or dark" data-icon="moon"></button>
+        <button class="icon-btn" data-action="focus" data-icon="focus" title="Focus mode (Ctrl+Shift+F)" aria-label="Focus mode"></button>
+      </div>
+    </header>
 
-        <!-- Dynamic Word Goal Metric Tracker Progress Canvas Bar Layer -->
-        <div id="goal-progress-container" class="hidden">
-            <div id="goal-progress-bar"></div>
-        </div>
-
-        <!-- Primary Text Canvas Writing Area Core Processing Shell -->
-        <main id="workspace-outer" class="workspace-wrapper bg-notepad">
-            <div class="workspace">
-                <div id="editor" contenteditable="true" spellcheck="true" placeholder="Start typing your formatting rich text document context here..."></div>
-                <div id="preview" class="hidden"></div>
-            </div>
-        </main>
-
-        <!-- Footer Analytics Session Pipeline Layout Status Monitoring -->
-        <footer class="status-bar">
-            <span id="save-status">💾 Auto-saved</span>
-            <span id="goal-status"></span>
-            <span id="word-count">Words: 0</span>
-            <span id="char-count">Characters: 0</span>
-        </footer>
+    <!-- ===================== Formatting toolbar ===================== -->
+    <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting">
+      <button class="tb" data-action="cmd" data-arg="undo" data-icon="undo" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
+      <button class="tb" data-action="cmd" data-arg="redo" data-icon="redo" title="Redo (Ctrl+Y)" aria-label="Redo"></button>
+      <span class="tb-sep"></span>
+      <select id="tb-block" class="tb-select tb-block" title="Paragraph style" aria-label="Paragraph style">
+        <option value="p">Normal text</option>
+        <option value="h1">Heading 1</option>
+        <option value="h2">Heading 2</option>
+        <option value="h3">Heading 3</option>
+        <option value="blockquote">Quote</option>
+        <option value="pre">Code block</option>
+      </select>
+      <select id="tb-font" class="tb-select tb-font" title="Font" aria-label="Font"></select>
+      <select id="tb-size" class="tb-select tb-size" title="Font size" aria-label="Font size"></select>
+      <span class="tb-sep"></span>
+      <button class="tb" data-action="cmd" data-arg="bold" data-state="bold" data-icon="bold" title="Bold (Ctrl+B)" aria-label="Bold"></button>
+      <button class="tb" data-action="cmd" data-arg="italic" data-state="italic" data-icon="italic" title="Italic (Ctrl+I)" aria-label="Italic"></button>
+      <button class="tb" data-action="cmd" data-arg="underline" data-state="underline" data-icon="underline" title="Underline (Ctrl+U)" aria-label="Underline"></button>
+      <button class="tb" data-action="cmd" data-arg="strikeThrough" data-state="strikeThrough" data-icon="strike" title="Strikethrough (Ctrl+Shift+X)" aria-label="Strikethrough"></button>
+      <button class="tb tb-color" data-action="color-menu" data-arg="fore" data-icon="color" title="Text color" aria-label="Text color"><span class="color-bar" id="fore-bar"></span></button>
+      <button class="tb tb-color" data-action="color-menu" data-arg="back" data-icon="highlight" title="Highlight color" aria-label="Highlight color"><span class="color-bar" id="back-bar"></span></button>
+      <span class="tb-sep"></span>
+      <button class="tb" data-action="link" data-icon="link" title="Insert link (Ctrl+K)" aria-label="Insert link"></button>
+      <button class="tb" data-action="image" data-icon="image" title="Insert image" aria-label="Insert image"></button>
+      <button class="tb" data-action="table-menu" data-icon="table" title="Insert table" aria-label="Insert table"></button>
+      <span class="tb-sep"></span>
+      <button class="tb" data-action="cmd" data-arg="justifyLeft" data-state="justifyLeft" data-icon="alignLeft" title="Align left (Ctrl+Shift+L)" aria-label="Align left"></button>
+      <button class="tb" data-action="cmd" data-arg="justifyCenter" data-state="justifyCenter" data-icon="alignCenter" title="Align center (Ctrl+Shift+E)" aria-label="Align center"></button>
+      <button class="tb" data-action="cmd" data-arg="justifyRight" data-state="justifyRight" data-icon="alignRight" title="Align right (Ctrl+Shift+R)" aria-label="Align right"></button>
+      <button class="tb" data-action="cmd" data-arg="justifyFull" data-state="justifyFull" data-icon="alignJustify" title="Justify (Ctrl+Shift+J)" aria-label="Justify"></button>
+      <span class="tb-sep"></span>
+      <button class="tb" data-action="cmd" data-arg="insertUnorderedList" data-state="insertUnorderedList" data-icon="bullets" title="Bulleted list (Ctrl+Shift+8)" aria-label="Bulleted list"></button>
+      <button class="tb" data-action="cmd" data-arg="insertOrderedList" data-state="insertOrderedList" data-icon="numbers" title="Numbered list (Ctrl+Shift+7)" aria-label="Numbered list"></button>
+      <button class="tb" data-action="checklist" data-state="checklist" data-icon="checklist" title="Checklist (Ctrl+Shift+9)" aria-label="Checklist"></button>
+      <button class="tb" data-action="cmd" data-arg="outdent" data-icon="outdent" title="Decrease indent (Shift+Tab)" aria-label="Decrease indent"></button>
+      <button class="tb" data-action="cmd" data-arg="indent" data-icon="indent" title="Increase indent (Tab)" aria-label="Increase indent"></button>
+      <span class="tb-sep"></span>
+      <button class="tb" data-action="clear-format" data-icon="clear" title="Clear formatting (Ctrl+\)" aria-label="Clear formatting"></button>
     </div>
 
-    <script src="app.js"></script>
+    <!-- ===================== Writing area ===================== -->
+    <main class="stage">
+      <div class="scroller" id="workspace">
+        <div class="page" id="page">
+          <div id="editor" class="editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Document" data-placeholder="Start writing…"></div>
+        </div>
+        <div class="img-frame" id="img-frame" hidden><span class="img-handle" id="img-handle" title="Drag to resize"></span></div>
+      </div>
+      <div class="find" id="find" hidden role="search" aria-label="Find and replace">
+        <div class="find-row">
+          <input id="find-q" type="text" placeholder="Find" aria-label="Find" autocomplete="off" spellcheck="false">
+          <span class="find-count" id="find-count"></span>
+          <button class="icon-btn sm" data-action="find-prev" data-icon="up" title="Previous (Shift+Enter)" aria-label="Previous match"></button>
+          <button class="icon-btn sm" data-action="find-next" data-icon="down" title="Next (Enter)" aria-label="Next match"></button>
+          <button class="icon-btn sm" data-action="find-close" data-icon="close" title="Close (Esc)" aria-label="Close find"></button>
+        </div>
+        <div class="find-row">
+          <input id="find-r" type="text" placeholder="Replace with" aria-label="Replace with" autocomplete="off" spellcheck="false">
+          <button class="btn btn-sm" data-action="replace-one">Replace</button>
+          <button class="btn btn-sm" data-action="replace-all">All</button>
+        </div>
+        <div class="find-opts">
+          <label class="chip"><input type="checkbox" id="find-case"> Match case</label>
+          <label class="chip"><input type="checkbox" id="find-word"> Whole words</label>
+          <label class="chip"><input type="checkbox" id="find-regex"> Regex</label>
+        </div>
+      </div>
+
+      <!-- Tools for the image, link or table the cursor is in -->
+      <div class="ctxbar" id="ctxbar" hidden></div>
+      <div class="drop-hint" id="drop-hint" hidden>Drop to insert</div>
+    </main>
+
+    <!-- ===================== Status bar ===================== -->
+    <footer class="statusbar" id="statusbar">
+      <button class="sb-btn speak-pill" id="sb-speak" data-action="speak" hidden><span data-icon="stop"></span>Stop reading</button>
+      <span class="grow"></span>
+      <button class="sb-btn" id="sb-goal" data-action="goal" title="Word goal">
+        <span id="goal-text">Set a goal</span>
+        <span class="goal-meter" id="goal-meter" hidden><span id="goal-fill"></span></span>
+      </button>
+      <button class="sb-btn" id="sb-count" data-action="word-count" title="Word count (Ctrl+Shift+C)">0 words</button>
+      <span class="sb-item sb-hide-sm" id="sb-read"></span>
+      <span class="sb-item sb-hide-sm" id="sb-pages"></span>
+      <button class="sb-btn" id="sb-zoom" data-action="zoom" data-arg="reset" title="Zoom (click for actual size)">100%</button>
+    </footer>
+  </div>
+</div>
+
+<button class="focus-exit" id="focus-exit" data-action="focus" title="Leave focus mode (Esc)">Exit focus</button>
+<div class="popover" id="popover" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<input type="file" id="file-open" accept=".docx,.md,.markdown,.txt,.text,.html,.htm,text/plain,text/markdown,text/html" hidden multiple>
+<input type="file" id="file-image" accept="image/*" hidden>
+<input type="file" id="file-backup" accept=".json,application/json" hidden>
+
+<script src="js/icons.js"></script>
+<script src="js/sanitize.js"></script>
+<script src="js/markdown.js"></script>
+<script src="js/zip.js"></script>
+<script src="js/docx.js"></script>
+<script src="js/store.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>

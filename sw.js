@@ -1,10 +1,10 @@
 /* Notepad Online — offline support.
    Serves the app from cache and refreshes the cache in the background, so it
    opens with no connection and picks up updates on the next visit. */
-const CACHE = 'notepad-online-v7';
+const CACHE = 'notepad-online-v8';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
-  './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/pdf.js', './js/app.js'
+  './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/app.js'
 ];
 
 self.addEventListener('install', (e) => {

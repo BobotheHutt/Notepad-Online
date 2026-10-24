@@ -26,6 +26,16 @@
   const CSS_FAMILY = { sans: 'Helvetica, Arial, sans-serif', serif: '"Times New Roman", Times, serif', mono: '"Courier New", Courier, monospace' };
   const SIZES = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72, 96];
 
+  const measureCtx = document.createElement('canvas').getContext('2d');
+  function fontCss(it, sizePx) {
+    return (it.italic ? 'italic ' : '') + (it.bold ? '700 ' : '400 ') + sizePx + 'px ' + CSS_FAMILY[it.family || 'sans'];
+  }
+  // width in points of text set in the item's standard font
+  function textWidth(text, it) {
+    measureCtx.font = fontCss(it, 100);
+    return (measureCtx.measureText(text).width / 100) * it.size;
+  }
+
   let api = null;
   let libs = null;
 
@@ -42,6 +52,7 @@
     editing: null,
     undo: [],
     redo: [],
+    boldStroke: 0.16,
     observer: null,
     thumbObserver: null,
     style: Object.assign({ family: 'sans', size: 12, color: '#111111', bold: false, italic: false, ink: '#d93025', inkWidth: 2, box: '#d93025', boxWidth: 2, hl: '#fde047', white: '#ffffff' },
@@ -429,8 +440,13 @@
     info.seq = (info.seq || 0) + 1;
     const mine = S.rec.items.filter((i) => i.page === info.entry.uid);
     // patches over replaced text go underneath everything else
+    const coverDiv = (c, color, id) => el('div', { class: 'pdf-cover', 'data-id': id || null, style: 'left:' + px(c.x) + ';top:' + px(c.y) + ';width:' + px(c.w) + ';height:' + px(c.h) + ';background:' + color });
     for (const it of mine) {
-      if (it.cover) layer.append(el('div', { class: 'pdf-cover', style: 'left:' + px(it.cover.x) + ';top:' + px(it.cover.y) + ';width:' + px(it.cover.w) + ';height:' + px(it.cover.h) + ';background:' + it.cover.color }));
+      if (it.cover) layer.append(coverDiv(it.cover, it.cover.color));
+      if (it.anchored) {
+        if (S.editPrep === it.id) layer.append(coverDiv(phraseBox(it), it.bg, it.id));
+        else for (const c of layoutEdit(it).covers) layer.append(coverDiv(c, it.bg, it.id));
+      }
     }
     let svg = null;
     for (const it of mine) {
@@ -467,13 +483,29 @@
 
   function itemEl(it) {
     const sel = it.id === S.sel;
+    if (it.type === 'text' && it.anchored && S.editPrep !== it.id) {
+      // only the changed words are drawn; the rest of the line is the original
+      const frag = document.createDocumentFragment();
+      for (const r of layoutEdit(it).runs) {
+        const d = el('div', {
+          class: 'pdf-item pdf-textbox pdf-run' + (sel ? ' sel' : '') + (it.scan ? ' pdf-scan-text' : ''), 'data-id': it.id,
+          style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + CSS_FAMILY[it.family] +
+            ';color:' + it.color + ';font-weight:' + (it.bold ? 700 : 400) + ';font-style:' + (it.italic ? 'italic' : 'normal') +
+            (it.scan ? ';filter:blur(' + Math.max(0.2, 0.16 * S.scale).toFixed(2) + 'px)' : '') +
+            (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
+        });
+        d.textContent = r.text;
+        frag.append(d);
+      }
+      return frag;
+    }
     if (it.type === 'text') {
       const d = el('div', {
         class: 'pdf-item pdf-textbox' + (sel ? ' sel' : ''), 'data-id': it.id,
         style: 'left:' + px(it.x) + ';top:' + px(it.y) + ';font-size:' + px(it.size) + ';font-family:' + CSS_FAMILY[it.family] +
           ';color:' + it.color + ';font-weight:' + (it.bold ? 700 : 400) + ';font-style:' + (it.italic ? 'italic' : 'normal')
       });
-      d.textContent = it.text;
+      d.textContent = it.anchored ? it.text.replace(/\s+/g, ' ') : it.text;
       return d;
     }
     const st = 'left:' + px(it.x) + ';top:' + px(it.y) + ';width:' + px(it.w) + ';height:' + px(it.h) + ';';
@@ -514,10 +546,115 @@
     // A scanned page has no text of its own: use what OCR read, if it has run.
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
     if (!out.length && ocr && ocr.rot === info.rot) {
-      ocr.lines.forEach((l, i) => out.push({ key: info.entry.uid + ':ocr' + i, str: l.text, x: l.x, base: l.base, size: l.size, top: l.y, w: l.w, fontName: null, family: 'sans' }));
+      ocr.lines.forEach((l, li) => ocrPhrases(l).forEach((ph, pi) => out.push({
+        key: info.entry.uid + ':ocr' + li + '.' + pi, str: ph.map((w) => w.t).join(' '), x: ph[0].x0, base: l.base, size: l.size,
+        top: Math.min(...ph.map((w) => w.y0)), w: ph[ph.length - 1].x1 - ph[0].x0, words: ph, scan: true, fontName: null, family: 'sans'
+      })));
     }
     info.text = out;
     return out;
+  }
+
+  // Split an OCR line into the pieces a person would edit separately: table
+  // borders that OCR reads as "|", and wide gaps between columns, end a piece.
+  function ocrPhrases(l) {
+    const raw = l.words && l.words.length ? l.words : [{ t: l.text, x: l.x, w: l.w }];
+    const words = [];
+    for (const w of raw) {
+      let t = w.t;
+      let x0 = w.x;
+      let x1 = w.x + w.w;
+      const y0 = w.y != null ? w.y : l.y;
+      const y1 = w.y != null ? w.y + w.h : l.y + l.h;
+      const per = (x1 - x0) / Math.max(1, t.length);
+      if (/^[|¦\[\]]+$/.test(t)) { words.push({ sep: true }); continue; }
+      let after = false;
+      while (/^[|¦]/.test(t)) { t = t.slice(1); x0 += per; words.push({ sep: true }); }
+      while (/[|¦]$/.test(t)) { t = t.slice(0, -1); x1 -= per; after = true; }
+      if (t) words.push({ t, x0, x1, y0, y1, sw: w.sw });
+      if (after) words.push({ sep: true });
+    }
+    const phrases = [];
+    let cur = [];
+    const gap = (l.h || l.size) * 1.3;
+    for (const w of words) {
+      if (w.sep || (cur.length && w.x0 - cur[cur.length - 1].x1 > gap)) { if (cur.length) phrases.push(cur); cur = []; if (w.sep) continue; }
+      cur.push(w);
+    }
+    if (cur.length) phrases.push(cur);
+    return phrases;
+  }
+
+  // Word positions inside a run of the PDF's own text, measured with the PDF's
+  // own font when PDF.js has loaded it.
+  function nativeWords(info, t) {
+    let fam = CSS_FAMILY[t.family];
+    try {
+      const f = info.page.commonObjs.get(t.fontName);
+      if (f && f.loadedName) fam = '"' + f.loadedName + '", ' + fam;
+    } catch (e) { /* font not loaded */ }
+    measureCtx.font = '100px ' + fam;
+    const k = t.w / (measureCtx.measureText(t.str).width || 1);
+    const words = [];
+    const re = /\S+/g;
+    let m;
+    while ((m = re.exec(t.str))) {
+      const x0 = t.x + measureCtx.measureText(t.str.slice(0, m.index)).width * k;
+      words.push({ t: m[0], x0, x1: x0 + measureCtx.measureText(m[0]).width * k, y0: t.top, y1: t.base + t.size * 0.22 });
+    }
+    return words;
+  }
+
+  // The smallest change between the original words and the edited text: the
+  // words that differ are covered and redrawn, everything else is left as it
+  // was. If the new words need more room than the old ones left, the rest of
+  // the line is redrawn with them so nothing overlaps.
+  function layoutEdit(it) {
+    const orig = it.words || [];
+    const neu = it.text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    let p = 0;
+    while (p < orig.length && p < neu.length && orig[p].t === neu[p]) p++;
+    let s = 0;
+    while (s < orig.length - p && s < neu.length - p && orig[orig.length - 1 - s].t === neu[neu.length - 1 - s]) s++;
+    if (p === orig.length && p === neu.length) return { covers: [], runs: [] };
+    const space = textWidth(' ', it);
+    let end = orig.length - s;
+    let mid = neu.slice(p, neu.length - s).join(' ');
+    const x = p < orig.length ? orig[p].x0 : orig[orig.length - 1].x1 + space;
+    if (s > 0 && mid && textWidth(mid, it) > orig[end].x0 - space - x + it.size * 0.15) {
+      end = orig.length;
+      mid = neu.slice(p).join(' ');
+    }
+    // a much shorter replacement would leave a hole: move the rest of the line over
+    if (end < orig.length && mid) {
+      const removedW = orig[end - 1] ? orig[end - 1].x1 - x : 0;
+      if (end > p && removedW - textWidth(mid, it) > space * 1.5) { end = orig.length; mid = neu.slice(p).join(' '); }
+    }
+    const gone = orig.slice(p, end);
+    const covers = [];
+    if (gone.length) {
+      const pad = Math.max(0.5, it.size * 0.04);
+      const y0 = Math.min(...gone.map((w) => w.y0));
+      const y1 = Math.max(...gone.map((w) => w.y1));
+      covers.push({ x: gone[0].x0 - pad, y: y0 - pad, w: gone[gone.length - 1].x1 - gone[0].x0 + pad * 2, h: y1 - y0 + pad * 2 });
+    }
+    // Redrawn to the end of the line: keep it inside the line's own space (a
+    // table cell, say) by narrowing the letters a little, never below 80%.
+    let scaleX = 1;
+    if (mid && end === orig.length) {
+      const room = orig[orig.length - 1].x1 - x + it.size * 0.2;
+      const need = textWidth(mid, it);
+      if (need > room) scaleX = Math.max(0.8, room / need);
+    }
+    return { covers, runs: mid ? [{ text: mid, x, base: it.base, scaleX, overflow: mid && end === orig.length && textWidth(mid, it) * scaleX > orig[orig.length - 1].x1 - x + it.size * 0.3 }] : [] };
+  }
+
+  function phraseBox(it) {
+    const w = it.words;
+    const pad = Math.max(0.5, it.size * 0.04);
+    const y0 = Math.min(...w.map((q) => q.y0));
+    const y1 = Math.max(...w.map((q) => q.y1));
+    return { x: w[0].x0 - pad, y: y0 - pad, w: w[w.length - 1].x1 - w[0].x0 + pad * 2, h: y1 - y0 + pad * 2 };
   }
 
   async function renderTextTargets(info) {
@@ -529,7 +666,7 @@
     const frag = document.createDocumentFragment();
     for (const t of items) {
       if (used.has(t.key)) continue;
-      frag.append(el('div', { class: 'pdf-target', 'data-key': t.key, title: 'Click to edit', style: 'left:' + px(t.x) + ';top:' + px(t.top) + ';width:' + px(Math.max(t.w, 2)) + ';height:' + px(t.size * 1.15) }));
+      frag.append(el('div', { class: 'pdf-target', 'data-key': t.key, title: 'Click to edit', 'aria-label': 'Edit: ' + t.str, style: 'left:' + px(t.x) + ';top:' + px(t.top) + ';width:' + px(Math.max(t.w, 2)) + ';height:' + px(t.base - t.top + t.size * 0.25) }));
     }
     info.layer.prepend(frag);
   }
@@ -658,6 +795,10 @@
   }
 
   async function rotatePage(uidv, dir) {
+    if (S.rec.items.some((i) => i.page === uidv && i.anchored)) {
+      api.toast('This page has text edits tied to its original lines. Rotate it before editing text, or undo the edits first.', 6000);
+      return;
+    }
     const before = snap();
     const entry = S.rec.pages.find((p) => p.uid === uidv);
     if (!entry) return;
@@ -821,7 +962,7 @@
       const [x, y] = pointIn(ev, info);
       const dx = x - sx;
       const dy = y - sy;
-      if (!moved && Math.hypot(dx, dy) * S.scale < 3) return;
+      if (item.anchored || (!moved && Math.hypot(dx, dy) * S.scale < 3)) return;
       moved = true;
       if (item.type === 'ink') item.points = orig.points.map(([px0, py0]) => [px0 + dx, py0 + dy]);
       else { item.x = orig.x + dx; item.y = orig.y + dy; }
@@ -922,9 +1063,11 @@
     const info = S.info.get(it.page);
     S.sel = id;
     S.editing = null;
+    S.editPrep = it.anchored ? id : null;
     renderOverlay(info);
+    S.editPrep = null;
     S.editing = id;
-    const node = info.layer.querySelector('[data-id="' + id + '"]');
+    const node = info.layer.querySelector('.pdf-textbox[data-id="' + id + '"]');
     if (!node) return;
     node.classList.add('editing');
     try { node.contentEditable = 'plaintext-only'; } catch (e) { node.contentEditable = 'true'; }
@@ -957,10 +1100,11 @@
     S.editing = null;
     const it = itemById(id);
     const info = it && S.info.get(it.page);
-    const node = info && info.layer.querySelector('[data-id="' + id + '"]');
+    const node = info && info.layer.querySelector('.pdf-textbox[data-id="' + id + '"]');
     if (!it || !node) return;
     const before = node.dataset.isNew ? null : node.dataset.before;
-    const text = node.innerText.replace(/\r/g, '').replace(/\n$/, '');
+    let text = node.innerText.replace(/\r/g, '').replace(/\n$/, '');
+    if (it.anchored) text = text.replace(/\s+/g, ' ').trim();
     if (node.dataset.fresh && text === it.origText) {
       // clicked a run of the PDF's text but changed nothing: leave the page alone
       S.rec.items = S.rec.items.filter((i) => i.id !== id);
@@ -982,7 +1126,7 @@
         commit(JSON.stringify(prev));
       }
     } else {
-      if (!text.trim() && !it.cover) {
+      if (!text.trim() && !it.cover && !it.anchored) {
         S.rec.items = S.rec.items.filter((i) => i.id !== id);
         S.sel = null;
       } else {
@@ -996,82 +1140,109 @@
   }
 
   function measure1(it, node) {
+    if (it.anchored) return;
     it.w = node.offsetWidth / S.scale;
     it.h = node.offsetHeight / S.scale;
   }
 
   function measureTextItems() {
     for (const info of S.info.values()) {
-      for (const node of info.layer.querySelectorAll('.pdf-textbox')) {
+      for (const node of info.layer.querySelectorAll('.pdf-textbox:not(.pdf-run)')) {
         const it = itemById(node.getAttribute('data-id'));
         if (it) measure1(it, node);
       }
     }
   }
 
-  // Replace a run of the PDF's own text: patch over it, then put an editable
-  // copy in a matching standard font on top.
+  // Edit a run of the PDF's own text (or a phrase OCR read on a scan). The
+  // edit remembers the original words, so only the words you change are
+  // erased and redrawn.
   async function editOriginal(info, key) {
     const t = (await textItems(info)).find((x) => x.key === key);
     if (!t) return;
     const before = snap();
-    const bg = sampleColor(info, t, true);
-    const fg = sampleColor(info, t, false, bg);
+    const words = t.words || nativeWords(info, t);
+    if (!words.length) return;
+    const ink = sampleInk(info, { x: words[0].x0, y: Math.min(...words.map((w) => w.y0)), w: words[words.length - 1].x1 - words[0].x0, h: Math.max(...words.map((w) => w.y1)) - Math.min(...words.map((w) => w.y0)) });
+    const origText = words.map((w) => w.t).join(' ');
+    const fam = t.family;
     let bold = false;
     let italic = false;
-    try {
-      const f = info.page.commonObjs.get(t.fontName);
-      const name = (f && (f.name || f.loadedName)) || '';
-      bold = !!(f && f.bold) || /bold|black|heavy|semibold|demi/i.test(name);
-      italic = !!(f && f.italic) || /italic|oblique/i.test(name);
-    } catch (e) { /* font not resolved yet */ }
-    const fam = t.family;
-    const size = Math.round(t.size * 10) / 10;
+    let size = Math.round(t.size * 10) / 10;
+    if (t.scan) {
+      // Weight from how much ink the words hold, then the size that makes the
+      // original words exactly as wide as they are on the scan.
+      const sws = words.map((w) => w.sw).filter((v) => v > 0).sort((a, b) => a - b);
+      bold = sws.length ? sws[sws.length >> 1] > S.boldStroke : ink.density > 0.3;
+      const span = words[words.length - 1].x1 - words[0].x0;
+      const fit = (b) => span / textWidth(origText, { family: fam, bold: b, italic: false, size: 1 });
+      const s1 = fit(bold);
+      if (s1 > t.size * 0.6 && s1 < t.size * 1.6) size = Math.round(s1 * 10) / 10;
+    } else {
+      try {
+        const f = info.page.commonObjs.get(t.fontName);
+        const name = (f && (f.name || f.loadedName)) || '';
+        bold = !!(f && f.bold) || /bold|black|heavy|semibold|demi/i.test(name);
+        italic = !!(f && f.italic) || /italic|oblique/i.test(name);
+      } catch (e) { /* font not resolved yet */ }
+    }
     const it = {
-      id: uid(), type: 'text', page: info.entry.uid, origKey: key,
-      x: t.x, y: t.base - BASELINE[fam] * size, size, family: fam, color: fg, bold, italic, text: t.str, origText: t.str,
-      cover: { x: t.x - 1, y: t.base - t.size * 1.0 - 1, w: t.w + 2, h: t.size * 1.3 + 2, color: bg }
+      id: uid(), type: 'text', page: info.entry.uid, origKey: key, anchored: true, scan: !!t.scan,
+      words, origText, text: origText, x: words[0].x0, base: t.base, y: t.base - BASELINE[fam] * size,
+      size, family: fam, color: ink.fg, bg: ink.bg, bold, italic
     };
     S.rec.items.push(it);
     renderOverlay(info);
     startEditing(it.id);
-    const node = info.layer.querySelector('[data-id="' + it.id + '"]');
+    const node = info.layer.querySelector('.pdf-textbox[data-id="' + it.id + '"]');
     if (node) { node.dataset.before = before; node.dataset.fresh = '1'; }
   }
 
-  function sampleColor(info, t, background, bg) {
+  // Paper color, ink color and how much of the box is ink, from the rendered page.
+  function sampleInk(info, r) {
+    const out = { bg: '#ffffff', fg: '#000000', density: 0 };
     try {
       const c = info.canvas;
       const k = c.width / info.w;
       const ctx = c.getContext('2d', { willReadFrequently: true });
-      const x = Math.max(0, Math.floor((t.x - 2) * k));
-      const y = Math.max(0, Math.floor((t.base - t.size * 1.05) * k));
-      const w = Math.min(c.width - x, Math.ceil((t.w + 4) * k));
-      const h = Math.min(c.height - y, Math.ceil(t.size * 1.35 * k));
-      if (w <= 0 || h <= 0) return background ? '#ffffff' : '#000000';
+      const m = 2;
+      const x = Math.max(0, Math.floor((r.x - m) * k));
+      const y = Math.max(0, Math.floor((r.y - m) * k));
+      const w = Math.min(c.width - x, Math.ceil((r.w + m * 2) * k));
+      const h = Math.min(c.height - y, Math.ceil((r.h + m * 2) * k));
+      if (w <= 2 || h <= 2) return out;
       const d = ctx.getImageData(x, y, w, h).data;
-      const hex = (r, g, b) => '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
-      if (background) {
-        // the most common color along the edges of the box
-        const counts = new Map();
-        const add = (i) => { const key = (d[i] >> 3) + ',' + (d[i + 1] >> 3) + ',' + (d[i + 2] >> 3); const v = counts.get(key) || [0, d[i], d[i + 1], d[i + 2]]; v[0]++; counts.set(key, v); };
-        for (let xx = 0; xx < w; xx++) { add(xx * 4); add(((h - 1) * w + xx) * 4); }
-        for (let yy = 0; yy < h; yy++) { add(yy * w * 4); add((yy * w + w - 1) * 4); }
-        let best = null;
-        for (const v of counts.values()) if (!best || v[0] > best[0]) best = v;
-        return best ? hex(best[1], best[2], best[3]) : '#ffffff';
+      const hex = (a) => '#' + a.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+      const counts = new Map();
+      const add = (i) => { const key = (d[i] >> 3) + ',' + (d[i + 1] >> 3) + ',' + (d[i + 2] >> 3); const v = counts.get(key) || [0, 0, 0, 0]; v[0]++; v[1] += d[i]; v[2] += d[i + 1]; v[3] += d[i + 2]; counts.set(key, v); };
+      for (let xx = 0; xx < w; xx++) { add(xx * 4); add(((h - 1) * w + xx) * 4); }
+      for (let yy = 0; yy < h; yy++) { add(yy * w * 4); add((yy * w + w - 1) * 4); }
+      let best = null;
+      for (const v of counts.values()) if (!best || v[0] > best[0]) best = v;
+      const bg = best ? [best[1] / best[0], best[2] / best[0], best[3] / best[0]] : [255, 255, 255];
+      out.bg = hex(bg);
+      // ink: clearly darker than the paper; its color is the average of the
+      // darkest eighth, the solid middle of the strokes rather than their soft edges
+      const inner = { x0: Math.round(m * k), y0: Math.round(m * k), x1: w - Math.round(m * k), y1: h - Math.round(m * k) };
+      const ink = [];
+      let area = 0;
+      for (let yy = inner.y0; yy < inner.y1; yy++) {
+        for (let xx = inner.x0; xx < inner.x1; xx++) {
+          const i = (yy * w + xx) * 4;
+          area++;
+          if (Math.abs(d[i] - bg[0]) + Math.abs(d[i + 1] - bg[1]) + Math.abs(d[i + 2] - bg[2]) > 120) ink.push(i);
+        }
       }
-      const b = bg ? [parseInt(bg.slice(1, 3), 16), parseInt(bg.slice(3, 5), 16), parseInt(bg.slice(5, 7), 16)] : [255, 255, 255];
-      let far = 0;
-      let col = [0, 0, 0];
-      for (let i = 0; i < d.length; i += 4) {
-        const dist = Math.abs(d[i] - b[0]) + Math.abs(d[i + 1] - b[1]) + Math.abs(d[i + 2] - b[2]);
-        if (dist > far) { far = dist; col = [d[i], d[i + 1], d[i + 2]]; }
+      out.density = area ? ink.length / area : 0;
+      if (ink.length) {
+        ink.sort((p, q) => (d[p] + d[p + 1] + d[p + 2]) - (d[q] + d[q + 1] + d[q + 2]));
+        const half = ink.slice(0, Math.max(1, Math.ceil(ink.length / 8)));
+        const sum = [0, 0, 0];
+        for (const i of half) { sum[0] += d[i]; sum[1] += d[i + 1]; sum[2] += d[i + 2]; }
+        out.fg = hex(sum.map((v) => v / half.length));
       }
-      return far < 60 ? '#000000' : hex(col[0], col[1], col[2]);
-    } catch (e) {
-      return background ? '#ffffff' : '#000000';
-    }
+    } catch (e) { /* canvas not readable: defaults */ }
+    return out;
   }
 
   /* ----- images and signatures ----- */
@@ -1224,6 +1395,40 @@
     g.fillRect(0, 0, c.width, c.height);
     await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot }) }).promise;
     const { data } = await worker.recognize(c);
+    const px = g.getImageData(0, 0, c.width, c.height).data;
+    // Stroke thickness relative to letter height (bold strokes are about half
+    // again as thick), from the median run of ink along rows of the word.
+    const stroke = (bb) => {
+      const x0 = Math.max(0, bb.x0 | 0);
+      const x1 = Math.min(c.width, bb.x1 | 0);
+      const y0 = Math.max(0, bb.y0 | 0);
+      const y1 = Math.min(c.height, bb.y1 | 0);
+      const h = y1 - y0;
+      if (h < 6 || x1 - x0 < 4) return null;
+      let lo = 255;
+      let hi = 0;
+      for (let y = y0; y < y1; y += 2) for (let x = x0; x < x1; x += 2) {
+        const i = (y * c.width + x) * 4;
+        const v = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      if (hi - lo < 60) return null;
+      const thr = (lo + hi) / 2;
+      const runs = [];
+      for (let y = y0 + Math.round(h * 0.3); y < y1 - Math.round(h * 0.2); y++) {
+        let run = 0;
+        for (let x = x0; x < x1; x++) {
+          const i = (y * c.width + x) * 4;
+          if (px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114 < thr) run++;
+          else if (run) { runs.push(run); run = 0; }
+        }
+        if (run) runs.push(run);
+      }
+      if (runs.length < 4) return null;
+      runs.sort((a, b) => a - b);
+      return Math.round((runs[runs.length >> 1] / h) * 1000) / 1000;
+    };
     const lines = [];
     for (const l of data.lines || []) {
       const text = (l.text || '').replace(/\s+/g, ' ').trim();
@@ -1235,7 +1440,7 @@
       const top = b.y0 / k;
       // top of the box to the baseline is about the cap height, ~0.7 em
       const size = clamp((base - top) / 0.7, lineH * 0.55, lineH * 1.6);
-      const words = (l.words || []).filter((w) => w.text && w.text.trim()).map((w) => ({ t: w.text.trim(), x: w.bbox.x0 / k, w: (w.bbox.x1 - w.bbox.x0) / k }));
+      const words = (l.words || []).filter((w) => w.text && w.text.trim()).map((w) => ({ t: w.text.trim(), x: w.bbox.x0 / k, w: (w.bbox.x1 - w.bbox.x0) / k, y: w.bbox.y0 / k, h: (w.bbox.y1 - w.bbox.y0) / k, sw: stroke(w.bbox) }));
       lines.push({ text, x: b.x0 / k, y: top, w: (b.x1 - b.x0) / k, h: lineH, base, size: Math.round(size * 10) / 10, words });
     }
     return lines;
@@ -1758,10 +1963,12 @@
             const xs = pts.map((q) => q[0]);
             const ys = pts.map((q) => q[1]);
             const bb = { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
-            const hits = regions.filter((r) => r.x < bb.x1 && r.x + r.width > bb.x0 && r.y < bb.y1 && r.y + r.height > bb.y0);
-            if (!hits.length) break;
+            const meets = (r) => r.x < bb.x1 && r.x + r.width > bb.x0 && r.y < bb.y1 && r.y + r.height > bb.y0;
+            const hits = regions.filter(meets);
+            const paints = (count.paints || []).filter((q) => meets(q.rect));
+            if (!hits.length && !paints.length) break;
             const newName = a[0].v + '_np' + Math.random().toString(36).slice(2, 7);
-            count.images.push({ xobjs, name: a[0].v, newName, ref: xobjs.get(N(a[0].v)), ctm: gs.ctm.slice(), hits });
+            count.images.push({ xobjs, name: a[0].v, newName, ref: xobjs.get(N(a[0].v)), ctm: gs.ctm.slice(), hits, paints });
             edits.push({ start: o.start, end: o.end, text: '/' + newName + ' Do' });
             break;
           }
@@ -1808,7 +2015,7 @@
   // Repaint the covered parts of an image. PDF.js decodes it (any format a
   // PDF can hold: JPEG, fax, JBIG2, JPEG 2000…) by rendering a one-image
   // scratch PDF at one pixel per image pixel.
-  async function redactImage(doc, ref, ctm, hits) {
+  async function redactImage(doc, ref, ctm, hits, paints) {
     const L = PDFLib;
     const N = (k) => L.PDFName.of(k);
     const img = doc.context.lookup(ref);
@@ -1863,6 +2070,29 @@
       g.strokeStyle = g.fillStyle;
       g.stroke();
     }
+    // Replacement words go into the scan itself, slightly soft, so they look
+    // scanned rather than typed on top.
+    const painted = [];
+    for (const q of paints || []) {
+      const [ax, ay] = toPx(q.o[0], q.o[1]);
+      const [bx, by] = toPx(q.along[0], q.along[1]);
+      const [ux, uy] = toPx(q.up[0], q.up[1]);
+      if (ax < -20 || ay < -20 || ax > cw + 20 || ay > ch + 20) continue;
+      const perPt = Math.hypot(bx - ax, by - ay) / 10;
+      const perPtY = Math.hypot(ux - ax, uy - ay) / 10;
+      if (!perPt) continue;
+      g.save();
+      g.translate(ax, ay);
+      g.rotate(Math.atan2(by - ay, bx - ax));
+      g.scale(q.scaleX || 1, perPtY / perPt);
+      g.font = fontCss(q.item, q.item.size * perPt);
+      g.fillStyle = q.item.color;
+      g.textBaseline = 'alphabetic';
+      if ('filter' in g) g.filter = 'blur(' + Math.max(0.3, perPt * 0.12).toFixed(2) + 'px)';
+      g.fillText(q.text, 0, 0);
+      g.restore();
+      painted.push(q.id);
+    }
 
     const ctx = doc.context;
     if (bilevel) {
@@ -1876,23 +2106,25 @@
           if (data[k] * 0.299 + data[k + 1] * 0.587 + data[k + 2] * 0.114 >= 128) bits[y * rowBytes + (x >> 3)] |= 0x80 >> (x & 7);
         }
       }
-      return ctx.register(ctx.flateStream(bits, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceGray', BitsPerComponent: 1 }));
+      return { ref: ctx.register(ctx.flateStream(bits, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceGray', BitsPerComponent: 1 })), painted };
     }
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
     const jpg = new Uint8Array(await blob.arrayBuffer());
-    return ctx.register(ctx.stream(jpg, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' }));
+    return { ref: ctx.register(ctx.stream(jpg, { Type: 'XObject', Subtype: 'Image', Width: cw, Height: ch, ColorSpace: 'DeviceRGB', BitsPerComponent: 8, Filter: 'DCTDecode' })), painted };
   }
 
-  async function eraseText(doc, page, regions) {
+  // Returns { n: glyphs and images changed, painted: ids of paints drawn into images }.
+  async function eraseText(doc, page, regions, paints) {
     const L = PDFLib;
     const N = (k) => L.PDFName.of(k);
     const ctx = doc.context;
     page.node.normalize();
     const contents = page.node.Contents();
-    if (!contents) return 0;
+    const none = { n: 0, painted: new Set() };
+    if (!contents) return none;
     const streams = contents instanceof L.PDFArray ? contents.asArray().map((r, k) => contents.lookup(k)) : [contents];
     const parts = [];
-    for (const s of streams) { try { parts.push(contentBytes(s)); } catch (e) { return 0; } }
+    for (const s of streams) { try { parts.push(contentBytes(s)); } catch (e) { return none; } }
     const len = parts.reduce((t, p) => t + p.length + 1, 0);
     const bytes = new Uint8Array(len);
     let at = 0;
@@ -1901,20 +2133,21 @@
     const res = page.node.Resources() ? page.node.Resources().clone(ctx) : ctx.obj({});
     const xo = res.lookup(N('XObject'));
     if (xo) res.set(N('XObject'), xo.clone(ctx));
-    const count = { n: 0, images: [] };
+    const count = { n: 0, images: [], paints: paints || [] };
     const out = eraseIn(bytes, res, [1, 0, 0, 1, 0, 0], regions, ctx, count, 0);
-    if (!out) return 0;
+    if (!out) return none;
     let redacted = 0;
+    const painted = new Set();
     for (const im of count.images) {
       let fresh = null;
-      try { fresh = await redactImage(doc, im.ref, im.ctm, im.hits); } catch (e) { fresh = null; }
-      im.xobjs.set(N(im.newName), fresh || im.ref);
-      if (fresh) redacted++;
+      try { fresh = await redactImage(doc, im.ref, im.ctm, im.hits, im.paints); } catch (e) { fresh = null; }
+      im.xobjs.set(N(im.newName), fresh ? fresh.ref : im.ref);
+      if (fresh) { redacted++; fresh.painted.forEach((id) => painted.add(id)); }
     }
     page.node.set(N('Resources'), res);
     // an array, as normalize() left it, so later wrapping can add to it
     page.node.set(N('Contents'), ctx.obj([ctx.register(ctx.flateStream(out))]));
-    return count.n + redacted;
+    return { n: count.n + redacted, painted };
   }
 
   /* ============================================================ export */
@@ -1992,6 +2225,7 @@
     let replaced = 0;
     let erased = 0;
     let coveredNothing = 0;
+    let overflowed = 0;
 
     for (const { entry, page, baseRot } of final) {
       const R = ((baseRot + entry.rotate) % 360 + 360) % 360;
@@ -1999,18 +2233,36 @@
       const items = (rec.items || []).filter((i) => i.page === entry.uid);
       const ocr = rec.ocr && rec.ocr[entry.uid] && rec.ocr[entry.uid].rot === R ? rec.ocr[entry.uid].lines : [];
       if (!items.length && !ocr.length) continue;
+      const regions = [];
       const box = page.getCropBox();
       // Text under edits and white-out is removed from the file, not just hidden.
-      const regions = [];
+      const paints = [];
+      const layouts = new Map();
       for (const it of items) {
         if (it.cover) regions.push(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: it.cover.color }));
         if (it.type === 'whiteout') regions.push(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: it.color }));
+        if (it.anchored) {
+          const lay = layoutEdit(it);
+          layouts.set(it.id, lay);
+          for (const c of lay.covers) regions.push(Object.assign(rectToPdf(R, box, c.x, c.y, c.w, c.h), { color: it.bg }));
+          if (it.scan) {
+            lay.runs.forEach((r, k) => paints.push({
+              id: it.id + ':' + k, text: r.text, item: it, scaleX: r.scaleX,
+              rect: rectToPdf(R, box, r.x, r.base - it.size, textWidth(r.text, it), it.size * 1.3),
+              o: toPdf(R, box, r.x, r.base), along: toPdf(R, box, r.x + 10, r.base), up: toPdf(R, box, r.x, r.base - 10)
+            }));
+          }
+        }
       }
-      if (regions.length) {
-        let n = 0;
-        try { n = await eraseText(base, page, regions); } catch (e) { n = 0; }
-        erased += n;
-        if (!n) coveredNothing++;
+      let painted = new Set();
+      let erasedHere = 0;
+      if (regions.length || paints.length) {
+        let res = { n: 0, painted: new Set() };
+        try { res = await eraseText(base, page, regions, paints); } catch (e) { /* page left as it was */ }
+        erasedHere = res.n;
+        painted = res.painted;
+        erased += res.n;
+        if (regions.length && !res.n) coveredNothing++;
       }
       // Keep the page's own drawing state from leaking into ours.
       page.node.normalize();
@@ -2047,6 +2299,33 @@
       for (const it of items) if (it.cover) {
         page.drawRectangle(Object.assign(rectToPdf(R, box, it.cover.x, it.cover.y, it.cover.w, it.cover.h), { color: hexRgb(it.cover.color) }));
       }
+      // Edits of the page's own words: the old words are already gone from
+      // the file, so a patch is only needed if erasing failed.
+      for (const it of items) {
+        if (!it.anchored) continue;
+        const lay = layouts.get(it.id);
+        if (!erasedHere) for (const c of lay.covers) page.drawRectangle(Object.assign(rectToPdf(R, box, c.x, c.y, c.w, c.h), { color: hexRgb(it.bg) }));
+        const font = await fontFor(it);
+        for (let k = 0; k < lay.runs.length; k++) {
+          const r = lay.runs[k];
+          let safe = '';
+          for (const ch of r.text) { try { font.encodeText(ch); safe += ch; } catch (e) { safe += '?'; replaced++; } }
+          if (!safe) continue;
+          const [x, y] = toPdf(R, box, r.x, r.base);
+          if (painted.has(it.id + ':' + k)) {
+            // drawn into the scan already: add it as invisible text so it can be searched and copied
+            const fkey = page.node.newFontDictionary(font.name, font.ref);
+            const rad = (R * Math.PI) / 180;
+            page.pushOperators(L.pushGraphicsState(), L.beginText(), L.setFontAndSize(fkey, it.size), L.setTextRenderingMode(L.TextRenderingMode.Invisible),
+              L.setTextMatrix(Math.cos(rad), Math.sin(rad), -Math.sin(rad), Math.cos(rad), x, y), L.showText(font.encodeText(safe)), L.endText(), L.popGraphicsState());
+          } else {
+            if (r.scaleX < 1) page.pushOperators(L.pushGraphicsState(), L.setCharacterSqueeze(r.scaleX * 100));
+            page.drawText(safe, { x, y, size: it.size, font, color: hexRgb(it.color), rotate: L.degrees(R) });
+            if (r.scaleX < 1) page.pushOperators(L.popGraphicsState());
+          }
+          if (r.overflow) overflowed++;
+        }
+      }
       for (const it of items) {
         if (it.type === 'whiteout') page.drawRectangle(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: hexRgb(it.color) }));
         else if (it.type === 'highlight') page.drawRectangle(Object.assign(rectToPdf(R, box, it.x, it.y, it.w, it.h), { color: hexRgb(it.color), opacity: 0.4, blendMode: L.BlendMode.Multiply }));
@@ -2068,7 +2347,7 @@
           for (let i = 1; i < pts.length; i++) d += 'L' + (pts[i][0] - box.x) + ' ' + (top - pts[i][1]);
           if (pts.length === 1) d += 'l0.01 0';
           page.drawSvgPath(d, { x: box.x, y: top, borderColor: hexRgb(it.color), borderWidth: it.width, borderLineCap: L.LineCapStyle.Round });
-        } else if (it.type === 'text' && it.text) {
+        } else if (it.type === 'text' && it.text && !it.anchored) {
           const font = await fontFor(it);
           const lines = it.text.replace(/\t/g, '    ').split('\n');
           lines.forEach((line, i) => {
@@ -2085,6 +2364,7 @@
     }
     const bytes = await base.save({ updateFieldAppearances: false });
     if (replaced) api.toast(replaced + ' character' + (replaced === 1 ? '' : 's') + ' could not be written with the PDF’s standard fonts and became “?”.', 6000);
+    if (overflowed) api.toast('Some edited text is longer than the space it had, so it runs past the end of its line. Shorten it if it overlaps something.', 7000);
     if (coveredNothing) api.toast('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.', 7000);
     if (warnings.length) api.toast('Some form fields could not be filled: ' + warnings.slice(0, 3).join(', '), 6000);
     return new Blob([bytes], { type: 'application/pdf' });

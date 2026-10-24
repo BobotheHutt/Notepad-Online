@@ -31,7 +31,7 @@ and lets you edit and sign PDFs.
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
 - **Scanned pages become editable text (OCR)**: click Read text and the app reads the page, takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
-  - A page that went through the scanner crooked is straightened first, so lines read cleanly and the new text sits level.
+  - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
   - Every word of a line is redrawn together, so a line looks of a piece; words OCR was unsure of are underlined to check.
   - **Handwriting is left alone**: writing that fits no font, and marks like check boxes, stay exactly as scanned. To clear a filled-in form, click a piece of handwriting with Edit text and choose Erase handwriting, or use Pages → Erase handwriting on this page. The paper (or the dotted shading of a black-and-white scan) is filled in behind it.

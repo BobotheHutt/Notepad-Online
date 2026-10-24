@@ -1859,6 +1859,82 @@
     return { lines, rules };
   }
 
+  // Which way a scanned page has to turn to read upright: 0, 90, 180 or 270
+  // degrees clockwise. Lines of text make a far more uneven profile across
+  // them than along them, which tells upright-or-upside-down from sideways;
+  // which of the two it is, OCR tells by how well a sample from the middle
+  // of the page reads each way.
+  async function detectTurn(worker, info) {
+    if (!info.page) return 0;
+    const k = 60 / 72;
+    const W = Math.round(info.w * k);
+    const H = Math.round(info.h * k);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, W, H);
+    await info.page.render({ canvasContext: g, viewport: info.page.getViewport({ scale: k, rotation: info.rot }) }).promise;
+    const d = g.getImageData(0, 0, W, H).data;
+    const rows = new Float64Array(H);
+    const cols = new Float64Array(W);
+    let ink = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 < 128) { rows[y]++; cols[x]++; ink++; }
+    }
+    if (ink < 200) return 0;
+    const unevenness = (a) => {
+      let m = 0;
+      for (const v of a) m += v;
+      m /= a.length;
+      let q = 0;
+      for (const v of a) q += (v - m) * (v - m);
+      return m ? q / a.length / (m * m) : 0;
+    };
+    const sideways = unevenness(cols) > unevenness(rows) * 1.25;
+    const conf = async (turn) => {
+      const kk = 150 / 72;
+      const rot = (info.rot + turn) % 360;
+      const vp = info.page.getViewport({ scale: kk, rotation: rot });
+      const full = document.createElement('canvas');
+      full.width = Math.round(vp.width);
+      full.height = Math.round(vp.height);
+      const fg = full.getContext('2d');
+      fg.fillStyle = '#fff';
+      fg.fillRect(0, 0, full.width, full.height);
+      await info.page.render({ canvasContext: fg, viewport: vp }).promise;
+      // where the ink is: the rows and columns with more of it than the paper's grain
+      const fd = fg.getImageData(0, 0, full.width, full.height).data;
+      const ry = new Uint32Array(full.height);
+      const rx = new Uint32Array(full.width);
+      for (let y = 0; y < full.height; y++) for (let x = 0; x < full.width; x++) {
+        const i = (y * full.width + x) * 4;
+        if (fd[i] * 0.299 + fd[i + 1] * 0.587 + fd[i + 2] * 0.114 < 110) { ry[y]++; rx[x]++; }
+      }
+      const span = (a, min) => { let lo = 0; let hi = a.length - 1; while (lo < hi && a[lo] < min) lo++; while (hi > lo && a[hi] < min) hi--; return [lo, hi + 1]; };
+      const [y0, y1] = span(ry, Math.max(2, full.width * 0.004));
+      const [x0, x1] = span(rx, Math.max(2, full.height * 0.004));
+      if (y1 - y0 < 20 || x1 - x0 < 20) return 0;
+      const crop = document.createElement('canvas');
+      crop.width = x1 - x0;
+      crop.height = Math.min(y1 - y0, Math.round(full.height * 0.45));
+      crop.getContext('2d').drawImage(full, x0, y0, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      // how many real words read surely: noise read as letters scores none
+      try { const { data } = await worker.recognize(crop); return (data.words || []).filter((w) => w.confidence >= 80 && /[\p{L}\p{N}]{3}/u.test(w.text)).length; } catch (e) { return 0; }
+    };
+    if (!sideways) {
+      const up = await conf(0);
+      if (up >= 6) return 0;
+      const down = await conf(180);
+      return down >= 3 && down > up * 2 ? 180 : 0;
+    }
+    const a = await conf(90);
+    const b = await conf(270);
+    return Math.max(a, b) >= 3 ? (a >= b ? 90 : 270) : 0;
+  }
+
   // OCR read from the page as it is drawn now (same quarter turn, same straightening)
   function ocrFits(ocr, entry, rot) {
     return !!ocr && ocr.rot === rot && (ocr.skew || 0) === (entry.skew || 0);
@@ -1931,7 +2007,7 @@
     if (!S.rec || S.ocrBusy) return;
     const rec = S.rec;
     const cur = currentPage();
-    const targets = [];
+    let targets = [];
     for (const info of S.info.values()) {
       if (!info.page) continue;
       if (scope === 'current' && info !== cur) continue;
@@ -1950,10 +2026,32 @@
     try {
       let n = 0;
       const worker = await getOcr((m) => {
-        if (m.status === 'recognizing text') api.status('Reading text, page ' + n + ' of ' + targets.length + ' (' + Math.round((m.progress || 0) * 100) + '%)…', 'pending');
+        if (m.status === 'recognizing text' && n) api.status('Reading text, page ' + n + ' of ' + targets.length + ' (' + Math.round((m.progress || 0) * 100) + '%)…', 'pending');
         else if (/load|initializ/.test(m.status || '')) api.status('Getting text recognition ready…', 'pending');
       });
       rec.ocr = rec.ocr || {};
+      // a page scanned sideways or upside down is turned upright first (its
+      // own undo step), unless it already has edits placed on it as it is
+      const wasTurned = snap();
+      let turned = 0;
+      for (const info of targets) {
+        if (S.rec !== rec) return;
+        if (rec.items.some((i) => i.page === info.entry.uid)) continue;
+        api.status('Checking which way up the pages are…', 'pending');
+        const turn = await detectTurn(worker, info);
+        if (turn) {
+          info.entry.rotate = (info.entry.rotate + turn) % 360;
+          delete info.entry.skew;
+          delete info.entry.paper;
+          if (rec.ocr) delete rec.ocr[info.entry.uid];
+          turned++;
+        }
+      }
+      if (turned) {
+        commit(wasTurned);
+        await build();
+        targets = targets.map((t) => S.info.get(t.entry.uid)).filter(Boolean);
+      }
       for (const info of targets) {
         n++;
         if (S.rec !== rec) return;
@@ -1994,7 +2092,7 @@
       changed();
       if (made) {
         setTool('edit');
-        api.toast((straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: click one to compare it with the scan and correct it.', 9000);
+        api.toast((turned ? 'Turned ' + turned + ' page' + (turned === 1 ? '' : 's') + ' the right way up. ' : '') + (straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: click one to compare it with the scan and correct it.', 9000);
       } else if (found) {
         setTool('edit');
         api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.' +
@@ -2229,7 +2327,11 @@
     // A slant or weight on one word alone is more likely a misjudged word than
     // emphasis, except a lead-in at the start of a line ("Note:"). Words too
     // short to judge do not count either way.
-    const alone = (i, k) => words.length > 1 && i > 0 && pickOf[i] && pickOf[i][k] !== line[k] &&
+    // A lead-in in another weight has to show it in its strokes, against the rest of its line.
+    const restSw = median(words.slice(1).map((w) => w.sw));
+    const leadIn = (i, k) => i === 0 && (k === 'style' || (words[0].sw != null && restSw != null &&
+      (pickOf[0].weight > line.weight ? words[0].sw > restSw * 1.25 : words[0].sw < restSw / 1.25)));
+    const alone = (i, k) => words.length > 1 && pickOf[i] && !leadIn(i, k) && pickOf[i][k] !== line[k] &&
       !(pickOf[i - 1] && pickOf[i - 1][k] === pickOf[i][k]) && !(pickOf[i + 1] && pickOf[i + 1][k] === pickOf[i][k]);
     const judged = pickOf.map((v, i) => (v ? { weight: alone(i, 'weight') ? line.weight : v.weight, style: alone(i, 'style') ? line.style : v.style } : undefined));
     // short words: like the words either side when those agree, else like the line
@@ -2964,7 +3066,25 @@
       const tog = (icon, label, prop) => {
         const b = el('button', { type: 'button', class: 'tb' + (cur[prop] ? ' on' : ''), 'data-icon': icon, title: label, 'aria-label': label, 'aria-pressed': cur[prop] ? 'true' : 'false' });
         b.addEventListener('mousedown', (e) => e.preventDefault());
-        b.addEventListener('click', () => { const v = !(it ? it[prop] : st[prop]); st[prop] = v; b.classList.toggle('on', v); update((i) => { i[prop] = v; }); });
+        b.addEventListener('click', () => {
+          const v = !(it ? it[prop] : st[prop]);
+          st[prop] = v;
+          b.classList.toggle('on', v);
+          update((i) => {
+            i[prop] = v;
+            // drawn in the page's matched font: switch that font's weight or slant,
+            // for the whole line (words set apart in it included)
+            if (i.font && typeof NpFonts !== 'undefined') {
+              const ws = (NpFonts.CATALOG[i.font.id] && NpFonts.CATALOG[i.font.id][2]) || [400, 700];
+              const near = (w) => ws.reduce((a, c) => (Math.abs(c - w) < Math.abs(a - w) ? c : a), ws[0]);
+              if (prop === 'bold') i.font = Object.assign({}, i.font, { weight: near(v ? 700 : 400) });
+              else i.font = Object.assign({}, i.font, { style: v ? 'italic' : 'normal' });
+              for (const w of i.words || []) if (w.v) { w.v = Object.assign({}, w.v, prop === 'bold' ? { weight: i.font.weight } : { style: i.font.style }); if (w.v.weight === i.font.weight && w.v.style === i.font.style) delete w.v; }
+              const info = S.info.get(i.page);
+              Promise.all(itemFonts(i).map((f) => NpFonts.load(f).catch(() => null))).then(() => { if (info && !S.editing) renderOverlay(info); });
+            }
+          });
+        });
         return b;
       };
       parts.push(fam, size, color, tog('bold', 'Bold', 'bold'), tog('italic', 'Italic', 'italic'));

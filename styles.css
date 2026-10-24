@@ -14,6 +14,8 @@
     --button-text: #333333;
     --preview-bg: #fafafa;
     --workspace-bg: #ffffff;
+    --table-border: #cccccc;
+    --table-header-bg: #f2f2f2;
 }
 
 body.dark-mode {
@@ -26,6 +28,8 @@ body.dark-mode {
     --button-text: #e0e0e0;
     --preview-bg: #252525;
     --workspace-bg: #1e1e1e;
+    --table-border: #555555;
+    --table-header-bg: #333333;
 }
 
 body {
@@ -77,6 +81,55 @@ body {
 
 .download-group {
     margin-left: auto;
+}
+
+/* Floating Table Layout Component Styles */
+.table-menu-container {
+    position: relative;
+    display: inline-block;
+}
+
+.grid-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    z-index: 100;
+    width: 142px;
+}
+
+.grid-menu.hidden {
+    display: none;
+}
+
+.grid-matrix {
+    display: grid;
+    grid-template-columns: repeat(5, 20px);
+    grid-gap: 4px;
+    margin-bottom: 8px;
+}
+
+.grid-cell {
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-color);
+    background-color: var(--button-bg);
+    cursor: pointer;
+}
+
+.grid-cell.active {
+    background-color: #007bff !important;
+    border-color: #0056b3;
+}
+
+.grid-label {
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-color);
 }
 
 .color-group input[type="color"] {
@@ -131,7 +184,6 @@ select {
     width: 70px;
 }
 
-/* Goal Progress Bar styling */
 #goal-progress-container {
     width: 100%;
     height: 4px;
@@ -145,7 +197,6 @@ select {
     transition: width 0.2s ease;
 }
 
-/* Outer wrapper handles the scroll & page backgrounds */
 .workspace-wrapper {
     overflow-y: auto;
     height: 550px;
@@ -170,23 +221,40 @@ body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
     min-height: 100%;
 }
 
-/* Styles for default seamless Notepad view */
 .workspace-wrapper.bg-notepad #editor {
     flex: 1;
     color: var(--text-color);
     background: var(--workspace-bg);
 }
 
-/* Styles for Virtual A4/Letter Paper Sheet view */
 .workspace-wrapper.bg-page #editor {
     width: 100%;
-    max-width: 812px; /* standard proportions matching a paper canvas */
+    max-width: 812px;
     background: var(--container-bg);
     margin: 20px auto;
     box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     border: 1px solid var(--border-color);
     border-radius: 4px;
     flex: none;
+}
+
+/* Injected Document Table Formatting Styles */
+#editor table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 15px;
+}
+
+#editor table th, #editor table td {
+    border: 1px solid var(--table-border);
+    padding: 8px 12px;
+    min-width: 40px;
+}
+
+#editor table th {
+    background-color: var(--table-header-bg);
+    font-weight: bold;
 }
 
 #preview {
@@ -202,6 +270,10 @@ body.dark-mode .workspace-wrapper.bg-page { background: #121212; }
 #preview h1, #preview h2, #preview h3 { margin-bottom: 10px; margin-top: 10px; }
 #preview ul, #preview ol { padding-left: 20px; margin-bottom: 10px; }
 #preview code { background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+
+/* Markdown View Table Rendering fallback */
+#preview table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+#preview table th, #preview table td { border: 1px solid var(--table-border); padding: 8px 12px; }
 
 button {
     background: var(--button-bg);

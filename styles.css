@@ -211,16 +211,22 @@ body:not(.ready) .sidebar { transition: none; }
 
 /* ============================================================ top bar */
 
+/* Grid so the menu bar gets its own full-width row under the title and the
+   corner buttons, and can wrap rather than run off a narrow window. */
 .topbar {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "side title right" ". menu menu";
+  align-items: center;
+  column-gap: 8px;
   padding: 8px 12px 2px;
   background: var(--surface);
 }
-.topbar > .icon-btn { margin-top: 4px; }
-
-.title-block { flex: 1; min-width: 0; }
+.topbar > .icon-btn { grid-area: side; }
+.title-block { display: contents; }
+.doc-title { grid-area: title; }
+.menubar { grid-area: menu; }
+.top-right { grid-area: right; }
 
 .doc-title {
   display: block;
@@ -237,7 +243,7 @@ body:not(.ready) .sidebar { transition: none; }
 .doc-title:hover { border-color: var(--line); }
 .doc-title:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.top-right { display: flex; align-items: center; gap: 4px; margin-top: 4px; }
+.top-right { display: flex; align-items: center; gap: 4px; }
 
 .save-status {
   font-size: 12px;
@@ -251,7 +257,7 @@ body:not(.ready) .sidebar { transition: none; }
 
 /* ============================================================ menus */
 
-.menubar { display: flex; gap: 0; margin-top: 1px; }
+.menubar { display: flex; flex-wrap: wrap; min-width: 0; margin-top: 1px; }
 .menu { position: relative; }
 .menu-btn {
   border: 0;
@@ -361,12 +367,11 @@ body:not(.ready) .sidebar { transition: none; }
   padding: 4px 6px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  border-radius: 14px;
+  flex-wrap: wrap;
+  row-gap: 2px;
   flex: none;
 }
-.toolbar::-webkit-scrollbar { display: none; }
 .topbar { position: relative; z-index: 10; }
 .toolbar { position: relative; z-index: 5; }
 
@@ -980,15 +985,20 @@ body.focus .focus-exit:hover, body.focus .focus-exit:focus-visible { opacity: 1;
 }
 
 @media (max-width: 640px) {
-  .topbar { padding: 6px 8px 0; gap: 4px; }
+  .topbar { padding: 6px 8px 0; column-gap: 4px; grid-template-areas: "side title right" "menu menu menu"; }
   .doc-title { font-size: 16px; }
-  .menubar { overflow-x: auto; scrollbar-width: none; }
-  .menu-btn { padding: 3px 7px; }
+  .menu-btn { padding: 3px 6px; }
   .menu { position: static; }
   .menu-pop { left: 8px !important; right: 8px; top: auto; min-width: 0; margin-top: 4px; }
   .menu-pop kbd { display: none; }
   .save-status { display: none; }
-  .toolbar { margin: 4px 6px 6px; }
+  /* On a phone the toolbar is one row that scrolls sideways; a fade marks
+     the side where more buttons are hidden. */
+  .toolbar { margin: 4px 6px 6px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .toolbar::-webkit-scrollbar { display: none; }
+  .toolbar.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+  .toolbar.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
+  .toolbar.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
   .page { margin: 0; max-width: none; width: 100%; border-radius: 0; box-shadow: none; }
   .stage { background: var(--paper); }
   .editor { padding: 22px 18px 120px; min-height: 100%; }

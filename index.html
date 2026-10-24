@@ -59,9 +59,16 @@
                 <button onclick="speakText()" title="Read Aloud">🔊 Read</button>
             </div>
 
-            <!-- Group 6: Medium Feature Staging Slots (Ready for Next Step) -->
+            <!-- Group 6: Medium Feature Staging Slots (Table Activated!) -->
             <div class="tool-group staging-group">
-                <button title="Table Tools (Coming Next)" disabled style="opacity: 0.4;">📊 +Table</button>
+                <div class="table-menu-container">
+                    <button onclick="toggleTableGridMenu()" id="table-btn" title="Insert Table">📊 +Table</button>
+                    <!-- Floating Interactive Grid Selector Dropdown -->
+                    <div id="table-grid-menu" class="grid-menu hidden">
+                        <div class="grid-matrix" id="grid-matrix"></div>
+                        <div class="grid-label" id="grid-label">1 x 1 Table</div>
+                    </div>
+                </div>
                 <button title="Image Upload (Coming Next)" disabled style="opacity: 0.4;">🖼️ +Img</button>
                 <button title="Spellcheck Toggle (Coming Next)" disabled style="opacity: 0.4;">✔️ Spell</button>
             </div>

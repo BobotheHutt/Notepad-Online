@@ -8,20 +8,37 @@
 </head>
 <body>
     <div class="editor-container">
-        <!-- Main Application Toolbar -->
+        <!-- Main Application Toolbar Layout -->
         <div class="toolbar">
+            <!-- Group 1: History -->
             <div class="tool-group">
                 <button onclick="format('undo')" title="Undo">↩️</button>
                 <button onclick="format('redo')" title="Redo">↪️</button>
             </div>
 
+            <!-- Group 2: Typography & Structure -->
             <div class="tool-group">
                 <button onclick="format('bold')" title="Bold"><b>B</b></button>
                 <button onclick="format('italic')" title="Italic"><i>I</i></button>
                 <button onclick="format('underline')" title="Underline"><u>U</u></button>
                 <button onclick="format('strikeThrough')" title="Strikethrough"><s>S</s></button>
+                
+                <select id="font-family" onchange="changeFontFamily(this.value)" title="Font Family">
+                    <option value="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif">System Default</option>
+                    <option value="'Arial', sans-serif">Arial</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Georgia', serif">Georgia</option>
+                </select>
             </div>
             
+            <!-- Group 3: Color Pickers -->
+            <div class="tool-group color-group">
+                <label title="Text Color">🎨 <input type="color" id="text-color-picker" oninput="changeTextColor(this.value)" value="#333333"></label>
+                <label title="Highlight Color">🖍️ <input type="color" id="bg-color-picker" oninput="changeHighlightColor(this.value)" value="#ffffff"></label>
+            </div>
+
+            <!-- Group 4: Layout Realignment -->
             <div class="tool-group">
                 <button onclick="format('justifyLeft')" title="Align Left">Left</button>
                 <button onclick="format('justifyCenter')" title="Center">Center</button>
@@ -29,14 +46,27 @@
                 <button onclick="format('justifyFull')" title="Justify">Justify</button>
             </div>
 
+            <!-- Group 5: Views & Controls -->
             <div class="tool-group">
                 <button onclick="changeFontSize('increase')" title="Zoom In">A+</button>
                 <button onclick="changeFontSize('decrease')" title="Zoom Out">A-</button>
+                <select id="layout-view" onchange="changeLayoutView(this.value)" title="Document Layout">
+                    <option value="notepad">Notepad Style</option>
+                    <option value="page">Letter Page Style</option>
+                </select>
                 <button onclick="toggleDarkMode()" id="dark-btn" title="Toggle Dark Mode">🌙 Dark Mode</button>
                 <button onclick="toggleMarkdown()" id="md-btn" title="Toggle Markdown Mode">📝 Show Markdown</button>
                 <button onclick="speakText()" title="Read Aloud">🔊 Read</button>
             </div>
 
+            <!-- Group 6: Medium Feature Staging Slots (Ready for Next Step) -->
+            <div class="tool-group staging-group">
+                <button title="Table Tools (Coming Next)" disabled style="opacity: 0.4;">📊 +Table</button>
+                <button title="Image Upload (Coming Next)" disabled style="opacity: 0.4;">🖼️ +Img</button>
+                <button title="Spellcheck Toggle (Coming Next)" disabled style="opacity: 0.4;">✔️ Spell</button>
+            </div>
+
+            <!-- Group 7: Actions & Exports -->
             <div class="tool-group download-group">
                 <button onclick="printDoc()" class="btn-action">🖨️ Print / PDF</button>
                 <button onclick="saveFile('txt')" class="btn-save">Save .txt</button>
@@ -50,17 +80,29 @@
             <input type="text" id="find-input" placeholder="Find text...">
             <input type="text" id="replace-input" placeholder="Replace with...">
             <button onclick="findAndReplace()">Replace All</button>
+            <div class="goal-group">
+                <label for="word-goal-input">Goal:</label>
+                <input type="number" id="word-goal-input" placeholder="e.g. 500" min="0" oninput="updateMetrics()">
+            </div>
         </div>
 
-        <!-- Workspace Wrapper (Splits for Markdown view) -->
-        <div class="workspace">
-            <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
-            <div id="preview" class="hidden"></div>
+        <!-- Progress Metrics Bar for Word Targets -->
+        <div id="goal-progress-container" class="hidden">
+            <div id="goal-progress-bar"></div>
+        </div>
+
+        <!-- Workspace Wrapper -->
+        <div class="workspace-wrapper bg-notepad" id="workspace-outer">
+            <div class="workspace">
+                <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
+                <div id="preview" class="hidden"></div>
+            </div>
         </div>
 
         <!-- Status Tracking Bar -->
         <div class="status-bar">
             <span id="save-status">💾 Auto-saved</span>
+            <span id="goal-status"></span>
             <span id="word-count">Words: 0</span>
             <span id="char-count">Characters: 0</span>
         </div>

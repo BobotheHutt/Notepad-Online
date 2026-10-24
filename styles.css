@@ -12,9 +12,9 @@
     --border-color: #e1e4e8;
     --button-bg: #ffffff;
     --button-text: #333333;
+    --preview-bg: #fafafa;
 }
 
-/* Dark Mode Variables Override */
 body.dark-mode {
     --bg-color: #121212;
     --container-bg: #1e1e1e;
@@ -23,6 +23,7 @@ body.dark-mode {
     --border-color: #3d3d3d;
     --button-bg: #3a3a3a;
     --button-text: #e0e0e0;
+    --preview-bg: #252525;
 }
 
 body {
@@ -39,7 +40,7 @@ body {
 
 .editor-container {
     width: 100%;
-    max-width: 950px;
+    max-width: 1100px;
     background: var(--container-bg);
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -94,6 +95,46 @@ body {
     outline: none;
 }
 
+.workspace {
+    display: flex;
+    min-height: 500px;
+    background: var(--container-bg);
+}
+
+#editor, #preview {
+    flex: 1;
+    padding: 35px;
+    font-size: 16px;
+    line-height: 1.6;
+    outline: none;
+    overflow-y: auto;
+    height: 550px;
+}
+
+#editor {
+    color: var(--text-color);
+}
+
+#preview {
+    background: var(--preview-bg);
+    border-left: 1px solid var(--border-color);
+    color: var(--text-color);
+}
+
+#preview.hidden {
+    display: none;
+}
+
+#editor[placeholder]:empty:before {
+    content: attr(placeholder);
+    color: #888;
+}
+
+/* Base styling for elements rendered inside the Markdown preview window */
+#preview h1, #preview h2, #preview h3 { margin-bottom: 10px; margin-top: 10px; }
+#preview ul, #preview ol { padding-left: 20px; margin-bottom: 10px; }
+#preview code { background: rgba(0,0,0,0.1); padding: 2px 4px; border-radius: 3px; font-family: monospace; }
+
 button {
     background: var(--button-bg);
     color: var(--button-text);
@@ -104,29 +145,10 @@ button {
     cursor: pointer;
 }
 
-button:hover {
-    opacity: 0.85;
-}
-
+button:hover { opacity: 0.85; }
 .btn-save { background: #28a745; color: white; border: none; }
 .btn-action { background: #007bff; color: white; border: none; }
 .btn-danger { background: #dc3545; color: white; border: none; }
-
-#editor {
-    min-height: 500px;
-    padding: 35px;
-    font-size: 16px;
-    line-height: 1.6;
-    outline: none;
-    overflow-y: auto;
-    background: var(--container-bg);
-    color: var(--text-color);
-}
-
-#editor[placeholder]:empty:before {
-    content: attr(placeholder);
-    color: #888;
-}
 
 .status-bar {
     background: var(--toolbar-bg);
@@ -139,10 +161,15 @@ button:hover {
     color: #888;
 }
 
-/* Print Utility Optimization styles */
+#save-status {
+    margin-right: auto;
+    font-style: italic;
+    color: #28a745;
+}
+
 @media print {
     body { background: white; color: black; padding: 0; }
-    .toolbar, .find-replace-bar, .status-bar { display: none !important; }
+    .toolbar, .find-replace-bar, .status-bar, #preview { display: none !important; }
     .editor-container { border: none; box-shadow: none; max-width: 100%; }
-    #editor { padding: 0; min-height: auto; }
+    #editor { padding: 0; height: auto; min-height: auto; }
 }

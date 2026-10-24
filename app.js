@@ -2,62 +2,84 @@ const editor = document.getElementById('editor');
 const wordCount = document.getElementById('word-count');
 const charCount = document.getElementById('char-count');
 
-// Execute rich text commands natively
 function format(command) {
     document.execCommand(command, false, null);
     editor.focus();
 }
 
-// Adjust font size dynamically
 function changeFontSize(action) {
     const currentSize = window.getComputedStyle(editor).fontSize;
     let newSize = parseFloat(currentSize);
-    
     if (action === 'increase') newSize += 2;
     if (action === 'decrease' && newSize > 10) newSize -= 2;
-    
     editor.style.fontSize = newSize + 'px';
 }
 
-// Track text metrics in real-time
-editor.addEventListener('input', () => {
+// Live analytics metrics
+editor.addEventListener('input', updateMetrics);
+function updateMetrics() {
     const text = editor.innerText.trim();
-    
-    // Exact word counting logic
     const words = text === '' ? 0 : text.split(/\s+/).length;
     const chars = editor.innerText.length;
-
     wordCount.textContent = `Words: ${words}`;
     charCount.textContent = `Characters: ${chars}`;
-});
+}
 
-// Text-to-Speech engine
+// Global Dark Mode Toggle State
+function toggleDarkMode() {
+    document.body.classList.toggle('dark-mode');
+    const btn = document.getElementById('dark-btn');
+    if(document.body.classList.contains('dark-mode')) {
+        btn.textContent = "☀️ Light Mode";
+    } else {
+        btn.textContent = "🌙 Dark Mode";
+    }
+}
+
+// Direct Text-To-Speech Proofreader
 function speakText() {
     const text = editor.innerText;
-    if (!text.trim()) return alert("Nothing to read aloud!");
-    
-    // Stop any active readings first
+    if (!text.trim()) return;
     window.speechSynthesis.cancel();
-    
     const utterance = new SpeechSynthesisUtterance(text);
     window.speechSynthesis.speak(utterance);
 }
 
-// File export functionality
-function saveFile(type) {
-    let content = "";
-    let filename = "document";
-    let mimeType = "";
+// Native Local Web Printing Window Access
+function printDoc() {
+    window.print();
+}
 
-    if (type === 'txt') {
-        content = editor.innerText; // Plain layout text
-        filename += ".txt";
-        mimeType = "text/plain";
-    } else if (type === 'html') {
-        content = editor.innerHTML; // Keeps formatting HTML tags
-        filename += ".html";
-        mimeType = "text/html";
+// Inline Text Find and Global HTML Substitution
+function findAndReplace() {
+    const findText = document.getElementById('find-input').value;
+    const replaceText = document.getElementById('replace-input').value;
+    
+    if (!findText) return alert("Enter text to find.");
+    
+    // Global regular expression match
+    const regex = new RegExp(findText, 'g');
+    const currentHTML = editor.innerHTML;
+    
+    if (!currentHTML.includes(findText)) {
+        return alert("Text variant matching phrase not found.");
     }
+    
+    editor.innerHTML = currentHTML.replace(regex, replaceText);
+    updateMetrics();
+}
+
+function clearDoc() {
+    if (confirm("Are you sure you want to permanently delete this layout content?")) {
+        editor.innerHTML = "";
+        updateMetrics();
+    }
+}
+
+function saveFile(type) {
+    let content = type === 'txt' ? editor.innerText : editor.innerHTML;
+    let filename = `document.${type}`;
+    let mimeType = type === 'txt' ? "text/plain" : "text/html";
 
     const blob = new Blob([content], { type: mimeType });
     const link = document.createElement('a');

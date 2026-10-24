@@ -8,9 +8,14 @@ const goalContainer = document.getElementById('goal-progress-container');
 const goalBar = document.getElementById('goal-progress-bar');
 const goalStatus = document.getElementById('goal-status');
 const goalInput = document.getElementById('word-goal-input');
+const tableGridMenu = document.getElementById('table-grid-menu');
+const gridMatrix = document.getElementById('grid-matrix');
+const gridLabel = document.getElementById('grid-label');
 
 let isMarkdownMode = false;
 let autoSaveTimeout;
+const MAX_ROWS = 5;
+const MAX_COLS = 5;
 
 // Core initialization layer
 window.addEventListener('DOMContentLoaded', () => {
@@ -25,6 +30,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     updateMetrics();
+    buildInteractiveTableGrid();
 });
 
 function format(command, value = null) {
@@ -32,7 +38,6 @@ function format(command, value = null) {
     editor.focus();
 }
 
-// Typography control scripts
 function changeFontSize(action) {
     const currentSize = window.getComputedStyle(editor).fontSize;
     let newSize = parseFloat(currentSize);
@@ -53,7 +58,6 @@ function changeHighlightColor(color) {
     format('hiliteColor', color);
 }
 
-// Structural Document Views switcher
 function changeLayoutView(view) {
     if (view === 'page') {
         workspaceOuter.classList.remove('bg-notepad');
@@ -63,6 +67,70 @@ function changeLayoutView(view) {
         workspaceOuter.classList.add('bg-notepad');
     }
 }
+
+// Interactive Table Builder Logic
+function buildInteractiveTableGrid() {
+    gridMatrix.innerHTML = '';
+    for (let r = 1; r <= MAX_ROWS; r++) {
+        for (let c = 1; c <= MAX_COLS; c++) {
+            const cell = document.createElement('div');
+            cell.classList.add('grid-cell');
+            cell.dataset.row = r;
+            cell.dataset.col = c;
+            
+            // Hover matrix mapping event tracking
+            cell.addEventListener('mouseover', () => highlightGridCells(r, c));
+            cell.addEventListener('click', () => insertTableFromGrid(r, c));
+            
+            gridMatrix.appendChild(cell);
+        }
+    }
+}
+
+function toggleTableGridMenu() {
+    tableGridMenu.classList.toggle('hidden');
+}
+
+function highlightGridCells(targetRows, targetCols) {
+    gridLabel.textContent = `${targetRows} x ${targetCols} Table`;
+    const cells = gridMatrix.querySelectorAll('.grid-cell');
+    cells.forEach(cell => {
+        const r = parseInt(cell.dataset.row);
+        const c = parseInt(cell.dataset.col);
+        if (r <= targetRows && c <= targetCols) {
+            cell.classList.add('active');
+        } else {
+            cell.classList.remove('active');
+        }
+    });
+}
+
+function insertTableFromGrid(rows, cols) {
+    let tableHtml = '<table>';
+    for (let i = 0; i < rows; i++) {
+        tableHtml += '<tr>';
+        for (let j = 0; j < cols; j++) {
+            // First row acts as standard bold structural headers
+            if (i === 0) {
+                tableHtml += '<th>Header</th>';
+            } else {
+                tableHtml += '<td>Cell</td>';
+            }
+        }
+        tableHtml += '</tr>';
+    }
+    tableHtml += '</table><p><br></p>'; // trailing paragraph ensures cursor can escape table layout below
+    
+    format('insertHTML', tableHtml);
+    tableGridMenu.classList.add('hidden');
+}
+
+// Close float screens cleanly if clicked outside selection boxes
+window.addEventListener('click', (e) => {
+    if (!e.target.matches('#table-btn') && !e.target.closest('#table-grid-menu')) {
+        tableGridMenu.classList.add('hidden');
+    }
+});
 
 // Core text metrics calculations & tracker algorithms
 editor.addEventListener('input', () => {
@@ -79,7 +147,6 @@ function updateMetrics() {
     wordCount.textContent = `Words: ${words}`;
     charCount.textContent = `Characters: ${chars}`;
 
-    // Target Metric Goal Engine Processing
     const goal = parseInt(goalInput.value);
     if (goal > 0) {
         localStorage.setItem('notepad_online_goal', goal);

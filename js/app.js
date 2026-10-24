@@ -909,6 +909,14 @@
     // Toolbar buttons must not take focus from the document, or the selection goes with it.
     $('#toolbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
     $('#ctxbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+    const tb = $('#toolbar');
+    const edges = () => {
+      tb.classList.toggle('more-left', tb.scrollLeft > 2);
+      tb.classList.toggle('more-right', tb.scrollLeft + tb.clientWidth < tb.scrollWidth - 2);
+    };
+    tb.addEventListener('scroll', edges, { passive: true });
+    window.addEventListener('resize', edges);
+    edges();
     paintColorBars();
   }
 
@@ -2244,6 +2252,9 @@
     st.setProperty('--paper-h', PAPER[s.paper].h);
     st.setProperty('--paper-pad', MARGINS[s.margins].css);
     $('#page-rule').textContent = '@page { size: ' + PAPER[s.paper].css + '; margin: ' + MARGINS[s.margins].css + '; }';
+    // until the cursor lands somewhere, the toolbar shows the document's defaults
+    tbFont.value = s.font;
+    tbSize.value = String(s.size);
   }
 
   function applySpellcheck() {

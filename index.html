@@ -59,17 +59,18 @@
                 <button onclick="speakText()" title="Read Aloud">🔊 Read</button>
             </div>
 
-            <!-- Group 6: Medium Feature Staging Slots (Table Activated!) -->
+            <!-- Group 6: Medium Feature Staging Slots (Tables & Images Active!) -->
             <div class="tool-group staging-group">
                 <div class="table-menu-container">
                     <button onclick="toggleTableGridMenu()" id="table-btn" title="Insert Table">📊 +Table</button>
-                    <!-- Floating Interactive Grid Selector Dropdown -->
                     <div id="table-grid-menu" class="grid-menu hidden">
                         <div class="grid-matrix" id="grid-matrix"></div>
                         <div class="grid-label" id="grid-label">1 x 1 Table</div>
                     </div>
                 </div>
-                <button title="Image Upload (Coming Next)" disabled style="opacity: 0.4;">🖼️ +Img</button>
+                <!-- Hidden native file picker trigger -->
+                <input type="file" id="image-file-input" accept="image/*" style="display: none;" onchange="handleImageFileSelect(this)">
+                <button onclick="triggerImageUpload()" title="Insert Image">🖼️ +Img</button>
                 <button title="Spellcheck Toggle (Coming Next)" disabled style="opacity: 0.4;">✔️ Spell</button>
             </div>
 
@@ -101,7 +102,7 @@
         <!-- Workspace Wrapper -->
         <div class="workspace-wrapper bg-notepad" id="workspace-outer">
             <div class="workspace">
-                <div id="editor" contenteditable="true" placeholder="Start typing your document here..."></div>
+                <div id="editor" contenteditable="true" placeholder="Start typing or drop files here..."></div>
                 <div id="preview" class="hidden"></div>
             </div>
         </div>

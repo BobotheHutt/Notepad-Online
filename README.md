@@ -34,7 +34,8 @@ and lets you edit and sign PDFs.
   - A page that went through the scanner crooked is straightened first, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
   - Words the OCR was unsure of are left as the scan's own pixels until you change them, so a misread is never shown as if it were on the page.
-  - **Original** (toolbar) shows the page as it was scanned, to check what was read.
+  - **Fixing a misread**: words OCR may have got wrong are underlined in orange; click one to see the scanned word enlarged next to what was read, and type the correction (Tab goes on to the next one). Right-click any word read from the scan to do the same. A correction is redrawn in place, and searching and copying use it.
+  - **Original** (toolbar) shows the page as it was scanned, to check what was read: every word is clickable to correct it, and words OCR was unsure of are shaded.
   - **Pages → Keep this page as scanned** puts the scan back; Edit text then changes single words and leaves the rest of the scan exactly as it was.
   - English only for now; needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs

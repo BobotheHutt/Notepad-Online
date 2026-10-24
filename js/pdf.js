@@ -295,6 +295,7 @@
     S.info.clear();
     S.fields = [];
     S.rec = null;
+    S.fix = null;
     S.editing = null;
     S.sel = null;
     const pages = $('#pdf-pages');
@@ -379,6 +380,13 @@
       info.layer = el('div', { class: 'pdf-layer' });
       info.el.append(info.canvas, info.layer);
       info.el.addEventListener('pointerdown', onPointerDown);
+      info.el.addEventListener('contextmenu', (e) => {
+        const n = e.target.closest('[data-fix]');
+        if (!n) return;
+        e.preventDefault();
+        if (S.editing) finishEditing();
+        openFix(info, n.dataset.fix);
+      });
       S.info.set(entry.uid, info);
       frag.append(info.el);
     }
@@ -415,6 +423,7 @@
       if (info.visible) renderPage(info);
     }
     renderAllOverlays();
+    placeFix();
     const z = $('#pdf-zoom');
     if (z) z.textContent = Math.round((S.scale / PT_PX) * 100) + '%';
     const sb = $('#sb-zoom');
@@ -559,6 +568,32 @@
       }
       layer.append(itemEl(it));
     }
+    if (S.showOriginal) {
+      // proofreading: every word read from the scan, clickable to correct it
+      for (const it of mine) {
+        if (!it.conv) continue;
+        for (const r of convLayout(it)) {
+          if (!r.o) continue;
+          const w = r.o;
+          layer.append(el('div', {
+            class: 'pdf-proof' + (doubtful(w) ? ' doubt' : ''), 'data-fix': it.id + ':' + it.words.indexOf(w), title: 'Read as “' + w.t + '”. Click to correct it.',
+            style: 'left:' + px(w.x0 - 1) + ';top:' + px(w.y0 - 1) + ';width:' + px(w.x1 - w.x0 + 2) + ';height:' + px(w.y1 - w.y0 + 2)
+          }));
+        }
+      }
+      // lines left as scanned: what OCR read is only in the searchable text, but can be wrong too
+      const used = new Set(mine.filter((i) => i.origKey).map((i) => i.origKey));
+      for (const t of info.text || []) {
+        if (!t.scan || used.has(t.key)) continue;
+        const li = +t.key.split(':ocr')[1].split('.')[0];
+        for (const w of t.words) {
+          layer.append(el('div', {
+            class: 'pdf-proof doubt', 'data-fix': 'ocr:' + li + ':' + w.ri, title: 'Read as “' + w.t + '”. Click to correct it.',
+            style: 'left:' + px(w.x0 - 1) + ';top:' + px(w.y0 - 1) + ';width:' + px(w.x1 - w.x0 + 2) + ';height:' + px(w.y1 - w.y0 + 2)
+          }));
+        }
+      }
+    }
     if (S.tool === 'edit') renderTextTargets(info);
     renderFields(info);
   }
@@ -584,7 +619,8 @@
       }
       for (const r of lay) {
         const d = el('div', {
-          class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.scan ? ' pdf-conv-scan' : ''), 'data-id': it.id,
+          class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.scan ? ' pdf-conv-scan' : '') + (r.o && doubtful(r.o) ? ' pdf-doubt' : ''), 'data-id': it.id,
+          'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'Check this word: click to compare it with the scan' : null,
           style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(r.st).replace(/"/g, "'") +
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
             (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
@@ -673,7 +709,7 @@
   function ocrPhrases(l, rules) {
     const raw = l.words && l.words.length ? l.words : [{ t: l.text, x: l.x, w: l.w }];
     const words = [];
-    for (const w of raw) {
+    for (const [ri, w] of raw.entries()) {
       let t = w.t;
       let x0 = w.x;
       let x1 = w.x + w.w;
@@ -684,7 +720,7 @@
       let after = false;
       while (/^[|¦]/.test(t)) { t = t.slice(1); x0 += per; words.push({ sep: true }); }
       while (/[|¦]$/.test(t)) { t = t.slice(0, -1); x1 -= per; after = true; }
-      if (t) words.push({ t, x0, x1, y0, y1, sw: w.sw, c: w.c });
+      if (t) words.push({ t, x0, x1, y0, y1, sw: w.sw, c: w.c, ri });
       if (after) words.push({ sep: true });
     }
     const phrases = [];
@@ -1060,7 +1096,16 @@
     if (e.button !== 0) return;
     const info = S.info.get(e.currentTarget.dataset.uid);
     if (!info) return;
-    if (e.target.closest('.pdf-field')) return;
+    if (e.target.closest('.pdf-field') || e.target.closest('.pdf-fix')) return;
+    if (S.fix) closeFix(true);
+    // a word read from the scan: correct what OCR read (proofreading, or a word it was unsure of)
+    const fixNode = e.target.closest('[data-fix]');
+    if (fixNode && (S.showOriginal || (S.tool === 'edit' && fixNode.classList.contains('pdf-doubt')))) {
+      e.preventDefault();
+      if (S.editing) finishEditing();
+      openFix(info, fixNode.dataset.fix);
+      return;
+    }
     if (S.editing) {
       if (e.target.closest('[contenteditable]')) return;
       finishEditing();
@@ -1937,7 +1982,7 @@
       changed();
       if (made) {
         setTool('edit');
-        api.toast((straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. To check what was read, click Original to see the scan.', 8000);
+        api.toast((straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: click one to compare it with the scan and correct it.', 9000);
       } else if (found) {
         setTool('edit');
         api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.' +
@@ -2328,10 +2373,12 @@
 
   // Proofreading: the page as scanned, with the text drawn from it hidden.
   function toggleOriginal(on) {
+    if (S.fix) closeFix(true);
     S.showOriginal = on === undefined ? !S.showOriginal : !!on;
     document.body.classList.toggle('pdf-show-original', S.showOriginal);
     if (S.editing) finishEditing();
     for (const info of S.info.values()) if (isConv(info.entry.uid)) renderPage(info);
+    if (S.rec) renderAllOverlays();
     updateConvUi();
   }
 
@@ -2344,6 +2391,153 @@
       b.setAttribute('aria-pressed', S.showOriginal ? 'true' : 'false');
     }
     if (!any && S.showOriginal) { S.showOriginal = false; document.body.classList.remove('pdf-show-original'); }
+  }
+
+  // Words OCR was less than sure of: marked, so they are easy to check.
+  const doubtful = (w) => w.c != null && w.c < 90;
+
+  /* ----- correcting what OCR read ----- */
+
+  // A small box under a word: the word as scanned, enlarged, over what OCR
+  // read, to correct. The correction is what the page says, not an edit: the
+  // word is redrawn where it was, and search and copy use it.
+  // What a fix box is about: the word's box on the page, what OCR read, and
+  // how to put the correction in. A word of a line drawn as text (item:word),
+  // or one of a line left as scanned (ocr:line:word), which only the hidden,
+  // searchable text carries.
+  function fixTarget(info, ref) {
+    const parts = ref.split(':');
+    if (parts[0] === 'ocr') {
+      const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
+      const l = ocr && ocr.lines[+parts[1]];
+      const w = l && l.words && l.words[+parts[2]];
+      if (!w) return null;
+      return {
+        box: { x0: w.x, x1: w.x + w.w, y0: w.y, y1: w.y + w.h }, t: w.t,
+        apply: (val) => {
+          if (val) { w.t = val; w.c = 100; } else l.words.splice(l.words.indexOf(w), 1);
+          l.text = l.words.map((q) => q.t).join(' ');
+          info.text = null;
+          changed();
+          textItems(info).then(() => renderOverlay(info));
+        }
+      };
+    }
+    const it = itemById(parts[0]);
+    const w = it && it.words[+parts[1]];
+    if (!w) return null;
+    return { box: w, t: w.t, it, w, apply: (val) => fixWord(it, w, val) };
+  }
+
+  async function openFix(info, ref) {
+    closeFix(false);
+    const tg = fixTarget(info, ref);
+    if (!tg) return;
+    const w = tg.box;
+    const k = 4;
+    const pad = 3;
+    const cv = el('canvas', { class: 'pdf-fix-scan' });
+    cv.width = Math.ceil((w.x1 - w.x0 + pad * 2) * k);
+    cv.height = Math.ceil((w.y1 - w.y0 + pad * 2) * k);
+    const input = el('input', { type: 'text', class: 'pdf-fix-input', value: tg.t, 'aria-label': 'What this word says', spellcheck: 'true' });
+    const box = el('div', { class: 'pdf-fix', role: 'dialog', 'aria-label': 'Correct this word' },
+      el('div', { class: 'pdf-fix-label' }, 'Scanned word'), cv,
+      el('div', { class: 'pdf-fix-label' }, 'It says'), input,
+      el('div', { class: 'pdf-fix-hint' }, 'Enter saves · Tab saves and goes to the next word to check · Esc cancels'));
+    info.el.append(box);
+    S.fix = { info, tg, box };
+    placeFix();
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); closeFix(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeFix(false); }
+      else if (e.key === 'Tab') {
+        e.preventDefault();
+        const next = nextDoubt(tg.w, e.shiftKey);
+        closeFix(true);
+        // found by the word itself: saving may have split this one into two
+        const k2 = next ? next.it.words.indexOf(next.w) : -1;
+        if (k2 >= 0) openFix(next.info, next.it.id + ':' + k2);
+      }
+    });
+    // focus moving to something else on the page saves; switching to another window does not
+    input.addEventListener('blur', (e) => { if (e.relatedTarget && !box.contains(e.relatedTarget) && S.fix && S.fix.box === box) closeFix(true); });
+    input.focus();
+    input.select();
+    box.scrollIntoView({ block: 'nearest' });
+    try {
+      const g = cv.getContext('2d');
+      g.fillStyle = paperOf(info);
+      g.fillRect(0, 0, cv.width, cv.height);
+      await info.page.render(renderOpts(info, g, k, -(w.x0 - pad) * k, -(w.y0 - pad) * k)).promise;
+    } catch (e) { /* the box works without the picture */ }
+  }
+
+  // under its word, at the current zoom (the page can be re-fitted while the
+  // box is open, as when a phone's keyboard opens)
+  function placeFix() {
+    const f = S.fix;
+    const w = f && f.tg.box;
+    if (!w) return;
+    f.box.style.left = Math.max(0, Math.min(f.info.w * S.scale - 244, w.x0 * S.scale)) + 'px';
+    f.box.style.top = (w.y1 + 6) * S.scale + 'px';
+  }
+
+  function closeFix(save) {
+    const f = S.fix;
+    if (!f) return;
+    S.fix = null;
+    f.box.remove();
+    if (!save) return;
+    const val = f.box.querySelector('input').value.replace(/\s+/g, ' ').trim();
+    if (val === f.tg.t) return;
+    f.tg.apply(val);
+    renderOverlay(f.info);
+    renderStyleBar();
+  }
+
+  function fixWord(it, w, val) {
+    const before = snap();
+    // the line as it now reads, word by word, with this word in it
+    const lay = convLayout(it);
+    const at = lay.findIndex((r) => r.o === w);
+    const neu = lay.map((r) => r.text);
+    if (!val) {
+      // nothing there (OCR read a speck as a word): the word just goes
+      if (at >= 0) neu.splice(at, 1);
+      it.text = neu.join(' ');
+    } else {
+      // one box per word typed, sharing the old box by letters
+      const parts = val.split(' ');
+      const total = parts.reduce((t, q) => t + q.length, 0) + (parts.length - 1) * 0.6;
+      let x = w.x0;
+      const boxes = parts.map((q) => {
+        const wd = ((w.x1 - w.x0) * q.length) / total;
+        const b = Object.assign({}, w, { t: q, x0: x, x1: x + wd, c: 100 });
+        x += wd + ((w.x1 - w.x0) * 0.6) / total;
+        return b;
+      });
+      it.words.splice(it.words.indexOf(w), 1, ...boxes);
+      if (at >= 0) neu.splice(at, 1, ...parts);
+      it.text = neu.join(' ');
+    }
+    it.origText = it.words.map((q) => q.t).join(' ');
+    commit(before);
+  }
+
+  // The next word to check after this one, in reading order across the pages.
+  function nextDoubt(cur, back) {
+    const list = [];
+    for (const inf of S.info.values()) {
+      const items = S.rec.items.filter((i) => i.page === inf.entry.uid && i.conv).sort((a, b) => (Math.abs(a.base - b.base) < a.size * 0.5 ? a.x - b.x : a.base - b.base));
+      for (const i of items) for (const w of i.words) if (doubtful(w) || w === cur) list.push({ info: inf, it: i, w, me: w === cur });
+    }
+    const pos = list.findIndex((q) => q.me);
+    const rest = list.filter((q) => !q.me);
+    if (!rest.length) return null;
+    const n = back ? (pos - 1 + list.length) % list.length : (pos + 1) % list.length;
+    const q = list[n];
+    return q && !q.me ? q : rest[0];
   }
 
   // OCR's confidence in a word, below which an unchanged word is left as the

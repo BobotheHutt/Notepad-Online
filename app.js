@@ -71,6 +71,7 @@ function changeLayoutView(view) {
 
 // Interactive Table Builder Logic
 function buildInteractiveTableGrid() {
+    if (!gridMatrix) return;
     gridMatrix.innerHTML = '';
     for (let r = 1; r <= MAX_ROWS; r++) {
         for (let c = 1; c <= MAX_COLS; c++) {
@@ -131,12 +132,12 @@ function toggleSpellcheck() {
     
     if (isSpellcheckOn) {
         editor.setAttribute('spellcheck', 'false');
-        btn.textContent = "✔️ Spellcheck: OFF";
-        btn.classList.remove('active-toggle');
+        if (btn) btn.textContent = "✔️ Spellcheck: OFF";
+        if (btn) btn.classList.remove('active-toggle');
     } else {
         editor.setAttribute('spellcheck', 'true');
-        btn.textContent = "✔️ Spellcheck: ON";
-        btn.classList.add('active-toggle');
+        if (btn) btn.textContent = "✔️ Spellcheck: ON";
+        if (btn) btn.classList.add('active-toggle');
     }
     
     // Force browser text field structural re-render to update wavy lines
@@ -158,6 +159,7 @@ function handleImageFileSelect(input) {
 }
 
 function setupDragAndDropImages() {
+    if (!workspaceOuter) return;
     ['dragenter', 'dragover'].forEach(eventName => {
         workspaceOuter.addEventListener(eventName, (e) => {
             e.preventDefault();
@@ -210,57 +212,61 @@ function updateMetrics() {
     const words = text === '' ? 0 : text.split(/\s+/).length;
     const chars = editor.innerText.length;
     
-    wordCount.textContent = `Words: ${words}`;
-    charCount.textContent = `Characters: ${chars}`;
+    if (wordCount) wordCount.textContent = `Words: ${words}`;
+    if (charCount) charCount.textContent = `Characters: ${chars}`;
 
     const goal = parseInt(goalInput.value);
     if (goal > 0) {
         localStorage.setItem('notepad_online_goal', goal);
-        goalContainer.classList.remove('hidden');
+        if (goalContainer) goalContainer.classList.remove('hidden');
         const percentage = Math.min((words / goal) * 100, 100);
-        goalBar.style.width = `${percentage}%`;
+        if (goalBar) goalBar.style.width = `${percentage}%`;
         
         if (percentage >= 100) {
-            goalStatus.textContent = "🏆 Goal Met!";
-            goalBar.style.backgroundColor = "#28a745";
+            if (goalStatus) goalStatus.textContent = "🏆 Goal Met!";
+            if (goalBar) goalBar.style.backgroundColor = "#28a745";
         } else {
-            goalStatus.textContent = `${Math.round(percentage)}% of Goal`;
-            goalBar.style.backgroundColor = "#007bff";
+            if (goalStatus) goalStatus.textContent = `${Math.round(percentage)}% of Goal`;
+            if (goalBar) goalBar.style.backgroundColor = "#007bff";
         }
     } else {
         localStorage.removeItem('notepad_online_goal');
-        goalContainer.classList.add('hidden');
-        goalStatus.textContent = "";
+        if (goalContainer) goalContainer.classList.add('hidden');
+        if (goalStatus) goalStatus.textContent = "";
     }
 }
 
 function triggerAutoSave() {
-    saveStatus.textContent = "✍️ Typing...";
-    saveStatus.style.color = "#888";
+    if (saveStatus) {
+        saveStatus.textContent = "✍️ Typing...";
+        saveStatus.style.color = "#888";
+    }
     clearTimeout(autoSaveTimeout);
     autoSaveTimeout = setTimeout(() => {
         localStorage.setItem('notepad_online_content', editor.innerHTML);
-        saveStatus.textContent = "💾 Auto-saved";
-        saveStatus.style.color = "#28a745";
+        if (saveStatus) {
+            saveStatus.textContent = "💾 Auto-saved";
+            saveStatus.style.color = "#28a745";
+        }
     }, 1000);
 }
 
 function toggleDarkMode() {
     document.body.classList.toggle('dark-mode');
     const btn = document.getElementById('dark-btn');
-    btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode" : "🌙 Dark Mode";
+    if (btn) btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode" : "🌙 Dark Mode";
 }
 
 function toggleMarkdown() {
     isMarkdownMode = !isMarkdownMode;
     const btn = document.getElementById('md-btn');
     if (isMarkdownMode) {
-        preview.classList.remove('hidden');
-        btn.textContent = "📝 Hide Preview";
+        if (preview) preview.classList.remove('hidden');
+        if (btn) btn.textContent = "📝 Hide Preview";
         renderMarkdown();
     } else {
-        preview.classList.add('hidden');
-        btn.textContent = "📝 Show Markdown";
+        if (preview) preview.classList.add('hidden');
+        if (btn) btn.textContent = "📝 Show Markdown";
     }
 }
 
@@ -280,7 +286,7 @@ function renderMarkdown() {
         .replace(/<\/ul>\s*<ul>/gim, '')
         .replace(/\n$/gim, '<br>')
         .replace(/\n/gim, '<br>');
-    preview.innerHTML = html;
+    if (preview) preview.innerHTML = html;
 }
 
 function speakText() {
@@ -297,32 +303,3 @@ function printDoc() {
 
 function findAndReplace() {
     const findText = document.getElementById('find-input').value;
-    const replaceText = document.getElementById('replace-input').value;
-    if (!findText) return alert("Enter text to find.");
-    
-    const regex = new RegExp(findText, 'g');
-    const currentHTML = editor.innerHTML;
-    if (!currentHTML.includes(findText)) return alert("Text phrase not found.");
-    
-    editor.innerHTML = currentHTML.replace(regex, replaceText);
-    updateMetrics();
-    triggerAutoSave();
-}
-
-function clearDoc() {
-localStorage.removeItem('notepad_online_content');
-updateMetrics();
-saveStatus.textContent = "🗑️ Cleared";
-}
-}
-function saveFile(type) {
-let content = type === 'txt' ? editor.innerText : editor.innerHTML;
-let filename = document.${type};
-let mimeType = type === 'txt' ? "text/plain" : "text/html";
-const blob = new Blob([content], { type: mimeType });
-const link = document.createElement('a');
-link.href = URL.createObjectURL(blob);
-link.download = filename;
-link.click();
-URL.revokeObjectURL(link.href);
-}

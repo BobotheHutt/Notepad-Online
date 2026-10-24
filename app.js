@@ -3,24 +3,36 @@ const preview = document.getElementById('preview');
 const wordCount = document.getElementById('word-count');
 const charCount = document.getElementById('char-count');
 const saveStatus = document.getElementById('save-status');
+const workspaceOuter = document.getElementById('workspace-outer');
+const goalContainer = document.getElementById('goal-progress-container');
+const goalBar = document.getElementById('goal-progress-bar');
+const goalStatus = document.getElementById('goal-status');
+const goalInput = document.getElementById('word-goal-input');
 
 let isMarkdownMode = false;
 let autoSaveTimeout;
 
-// Load document data from LocalStorage instantly on app startup
+// Core initialization layer
 window.addEventListener('DOMContentLoaded', () => {
     const savedContent = localStorage.getItem('notepad_online_content');
     if (savedContent) {
         editor.innerHTML = savedContent;
-        updateMetrics();
     }
+    
+    const savedGoal = localStorage.getItem('notepad_online_goal');
+    if (savedGoal) {
+        goalInput.value = savedGoal;
+    }
+
+    updateMetrics();
 });
 
-function format(command) {
-    document.execCommand(command, false, null);
+function format(command, value = null) {
+    document.execCommand(command, false, value);
     editor.focus();
 }
 
+// Typography control scripts
 function changeFontSize(action) {
     const currentSize = window.getComputedStyle(editor).fontSize;
     let newSize = parseFloat(currentSize);
@@ -29,7 +41,30 @@ function changeFontSize(action) {
     editor.style.fontSize = newSize + 'px';
 }
 
-// Multi-event update listener (Input changes + triggers debounce backup)
+function changeFontFamily(font) {
+    editor.style.fontFamily = font;
+}
+
+function changeTextColor(color) {
+    format('foreColor', color);
+}
+
+function changeHighlightColor(color) {
+    format('hiliteColor', color);
+}
+
+// Structural Document Views switcher
+function changeLayoutView(view) {
+    if (view === 'page') {
+        workspaceOuter.classList.remove('bg-notepad');
+        workspaceOuter.classList.add('bg-page');
+    } else {
+        workspaceOuter.classList.remove('bg-page');
+        workspaceOuter.classList.add('bg-notepad');
+    }
+}
+
+// Core text metrics calculations & tracker algorithms
 editor.addEventListener('input', () => {
     updateMetrics();
     triggerAutoSave();
@@ -40,11 +75,32 @@ function updateMetrics() {
     const text = editor.innerText.trim();
     const words = text === '' ? 0 : text.split(/\s+/).length;
     const chars = editor.innerText.length;
+    
     wordCount.textContent = `Words: ${words}`;
     charCount.textContent = `Characters: ${chars}`;
+
+    // Target Metric Goal Engine Processing
+    const goal = parseInt(goalInput.value);
+    if (goal > 0) {
+        localStorage.setItem('notepad_online_goal', goal);
+        goalContainer.classList.remove('hidden');
+        const percentage = Math.min((words / goal) * 100, 100);
+        goalBar.style.width = `${percentage}%`;
+        
+        if (percentage >= 100) {
+            goalStatus.textContent = "🏆 Goal Met!";
+            goalBar.style.backgroundColor = "#28a745";
+        } else {
+            goalStatus.textContent = `${Math.round(percentage)}% of Goal`;
+            goalBar.style.backgroundColor = "#007bff";
+        }
+    } else {
+        localStorage.removeItem('notepad_online_goal');
+        goalContainer.classList.add('hidden');
+        goalStatus.textContent = "";
+    }
 }
 
-// Debounced auto-save function (Saves 1 second after typing stops)
 function triggerAutoSave() {
     saveStatus.textContent = "✍️ Typing...";
     saveStatus.style.color = "#888";
@@ -62,7 +118,6 @@ function toggleDarkMode() {
     btn.textContent = document.body.classList.contains('dark-mode') ? "☀️ Light Mode" : "🌙 Dark Mode";
 }
 
-// Side-by-Side Markdown Panel System Toggle
 function toggleMarkdown() {
     isMarkdownMode = !isMarkdownMode;
     const btn = document.getElementById('md-btn');
@@ -76,33 +131,22 @@ function toggleMarkdown() {
     }
 }
 
-// Simple, regex-powered native Markdown text parser
 function renderMarkdown() {
     let rawText = editor.innerText;
-    
-    // Escape standard layout components
     let html = rawText
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
-        // Headings (# Header)
         .replace(/^### (.*$)/gim, '<h3>$1</h3>')
         .replace(/^## (.*$)/gim, '<h2>$1</h2>')
         .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-        // Bold (**text**)
         .replace(/\*\*(.*)\*\*/gim, '<b>$1</b>')
-        // Italics (*text*)
         .replace(/\*(.*)\*/gim, '<i>$1</i>')
-        // Inline code blocks (`code`)
         .replace(/`(.*?)`/gim, '<code>$1</code>')
-        // Unordered List line match (- list item)
         .replace(/^\- (.*$)/gim, '<ul><li>$1</li></ul>')
-        // Cleanup nested layout list tags 
         .replace(/<\/ul>\s*<ul>/gim, '')
-        // Formatting paragraphs with clean linebreaks
         .replace(/\n$/gim, '<br>')
         .replace(/\n/gim, '<br>');
-
     preview.innerHTML = html;
 }
 

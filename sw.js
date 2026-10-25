@@ -1,9 +1,9 @@
-/* Notepad Online — offline support.
+/* Noteshack — offline support.
    The app's own files are fetched fresh whenever there is a connection (so an
    update shows up on the next load, not some loads later) and served from the
    cache only when offline. The large libraries under vendor/ never change for
    a given version, so they are served from the cache first. */
-const CACHE = 'notepad-online-v25';
+const CACHE = 'noteshack-v26';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
   './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/scanfont.js', './js/app.js'
@@ -15,7 +15,8 @@ self.addEventListener('install', (e) => {
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys()
-    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+    // only the app's own old copies: the downloaded fonts (np-fonts-…) stay
+    .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && /^(notepad-online|noteshack)-v/.test(k)).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
 

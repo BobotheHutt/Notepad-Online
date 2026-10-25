@@ -1,4 +1,4 @@
-/* Notepad Online — fonts made from a scan's own letters.
+/* Noteshack — fonts made from a scan's own letters.
 
    Like Acrobat's ClearScan: every copy of a letter cut from the scan is
    laid over the others and averaged, which takes away the scan's noise;
@@ -241,9 +241,9 @@
     font.names.fontFamily = { en: name };
     font.names.fullName = { en: name + ' ' + sub };
     font.names.postScriptName = { en: ps + '-' + sub.replace(/[^A-Za-z0-9]/g, '') };
-    font.names.uniqueID = { en: ps + '-' + sub.replace(/[^A-Za-z0-9]/g, '') + ';Notepad Online' };
+    font.names.uniqueID = { en: ps + '-' + sub.replace(/[^A-Za-z0-9]/g, '') + ';Noteshack' };
     font.names.version = { en: 'Version 1.0' };
-    font.names.description = { en: 'Made by Notepad Online from letters in a scanned page, on a modified copy of a font under the license below.' };
+    font.names.description = { en: 'Made by Noteshack from letters in a scanned page, on a modified copy of a font under the license below.' };
   }
 
   function build(baseBytes, samples, name) {
@@ -293,7 +293,7 @@
     delete font.tables.gsub;
     // every glyph named, as the font writer expects
     for (let i = 0; i < font.glyphs.length; i++) { const g = font.glyphs.get(i); if (!g.name) g.name = i ? 'g' + i : '.notdef'; }
-    rename(font, name || 'Notepad Scan');
+    rename(font, name || 'Noteshack Scan');
     return { bytes: font.toArrayBuffer(), replaced };
   }
 

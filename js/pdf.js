@@ -1,4 +1,4 @@
-/* Notepad Online — PDF editor.
+/* Noteshack — PDF editor.
    PDF.js draws the pages; edits live as a list of items over them (text,
    boxes, ink, images, cover patches for replaced text) and pdf-lib writes them
    into the file only on download. The original bytes are never changed, so
@@ -3041,7 +3041,7 @@
       const [id, weight, style] = key.split(':');
       try {
         const base = await NpFonts.baseBytes({ id, weight: +weight, style });
-        const r = NpScanFont.build(base, per, 'Notepad Scan ' + (Object.keys(rec.scanFonts).length + 1));
+        const r = NpScanFont.build(base, per, 'Noteshack Scan ' + (Object.keys(rec.scanFonts).length + 1));
         if (r) rec.scanFonts[key] = r.bytes;
       } catch (e) { /* this style keeps its matched font */ }
       await new Promise((res) => setTimeout(res, 0));

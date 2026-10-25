@@ -1,4 +1,4 @@
-/* Notepad Online — minimal ZIP reader/writer, enough for .docx.
+/* Noteshack — minimal ZIP reader/writer, enough for .docx.
    Reading inflates with the browser's DecompressionStream; writing stores
    entries uncompressed (valid for Word, and needs no compressor). */
 (function () {

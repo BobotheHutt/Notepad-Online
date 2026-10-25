@@ -1,4 +1,4 @@
-/* Notepad Online — HTML sanitizer and color helpers.
+/* Noteshack — HTML sanitizer and color helpers.
    Everything that enters the editor from outside (paste, open, import, the
    saved copy in storage) passes through NpSanitize.html first. */
 (function () {

@@ -1,4 +1,4 @@
-/* Notepad Online — Word (.docx) export and import.
+/* Noteshack — Word (.docx) export and import.
    NpDocx.export(editorEl, opts) → Promise<Blob>
    NpDocx.import(arrayBuffer)    → Promise<string> (HTML; sanitize before use) */
 (function () {
@@ -455,7 +455,7 @@
     const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     const core = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
-      '<dc:title>' + x(o.title) + '</dc:title><dc:creator>Notepad Online</dc:creator>' +
+      '<dc:title>' + x(o.title) + '</dc:title><dc:creator>Noteshack</dc:creator>' +
       '<dcterms:created xsi:type="dcterms:W3CDTF">' + now + '</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">' + now + '</dcterms:modified>' +
       '</cp:coreProperties>';
 

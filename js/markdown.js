@@ -1,4 +1,4 @@
-/* Notepad Online — Markdown in and out.
+/* Noteshack — Markdown in and out.
    NpMarkdown.toHtml(md)   → HTML (run it through NpSanitize before use)
    NpMarkdown.fromDom(el)  → Markdown for the editor's content */
 (function () {

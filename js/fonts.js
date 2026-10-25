@@ -1,4 +1,4 @@
-/* Notepad Online — finding and fetching the font a PDF was set in.
+/* Noteshack — finding and fetching the font a PDF was set in.
 
    NpFonts.fromName(baseFont)   the PDF names its font: find that family (or
                                 its free metric twin, for Arial, Times, Calibri…)

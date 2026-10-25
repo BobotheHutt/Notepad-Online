@@ -1,4 +1,4 @@
-/* Notepad Online — document storage.
+/* Noteshack — document storage.
    IndexedDB holds documents and their version history. It has room for
    images (localStorage tops out around 5 MB). If IndexedDB is unavailable
    (some private windows), everything lives in memory for the session and

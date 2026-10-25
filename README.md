@@ -1,4 +1,4 @@
-# Notepad Online
+# Noteshack
 
 A fast, private word processor and PDF editor that runs entirely in your
 browser. No account, no server, no tracking. Your documents stay on your
@@ -33,7 +33,7 @@ and lets you edit and sign PDFs.
 - **Scanned pages become editable text (OCR)**: click Read text and the app reads the page, takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
-  - **The scan's own letters** (like Acrobat's ClearScan): every copy of a letter on the page is cut out, averaged to take away the scan's noise, traced into a smooth outline and built into a font, so redrawn text, and anything you type, has the scanned letters' own shapes. Letters the page does not show come from the matched font. Pages → Use the scan's own letters, or the matched fonts switches between the two. These fonts are modified copies of free (Open Font License) fonts, so they go by their own names (Notepad Scan 1, 2…) and keep the original license notice, as that license asks.
+  - **The scan's own letters** (like Acrobat's ClearScan): every copy of a letter on the page is cut out, averaged to take away the scan's noise, traced into a smooth outline and built into a font, so redrawn text, and anything you type, has the scanned letters' own shapes. Letters the page does not show come from the matched font. Pages → Use the scan's own letters, or the matched fonts switches between the two. These fonts are modified copies of free (Open Font License) fonts, so they go by their own names (Noteshack Scan 1, 2…) and keep the original license notice, as that license asks.
   - Every word of a line is redrawn together, so a line looks of a piece; words OCR was unsure of are underlined to check.
   - **Paragraphs rewrap**: click any line of a paragraph and the whole paragraph opens for editing; when you finish, the text flows again from your change (bold and italic words keep their style), lines before it stay as they were, and a paragraph that needs another line gets one below.
   - **Handwriting is left alone**: writing OCR reads unsurely, and marks like check boxes, stay exactly as scanned and are never retyped. If a line was retyped that should not have been, select it and click **Show as scanned**. To clear a filled-in form, drag a box over the writing with Edit text: only the pen strokes go, the form's fill-in lines, printed slashes and printed text stay, and selecting the erased area shows each piece, to click to keep or erase. White-out clears everything in an area.
@@ -89,7 +89,7 @@ Everything else, text recognition included, runs on the device.
 
 ## Disclaimer
 
-Notepad Online is provided as is, without warranty of any kind. Text
+Noteshack is provided as is, without warranty of any kind. Text
 recognition and font matching can be wrong: check a PDF before sending,
 submitting or signing it, and keep backups of anything important.
 
@@ -99,12 +99,12 @@ in or signed.
 
 ## License
 
-Notepad Online's own code is released under the [MIT License](LICENSE).
+Noteshack's own code is released under the [MIT License](LICENSE).
 The libraries in `vendor/` keep their own licenses, listed below.
 
 ## Credits and licenses
 
-Notepad Online uses these open-source projects, kept unmodified in `vendor/`
+Noteshack uses these open-source projects, kept unmodified in `vendor/`
 with their license texts:
 
 - [PDF.js](https://mozilla.github.io/pdf.js/) (Mozilla), Apache License 2.0
@@ -116,7 +116,7 @@ with their license texts:
 Fonts come from [Fontsource](https://fontsource.org) when needed and are
 not stored in this repository; each is under its own free license (SIL Open
 Font License or Apache License 2.0). Fonts made from a scan's letters are
-changed copies of those fonts, so they are renamed (Notepad Scan 1, 2…) and
+changed copies of those fonts, so they are renamed (Noteshack Scan 1, 2…) and
 keep their license notices, as the Open Font License asks.
 
 ## Trademarks
@@ -124,7 +124,7 @@ keep their license notices, as the Open Font License asks.
 Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and
 Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks
 of The Monotype Corporation. They are named only to describe compatibility;
-Notepad Online is not affiliated with or endorsed by them.
+Noteshack is not affiliated with or endorsed by them.
 
 ## Running it
 
@@ -133,7 +133,13 @@ It is a static site with no build step and no dependencies.
 - **Locally:** open `index.html` in a browser. Offline install needs it
   served over http(s), for example `python3 -m http.server`.
 - **GitHub Pages:** Settings → Pages → Deploy from a branch → `main`, root folder.
-  It will be live at `https://<your-username>.github.io/Notepad-Online/`.
+  The live site is <https://noteshack.org>, set by the `CNAME` file and the
+  domain's DNS records (four A records and four AAAA records for GitHub Pages,
+  and a `www` CNAME to `bobothehutt.github.io`).
+
+Each web address keeps its own saved documents, so after moving the site to
+a new address, open the old one, use **File → Back up all documents**, and
+restore that file at the new address.
 
 ## Files
 

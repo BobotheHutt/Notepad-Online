@@ -1,4 +1,4 @@
-/* Notepad Online — the app.
+/* Noteshack — the app.
    Sections: helpers · settings · documents · editor core · toolbar state ·
    menus · popovers · dialogs · find & replace · images · tables · links ·
    files · sidebar · status · speech · views · boot */
@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-25';
+  const APP_VERSION = '2026.10.25-26';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -337,7 +337,7 @@
     if (!current) return;
     const t = displayTitle(current);
     if (document.activeElement !== titleInput) titleInput.value = current.titleAuto ? (autoTitle(current.text) || '') : current.title;
-    document.title = t + ' — Notepad Online';
+    document.title = t + ' — Noteshack';
   }
 
   titleInput.addEventListener('input', () => {
@@ -346,7 +346,7 @@
     current.title = v;
     current.titleAuto = !v;
     markDirty();
-    document.title = displayTitle(current) + ' — Notepad Online';
+    document.title = displayTitle(current) + ' — Noteshack';
   });
   titleInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === 'Escape') { e.preventDefault(); placeCaretAtStart(); }
@@ -1655,7 +1655,7 @@
     let persisted = false;
     try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; } catch (e) { /* not available */ }
     const body = el('div', { class: 'stack about' },
-      el('p', {}, 'Notepad Online is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.'),
+      el('p', {}, 'Noteshack is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.'),
       el('ul', { class: 'facts' },
         el('li', {}, el('strong', {}, String(docs.length)), ' document' + (docs.length === 1 ? '' : 's') + (usage ? ' · ' + usage : '')),
         el('li', {}, NpStore.persistent ? (persisted ? 'Storage is marked persistent: the browser will not clear it to free space.' : 'Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.') : 'This browser is not allowing storage (private window?). Work is kept only until you close the tab.'),
@@ -1666,7 +1666,7 @@
         el('p', {}, 'There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.'),
         el('p', {}, 'Two things are fetched from the internet: when a PDF needs a font, the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document; and pictures in your documents that link to a web address are loaded from that address.')),
       el('details', { class: 'about-more' }, el('summary', {}, 'Disclaimer'),
-        el('p', {}, 'Notepad Online is provided as is, without warranty of any kind. Text recognition and font matching can be wrong: check a PDF before you send, submit or sign it. Keep backups of anything important.'),
+        el('p', {}, 'Noteshack is provided as is, without warranty of any kind. Text recognition and font matching can be wrong: check a PDF before you send, submit or sign it. Keep backups of anything important.'),
         el('p', {}, 'You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.')),
       el('details', { class: 'about-more' }, el('summary', {}, 'Credits and licenses'),
         el('ul', { class: 'facts' },
@@ -1675,9 +1675,9 @@
           el('li', {}, 'Tesseract.js, Tesseract OCR and its English data, Apache License 2.0: read text on scans'),
           el('li', {}, 'opentype.js, MIT License: builds fonts from a scan’s letters'),
           el('li', {}, 'Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks')),
-        el('p', {}, 'Notepad Online’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.')),
+        el('p', {}, 'Noteshack’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.')),
       el('details', { class: 'about-more' }, el('summary', {}, 'Trademarks'),
-        el('p', {}, 'Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Notepad Online is not affiliated with or endorsed by them.')));
+        el('p', {}, 'Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Noteshack is not affiliated with or endorsed by them.')));
     dialog({ title: 'About and storage', body });
   }
 
@@ -2195,7 +2195,7 @@
         else if (file.type.startsWith('text/') || ['txt', 'text', 'csv', 'log', ''].includes(ext)) {
           const text = (await file.text()).replace(/\r\n?/g, '\n');
           html = text.split('\n').map((l) => '<p>' + (escapeHtml(l) || '<br>') + '</p>').join('');
-        } else { toast('“' + file.name + '” is not a file type Notepad can open.'); continue; }
+        } else { toast('“' + file.name + '” is not a file type Noteshack can open.'); continue; }
         last = await createDoc(html || '<p><br></p>', name, { keepFocus: true });
       } catch (e) {
         toast('Could not open “' + file.name + '”: ' + (e.message || e), 6000);
@@ -2233,7 +2233,7 @@
     const all = (await NpStore.allDocs()).map((d) => (d.type === 'pdf' ? Object.assign({}, d, { sources: d.sources.map(bufToB64) }) : d));
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);
-    download(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'notepad-backup-' + stamp + '.json');
+    download(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'noteshack-backup-' + stamp + '.json');
     toast('Backup downloaded (' + all.length + ' document' + (all.length === 1 ? '' : 's') + ')');
   }
 
@@ -2268,8 +2268,9 @@
 
   async function restoreBackupFile(file) {
     let data;
-    try { data = JSON.parse(await file.text()); } catch (e) { toast('That is not a Notepad backup file.'); return; }
-    if (!data || data.app !== 'notepad-online' || !Array.isArray(data.docs)) { toast('That is not a Notepad backup file.'); return; }
+    try { data = JSON.parse(await file.text()); } catch (e) { toast('That is not a Noteshack backup file.'); return; }
+    // (the backup format keeps the app's first name, so older backups still load)
+    if (!data || data.app !== 'notepad-online' || !Array.isArray(data.docs)) { toast('That is not a Noteshack backup file.'); return; }
     let added = 0;
     let skipped = 0;
     for (const raw of data.docs) {

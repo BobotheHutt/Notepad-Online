@@ -1,7 +1,7 @@
 {
-  "name": "Notepad Online",
-  "short_name": "Notepad",
-  "description": "A fast, private word processor that works offline.",
+  "name": "Noteshack",
+  "short_name": "Noteshack",
+  "description": "A fast, private word processor and PDF editor that works offline.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

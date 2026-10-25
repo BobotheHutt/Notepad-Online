@@ -1,4 +1,4 @@
-/* Notepad Online — icon set (24px stroke icons, injected into [data-icon]). */
+/* Noteshack — icon set (24px stroke icons, injected into [data-icon]). */
 (function () {
   'use strict';
 

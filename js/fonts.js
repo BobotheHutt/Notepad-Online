@@ -52,8 +52,25 @@
   const files = new Map();  // url → Promise<ArrayBuffer>
   const faces = new Map();  // css family → Promise<FontFace>
 
+  // Fonts built from a scan's own letters (see NpPdf), standing in for the
+  // font they were built on, by key "id:weight:style".
+  const custom = new Map(); // key → { bytes, n } (n: a version, for a fresh face name)
+  const keyOf = (ref) => ref.id + ':' + ref.weight + ':' + (ref.style || 'normal');
+  function setCustom(map) {
+    const next = new Map();
+    for (const [k, b] of Object.entries(map || {})) {
+      if (!(b instanceof ArrayBuffer) || !b.byteLength) continue;
+      const old = custom.get(k);
+      next.set(k, old && old.bytes === b ? old : { bytes: b, n: (old ? old.n : 0) + 1 });
+    }
+    custom.clear();
+    for (const [k, v] of next) custom.set(k, v);
+  }
+  const customOf = (ref) => custom.get(keyOf(ref)) || null;
+
   function cssFamily(ref) {
-    return 'np-' + ref.id + '-' + ref.weight + (ref.style === 'italic' ? 'i' : '');
+    const c = customOf(ref);
+    return 'np-' + ref.id + '-' + ref.weight + (ref.style === 'italic' ? 'i' : '') + (c ? '-scan' + c.n : '');
   }
 
   function fileUrl(ref, subset, ext) {
@@ -100,8 +117,9 @@
   async function load(ref) {
     const fam = cssFamily(ref);
     if (!faces.has(fam)) {
+      const c = customOf(ref);
       faces.set(fam, (async () => {
-        const buf = await cachedFetch(fileUrl(ref));
+        const buf = c ? c.bytes.slice(0) : await cachedFetch(fileUrl(ref));
         const face = new FontFace(fam, buf, { weight: String(ref.weight), style: ref.style || 'normal' });
         await face.load();
         document.fonts.add(face);
@@ -116,8 +134,11 @@
   /** Font file bytes for embedding in a PDF. WOFF, not WOFF2: WOFF2 stores
    *  glyph outlines transformed, and the PDF subsetter writes them out blank. */
   function bytes(ref, subset) {
-    return cachedFetch(fileUrl(ref, subset, 'woff'));
+    const c = customOf(ref);
+    return c ? Promise.resolve(c.bytes.slice(0)) : cachedFetch(fileUrl(ref, subset, 'woff'));
   }
+  // the downloaded font itself, never a stand-in (to build a stand-in from)
+  const baseBytes = (ref) => cachedFetch(fileUrl(ref, null, 'woff'));
 
   function label(ref) {
     const m = CATALOG[ref.id];
@@ -323,5 +344,5 @@
     return Object.assign({}, best.ref, { score: Math.round(best.s * 1000) / 1000, ranking: second.slice(0, 5).map((r) => r.ref.id + ' ' + r.ref.weight + ' ' + r.s.toFixed(3)) });
   }
 
-  window.NpFonts = { CATALOG, load, bytes, label, cssFamily, fromName, identify, score, parseName };
+  window.NpFonts = { CATALOG, load, bytes, baseBytes, setCustom, keyOf, label, cssFamily, fromName, identify, score, parseName };
 })();

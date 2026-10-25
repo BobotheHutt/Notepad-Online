@@ -280,7 +280,9 @@
     if (rec.ocr && Object.values(rec.ocr).some((o) => !o.rules)) {
       api.toast('This PDF’s text was read by an older version of the app. Click “Read text” again for better edits; for an edit made before, select it and choose Restore original.', 9000);
     }
-    // matched fonts from earlier sessions: load them, then redraw with them
+    // matched fonts from earlier sessions (and those made from the scan's
+    // letters): load them, then redraw with them
+    useScanFonts();
     const used = rec.items.flatMap(itemFonts);
     if (used.length && typeof NpFonts !== 'undefined') {
       Promise.all(used.map((f) => NpFonts.load(f).catch(() => null))).then(() => { if (S.rec === rec) renderAllOverlays(); });
@@ -644,7 +646,7 @@
           'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'Check this word: click to compare it with the scan' : null,
           style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(r.st).replace(/"/g, "'") +
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
-            (r.scaleX < 1 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
+            (Math.abs(r.scaleX - 1) > 0.002 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
         });
         if (it.smallCaps) d.append(...scParts(r.text, it.smallCaps).map((q) => (q.small ? el('span', { style: 'font-size:' + q.k + 'em' }, q.t) : document.createTextNode(q.t))));
         else d.textContent = r.text;
@@ -2569,6 +2571,7 @@
       }
     }
     if (S.rec.items.some((i) => i.page === info.entry.uid && i.conv)) return 0;
+    try { await buildScanFonts(out, c, K); } catch (e) { /* the matched fonts are used as they are */ }
     groupParagraphs(out);
     S.rec.items.push(...out);
     if (out.length) {
@@ -2871,7 +2874,8 @@
       // like ordinary text
       const x0 = i < p ? o.x0 : flow;
       // an unchanged word never grows past the room it had on the page
-      const sx = o ? Math.max(0.85, Math.min(1, ((o.x1 - o.x0) * 1.02) / (ink.w || 1))) : fitNew;
+      // an unchanged word fills exactly the room it had on the page (within reason)
+      const sx = o ? clamp((o.x1 - o.x0) / (ink.w || 1), 0.85, 1.12) : fitNew;
       runs.push({ text: t, x0, w: ink.w * sx, lsb: ink.lsb, sx, o, v });
       end = x0 + ink.w * sx;
     });
@@ -2889,6 +2893,150 @@
     return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, o: r.o, v: r.v, st: runStyle(it, r.v) }));
   }
 
+  /* ----- the scan's own letters ----- */
+
+  // The letters of the words OCR read surely, cut from a render of the page
+  // (k pixels per point), by the font each is drawn in: the ink of a word
+  // split into pieces, joined where one stands over another (the dot of an
+  // i, an accent), and kept only when there is one piece per letter.
+  function letterSamples(items, c, k) {
+    const g = c.getContext('2d', { willReadFrequently: true });
+    const out = {}; // font key → { char → [sample] }
+    for (const it of items) {
+      if (!it.font || it.smallCaps) continue;
+      const bgRgb = [1, 3, 5].map((q) => parseInt((it.bg || '#ffffff').slice(q, q + 2), 16));
+      const fgRgb = [1, 3, 5].map((q) => parseInt((it.color || '#000000').slice(q, q + 2), 16));
+      const bgL = bgRgb[0] * 0.299 + bgRgb[1] * 0.587 + bgRgb[2] * 0.114;
+      const fgL = fgRgb[0] * 0.299 + fgRgb[1] * 0.587 + fgRgb[2] * 0.114;
+      if (bgL - fgL < 60) continue;
+      for (const w of it.words) {
+        const chars = [...w.t];
+        if (w.c != null && w.c < 90) continue;
+        if (chars.length > 24) continue;
+        const pad = 2;
+        const X0 = Math.max(0, Math.floor(w.x0 * k) - pad);
+        const Y0 = Math.max(0, Math.floor((Math.min(w.y0, it.base - it.size)) * k) - pad);
+        const X1 = Math.min(c.width, Math.ceil(w.x1 * k) + pad);
+        const Y1 = Math.min(c.height, Math.ceil(Math.max(w.y1, it.base + it.size * 0.3) * k) + pad);
+        const W = X1 - X0;
+        const H = Y1 - Y0;
+        if (W < 4 || H < 4) continue;
+        const d = g.getImageData(X0, Y0, W, H).data;
+        const ink = new Float32Array(W * H);
+        for (let i = 0; i < W * H; i++) ink[i] = clamp((bgL - (d[i * 4] * 0.299 + d[i * 4 + 1] * 0.587 + d[i * 4 + 2] * 0.114)) / (bgL - fgL), 0, 1);
+        // the pieces, by flood fill over clearly-ink pixels
+        const lab = new Int32Array(W * H).fill(-1);
+        const boxes = [];
+        for (let s0 = 0; s0 < W * H; s0++) {
+          if (ink[s0] < 0.5 || lab[s0] >= 0) continue;
+          const id = boxes.length;
+          const b = { x0: W, x1: 0, y0: H, y1: 0, n: 0, ids: [id] };
+          const st = [s0];
+          lab[s0] = id;
+          while (st.length) {
+            const i = st.pop();
+            const x = i % W;
+            const y = (i / W) | 0;
+            b.n++;
+            if (x < b.x0) b.x0 = x; if (x > b.x1) b.x1 = x; if (y < b.y0) b.y0 = y; if (y > b.y1) b.y1 = y;
+            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+              const j = ny * W + nx;
+              if (ink[j] >= 0.5 && lab[j] < 0) { lab[j] = id; st.push(j); }
+            }
+          }
+          boxes.push(b);
+        }
+        // specks are no letter; pieces one above the other are one letter
+        let parts = boxes.filter((b) => b.n >= 3);
+        parts.sort((a, b) => a.x0 - b.x0);
+        const merged = [];
+        for (const b of parts) {
+          const m = merged.find((q) => Math.min(q.x1, b.x1) - Math.max(q.x0, b.x0) >= Math.min(q.x1 - q.x0, b.x1 - b.x0) * 0.6);
+          if (m) { m.x0 = Math.min(m.x0, b.x0); m.x1 = Math.max(m.x1, b.x1); m.y0 = Math.min(m.y0, b.y0); m.y1 = Math.max(m.y1, b.y1); m.ids.push(...b.ids); }
+          else merged.push(Object.assign({}, b, { ids: b.ids.slice() }));
+        }
+        merged.sort((a, b) => a.x0 - b.x0);
+        // the word's box may hold a neighbor's edge: only pieces inside the word count
+        const inside = merged.filter((b) => (b.x0 + b.x1) / 2 + X0 >= w.x0 * k - 1 && (b.x0 + b.x1) / 2 + X0 <= w.x1 * k + 1);
+        if (inside.length !== chars.length) continue;
+        const key = NpFonts.keyOf(runStyle(it, w.v).font);
+        const per = out[key] || (out[key] = {});
+        inside.forEach((b, i) => {
+          const ch = chars[i];
+          const mine = new Set(b.ids);
+          const x0 = Math.max(0, b.x0 - 1);
+          const y0 = Math.max(0, b.y0 - 1);
+          const x1 = Math.min(W - 1, b.x1 + 1);
+          const y1 = Math.min(H - 1, b.y1 + 1);
+          const sw = x1 - x0 + 1;
+          const sh = y1 - y0 + 1;
+          const s = new Float32Array(sw * sh);
+          for (let y = y0; y <= y1; y++) {
+            for (let x = x0; x <= x1; x++) {
+              const i2 = y * W + x;
+              let near = mine.has(lab[i2]);
+              // the soft edge: faint pixels next to this letter's ink, and no other's
+              if (!near && lab[i2] < 0) {
+                for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1 && !near; dx++) {
+                  const nx = x + dx;
+                  const ny = y + dy;
+                  if (nx >= 0 && ny >= 0 && nx < W && ny < H && mine.has(lab[ny * W + nx])) near = true;
+                }
+              }
+              if (near) s[(y - y0) * sw + (x - x0)] = ink[i2];
+            }
+          }
+          (per[ch] || (per[ch] = [])).push({ ink: s, w: sw, h: sh, base: it.base * k - (Y0 + y0), em: it.size * k });
+        });
+      }
+    }
+    return out;
+  }
+
+  let scanFontLib = null;
+  async function buildScanFonts(items, c, k) {
+    if (typeof NpFonts === 'undefined' || S.rec.scanFontsOff) return;
+    const rec = S.rec;
+    const all = letterSamples(items, c, k);
+    rec.scanFonts = rec.scanFonts || {};
+    const todo = Object.entries(all).filter(([key, per]) => !rec.scanFonts[key] && Object.values(per).some((l) => l.length >= 2));
+    if (!todo.length) return;
+    if (!scanFontLib) scanFontLib = Promise.all([loadScript(VENDOR + 'opentype/opentype.min.js'), loadScript('js/scanfont.js')]);
+    await scanFontLib;
+    api.status('Making fonts from the scan’s letters…', 'pending');
+    for (const [key, per] of todo) {
+      const [id, weight, style] = key.split(':');
+      try {
+        const base = await NpFonts.baseBytes({ id, weight: +weight, style });
+        const r = NpScanFont.build(base, per);
+        if (r) rec.scanFonts[key] = r.bytes;
+      } catch (e) { /* this style keeps its matched font */ }
+      await new Promise((res) => setTimeout(res, 0));
+    }
+    useScanFonts();
+    await Promise.all(items.flatMap(itemFonts).map((f) => NpFonts.load(f).catch(() => null)));
+  }
+
+  // The scan's letters stand in for the matched fonts (unless turned off).
+  function useScanFonts() {
+    if (typeof NpFonts === 'undefined' || !S.rec) return;
+    NpFonts.setCustom(S.rec.scanFontsOff ? {} : S.rec.scanFonts || {});
+  }
+
+  async function toggleScanFonts() {
+    if (!S.rec) return;
+    if (!S.rec.scanFonts || !Object.keys(S.rec.scanFonts).length) { api.toast('This document has no letters taken from a scan yet. Click “Read text” on a scanned page first.', 5000); return; }
+    S.rec.scanFontsOff = !S.rec.scanFontsOff;
+    useScanFonts();
+    await Promise.all(S.rec.items.flatMap(itemFonts).map((f) => NpFonts.load(f).catch(() => null)));
+    renderAllOverlays();
+    changed();
+    api.toast(S.rec.scanFontsOff ? 'Using the matched fonts as they are.' : 'Using the scan’s own letter shapes.', 3000);
+  }
+
   // How much narrower the scan's letters are than the matched font's, for a
   // line: its words are fitted to their places on the page by it, and new
   // words take it too, so a line is of a piece (and the editing box can show
@@ -2896,7 +3044,7 @@
   function lineFit(it) {
     if (!it.words.length) return it.fitX || 1;
     const f = it.words.filter((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2)
-      .map((w) => clamp(((w.x1 - w.x0) * 1.02) / (measureRun(w.t, runStyle(it, w.v), it.smallCaps).w || 1), 0.85, 1));
+      .map((w) => clamp((w.x1 - w.x0) / (measureRun(w.t, runStyle(it, w.v), it.smallCaps).w || 1), 0.85, 1.12));
     return median(f) || 1;
   }
 
@@ -2923,7 +3071,7 @@
         (g ? ';width:' + px((g.right - g.left) / f + top.size * 0.2) + ';text-indent:' + px((g.first - g.left) / f) : '') +
         ';line-height:' + px(lineH) + ';font-size:' + px(top.size) + ';font-family:' + familyCss(top).replace(/"/g, "'") + ';color:' + top.color +
         ';font-weight:' + weight(top) + ';font-style:' + (top.italic ? 'italic' : 'normal') + (top.smallCaps ? ';font-variant:small-caps' : '') +
-        (gap ? ';word-spacing:' + px(gap / f - space) : '') + (f < 0.999 ? ';transform:scaleX(' + f.toFixed(3) + ');transform-origin:0 0' : '')
+        (gap ? ';word-spacing:' + px(gap / f - space) : '') + (Math.abs(f - 1) > 0.002 ? ';transform:scaleX(' + f.toFixed(3) + ');transform-origin:0 0' : '')
     });
     let first = true;
     for (const l of lines) {
@@ -4323,7 +4471,11 @@
             if (typeof fontkit === 'undefined') await loadScript(VENDOR + 'pdf-lib/fontkit.umd.min.js');
             if (!S.fontkitOn) { base.registerFontkit(fontkit); S.fontkitOn = base; }
             if (S.fontkitOn !== base) base.registerFontkit(fontkit);
-            fonts[key] = await base.embedFont(await NpFonts.bytes(it.font), { subset: true });
+            // a font made from the scan's letters (a CFF font) goes in whole:
+            // the subsetter breaks that kind
+            const scanMade = /-scan\d+$/.test(NpFonts.cssFamily(it.font));
+            fonts[key] = await base.embedFont(await NpFonts.bytes(it.font), { subset: !scanMade });
+            if (scanMade) cffFonts.push(fonts[key]);
           } catch (e) { fonts[key] = null; }
         }
         if (fonts[key]) return fonts[key];
@@ -4338,6 +4490,7 @@
       return fonts[n];
     };
     const images = new Map();
+    const cffFonts = [];
     let replaced = 0;
     let erased = 0;
     let coveredNothing = 0;
@@ -4495,14 +4648,14 @@
             ? await fontFor(Object.assign({}, r.st, { font: null })) : matched;
           let safe = '';
           for (const ch of r.text) { try { font.encodeText(ch); safe += ch; } catch (e) { safe += '?'; replaced++; } }
-          if (r.scaleX < 1) page.pushOperators(L.pushGraphicsState(), L.setCharacterSqueeze(r.scaleX * 100));
+          if (Math.abs(r.scaleX - 1) > 0.002) page.pushOperators(L.pushGraphicsState(), L.setCharacterSqueeze(r.scaleX * 100));
           let xd = r.x;
           for (const q of it.smallCaps ? scParts(safe, it.smallCaps) : [{ t: safe, k: 1 }]) {
             const [x, y] = toPdf(R, box, xd, r.base);
             page.drawText(q.t, { x, y, size: it.size * q.k, font, color: hexRgb(it.color), rotate: L.degrees(R) });
             xd += font.widthOfTextAtSize(q.t, it.size * q.k) * r.scaleX;
           }
-          if (r.scaleX < 1) page.pushOperators(L.popGraphicsState());
+          if (Math.abs(r.scaleX - 1) > 0.002) page.pushOperators(L.popGraphicsState());
           over = over || r.overflow;
         }
         if (over) overflowed++;
@@ -4541,6 +4694,27 @@
             page.drawText(safe, { x, y, size: it.size, font, color: hexRgb(it.color), rotate: L.degrees(R) });
           });
         }
+      }
+    }
+    // pdf-lib files every font it embeds whole as TrueType; those made from
+    // the scan's letters are CFF fonts, so their entries are put right
+    if (cffFonts.length) {
+      await base.flush();
+      const N = L.PDFName.of;
+      for (const f of cffFonts) {
+        try {
+          const dict = base.context.lookup(f.ref);
+          const cid = dict.lookup(N('DescendantFonts')).lookup(0);
+          cid.set(N('Subtype'), N('CIDFontType0'));
+          cid.delete(N('CIDToGIDMap'));
+          const fd = cid.lookup(N('FontDescriptor'));
+          const fileRef = fd.get(N('FontFile2'));
+          if (fileRef) {
+            base.context.lookup(fileRef).dict.set(N('Subtype'), N('OpenType'));
+            fd.delete(N('FontFile2'));
+            fd.set(N('FontFile3'), fileRef);
+          }
+        } catch (e) { /* left as embedded */ }
       }
     }
     const bytes = await base.save({ updateFieldAppearances: false });
@@ -4618,6 +4792,7 @@
     convert: convertCurrent,
     unconvert: unconvertCurrent,
     clearHandwriting,
+    toggleScanFonts,
     showOriginal: () => toggleOriginal(),
     copyText: copyPageText,
     addPages: () => $('#pdf-add-input').click(),

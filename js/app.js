@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-18';
+  const APP_VERSION = '2026.10.25-19';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1231,6 +1231,7 @@
     'pdf-unconvert': () => NpPdf.unconvert(),
     'pdf-original': () => NpPdf.showOriginal(),
     'pdf-clear-hand': () => NpPdf.clearHandwriting(),
+    'pdf-scan-fonts': () => NpPdf.toggleScanFonts(),
     'pdf-copy-text': () => NpPdf.copyText()
   };
 
@@ -2124,7 +2125,8 @@
     if (src.type === 'pdf') {
       const now = Date.now();
       const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
-        id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0))
+        id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
+        scanFonts: src.scanFonts ? Object.fromEntries(Object.entries(src.scanFonts).map(([k, b]) => [k, b instanceof ArrayBuffer ? b.slice(0) : b])) : undefined
       });
       await addRecord(copy);
       toast('Copy created');

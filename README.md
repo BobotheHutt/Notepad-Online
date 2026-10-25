@@ -33,6 +33,7 @@ and lets you edit and sign PDFs.
 - **Scanned pages become editable text (OCR)**: click Read text and the app reads the page, takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
+  - **The scan's own letters** (like Acrobat's ClearScan): every copy of a letter on the page is cut out, averaged to take away the scan's noise, traced into a smooth outline and built into a font, so redrawn text, and anything you type, has the scanned letters' own shapes. Letters the page does not show come from the matched font. Pages → Use the scan's own letters, or the matched fonts switches between the two.
   - Every word of a line is redrawn together, so a line looks of a piece; words OCR was unsure of are underlined to check.
   - **Paragraphs rewrap**: click any line of a paragraph and the whole paragraph opens for editing; when you finish, the text flows again from your change (bold and italic words keep their style), lines before it stay as they were, and a paragraph that needs another line gets one below.
   - **Handwriting is left alone**: writing OCR reads unsurely, writing beside it on the same line, and marks like check boxes, stay exactly as scanned. If OCR read some writing surely and retyped it, select the line and click **Handwriting** to put it back as written. To clear a filled-in form, click a piece of handwriting with Edit text and choose Erase handwriting, use Pages → Erase handwriting on this page, or drag a box around writing the app did not find. Only the pen strokes go: the form's fill-in lines, printed slashes and printed text stay, and selecting erased handwriting shows each piece, to click to keep or erase. The paper (or the dotted shading of a black-and-white scan) is filled in behind it.
@@ -93,7 +94,8 @@ js/docx.js             Word .docx import and export
 js/zip.js              the zip reading and writing .docx needs
 js/pdf.js              the PDF editor
 js/fonts.js            identifies and downloads the font a PDF was set in
-vendor/                PDF.js (shows pages) and pdf-lib (writes PDFs), loaded only for PDFs
+js/scanfont.js         builds a font from a scan's own letters
+vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans) and opentype.js (builds fonts from scans), loaded only when needed
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

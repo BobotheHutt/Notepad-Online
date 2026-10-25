@@ -3,10 +3,10 @@
    update shows up on the next load, not some loads later) and served from the
    cache only when offline. The large libraries under vendor/ never change for
    a given version, so they are served from the cache first. */
-const CACHE = 'notepad-online-v18';
+const CACHE = 'notepad-online-v19';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
-  './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/app.js'
+  './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/scanfont.js', './js/app.js'
 ];
 
 self.addEventListener('install', (e) => {

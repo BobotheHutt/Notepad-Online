@@ -8,5 +8,7 @@ Third-party libraries, unmodified:
               (4.0.0_best_int; Tesseract data is Apache-2.0). Apache-2.0. Reads
               text on scanned pages.
 
+- opentype/   opentype.js 1.3.4, MIT. Builds fonts from a scan's own letters.
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used.

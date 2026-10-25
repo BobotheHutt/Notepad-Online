@@ -6,7 +6,8 @@
    copy of the matched font, in place of its own letters. Letters the scan
    does not show keep the matched font's shapes.
 
-   NpScanFont.build(baseFontBytes, samples) → ArrayBuffer (an OpenType font)
+   NpScanFont.build(baseFontBytes, samples, name) → ArrayBuffer (an OpenType
+     font, renamed to name: a changed font does not keep the original's name)
      samples: { char: [{ ink: Float32Array (0 paper … 1 ink), w, h,
                          base: rows from the top to the baseline, em: pixels per em }] }
 
@@ -228,7 +229,24 @@
 
   /* ----- the font ----- */
 
-  function build(baseBytes, samples) {
+  // A changed font may not go by its original name (the Open Font License
+  // reserves some, like "Source"): it takes a name of its own. The
+  // copyright and license notices stay, as the license requires.
+  function rename(font, name) {
+    const ps = name.replace(/[^A-Za-z0-9]/g, '');
+    const sub = (font.names.fontSubfamily && font.names.fontSubfamily.en) || 'Regular';
+    for (const k of Object.keys(font.names)) {
+      if (!['copyright', 'license', 'licenseURL', 'fontSubfamily'].includes(k)) delete font.names[k];
+    }
+    font.names.fontFamily = { en: name };
+    font.names.fullName = { en: name + ' ' + sub };
+    font.names.postScriptName = { en: ps + '-' + sub.replace(/[^A-Za-z0-9]/g, '') };
+    font.names.uniqueID = { en: ps + '-' + sub.replace(/[^A-Za-z0-9]/g, '') + ';Notepad Online' };
+    font.names.version = { en: 'Version 1.0' };
+    font.names.description = { en: 'Made by Notepad Online from letters in a scanned page, on a modified copy of a font under the license below.' };
+  }
+
+  function build(baseBytes, samples, name) {
     if (typeof opentype === 'undefined') throw new Error('opentype.js is not loaded');
     const font = opentype.parse(baseBytes);
     const U = font.unitsPerEm;
@@ -275,6 +293,7 @@
     delete font.tables.gsub;
     // every glyph named, as the font writer expects
     for (let i = 0; i < font.glyphs.length; i++) { const g = font.glyphs.get(i); if (!g.name) g.name = i ? 'g' + i : '.notdef'; }
+    rename(font, name || 'Notepad Scan');
     return { bytes: font.toArrayBuffer(), replaced };
   }
 

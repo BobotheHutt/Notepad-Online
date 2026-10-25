@@ -3041,7 +3041,7 @@
       const [id, weight, style] = key.split(':');
       try {
         const base = await NpFonts.baseBytes({ id, weight: +weight, style });
-        const r = NpScanFont.build(base, per);
+        const r = NpScanFont.build(base, per, 'Notepad Scan ' + (Object.keys(rec.scanFonts).length + 1));
         if (r) rec.scanFonts[key] = r.bytes;
       } catch (e) { /* this style keeps its matched font */ }
       await new Promise((res) => setTimeout(res, 0));

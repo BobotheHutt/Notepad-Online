@@ -54,6 +54,9 @@ test('saving, reloading, exporting and a second document', async ({ app: p }) =>
   }
   // the Word file opens again as a document of its own
   await p.setInputFiles('#file-open', test.info().outputPath('Kept copy.docx'));
+  // its own entry in the list (the original shows the same heading, so that alone proves nothing)
+  await expect(p.locator('.doc-item')).toHaveCount(2);
+  await expect(p.locator('#doc-title')).toHaveValue('Kept copy');
   await expect(p.locator('#editor h1')).toHaveText('Kept');
   await expect(p.locator('#editor')).toContainText('This survives a reload.');
   await p.click('.sb-head [data-action="new"]');

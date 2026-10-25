@@ -439,6 +439,7 @@
     renderAllOverlays();
     renderStyleBar();
     updatePageStatus();
+    showReadAllIfScans();
   }
 
   function fitWidth() {
@@ -2249,6 +2250,28 @@
     return info.nativeCount;
   }
 
+  // A scanned page: little or no text of its own, and a picture on it, or
+  // many drawn shapes (letters saved as shapes). A blank page, or one with
+  // just a page number, is not one.
+  async function isScanPage(info) {
+    if (!info.page || (await nativeTextCount(info)) >= 3) return false;
+    if (info.isScan !== undefined) return info.isScan;
+    let scan = false;
+    try {
+      const ops = await info.page.getOperatorList();
+      const O = pdfjsLib.OPS;
+      const pics = new Set([O.paintImageXObject, O.paintInlineImageXObject, O.paintImageMaskXObject, O.paintImageXObjectRepeat, O.paintInlineImageXObjectGroup]);
+      let fills = 0;
+      for (const f of ops.fnArray) {
+        if (pics.has(f)) { scan = true; break; }
+        if (f === O.fill || f === O.eoFill || f === O.fillStroke || f === O.eoFillStroke) fills++;
+      }
+      if (fills > 150) scan = true;
+    } catch (e) { scan = true; }
+    info.isScan = scan;
+    return scan;
+  }
+
   /* ----- reading pages: one when it is clicked, or the whole document ----- */
 
   // A queue of pages to read, worked on by all the readers at once. A page
@@ -2261,7 +2284,7 @@
   async function needsReading(info) {
     if (!info.page) return false;
     if (S.rec.ocr && ocrFits(S.rec.ocr[info.entry.uid], info.entry, info.rot)) return false;
-    return (await nativeTextCount(info)) < 3;
+    return isScanPage(info);
   }
 
   // Read one page now (ahead of any others); resolves when it is editable.
@@ -2431,6 +2454,26 @@
   function updateReadAllUi() {
     const sw = $('#pdf-readall');
     if (sw) sw.checked = !!(S.rec && S.rec.readAll);
+  }
+
+  // The switch is shown only for a PDF with a scanned page in it: on one
+  // whose pages all have text of their own there is nothing to read. Looked
+  // for in the background, stopping at the first scanned page found.
+  let scanCheck = 0;
+  async function showReadAllIfScans() {
+    const wrap = $('#pdf-readall-wrap');
+    if (!wrap || !S.rec) return;
+    const rec = S.rec;
+    const gen = ++scanCheck;
+    let any = false;
+    for (const p of rec.pages) {
+      const info = S.info.get(p.uid);
+      if (!info || !info.page) continue;
+      if (await isScanPage(info)) { any = true; break; }
+      if (S.rec !== rec || gen !== scanCheck) return;
+    }
+    if (S.rec !== rec || gen !== scanCheck) return;
+    wrap.hidden = !any;
   }
 
   // Clicking a scanned page that is not read yet (Edit text): read just it,
@@ -5136,7 +5179,7 @@
     // a PDF whose first page has no text of its own is almost always a scan
     const first = S.info.get(rec.pages[0] && rec.pages[0].uid);
     if (!first || !first.page || (rec.ocr && Object.keys(rec.ocr).length)) return;
-    if ((await nativeTextCount(first)) === 0 && S.rec === rec) api.toast('This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
+    if ((await isScanPage(first)) && S.rec === rec) api.toast('This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
   }
 
   window.NpPdf = {

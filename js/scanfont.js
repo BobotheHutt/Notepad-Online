@@ -251,7 +251,8 @@
       let inkX1 = -Infinity;
       for (const l of loops) for (const [x] of l) { if (x < inkX0) inkX0 = x; if (x > inkX1) inkX1 = x; }
       const k = U / (a.em * UP);
-      // the scanned letter must be about the shape of the font's (a consistent misread is not)
+      // the scanned letter must be about the shape of the font's (a consistent
+      // misread is not, nor two letters joined, like an fi ligature taken as f)
       const sh = isFinite(bb.y2) ? bb.y2 - bb.y1 : 0;
       const sw = isFinite(bb.x2) ? bb.x2 - bb.x1 : 0;
       let inkY0 = Infinity;
@@ -259,7 +260,7 @@
       for (const l of loops) for (const [, y] of l) { if (y < inkY0) inkY0 = y; if (y > inkY1) inkY1 = y; }
       const nh = (inkY1 - inkY0) * k;
       const nw = (inkX1 - inkX0) * k;
-      if (sh > 0 && sw > 0 && (nh / sh < 0.7 || nh / sh > 1.4 || nw / sw < 0.6 || nw / sw > 1.6)) continue;
+      if (sh > 0 && sw > 0 && (nh / sh < 0.75 || nh / sh > 1.3 || nw / sw < 0.75 || nw / sw > 1.3)) continue;
       const tf = (x, y) => [lsb + (x - inkX0) * k, (a.asc * UP - y) * k];
       const path = new opentype.Path();
       for (const l of loops) toPath(l, tf, path);

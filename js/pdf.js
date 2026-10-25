@@ -384,11 +384,13 @@
       info.el.append(info.canvas, info.layer);
       info.el.addEventListener('pointerdown', onPointerDown);
       info.el.addEventListener('contextmenu', (e) => {
+        // while typing, the browser's own menu (with its spelling suggestions)
+        if (e.target.closest('[contenteditable="true"], [contenteditable="plaintext-only"], input, textarea')) return;
         const n = e.target.closest('[data-fix]');
         if (!n) return;
         e.preventDefault();
         if (S.editing) finishEditing();
-        openFix(info, n.dataset.fix);
+        openWordMenu(e, info, n.dataset.fix);
       });
       S.info.set(entry.uid, info);
       frag.append(info.el);
@@ -643,7 +645,7 @@
       for (const r of lay) {
         const d = el('div', {
           class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.o && doubtful(r.o) ? ' pdf-doubt' : ''), 'data-id': it.id,
-          'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'Check this word: click to compare it with the scan' : null,
+          'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'This word may have been misread: right-click to check it against the scan' : null,
           style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(r.st).replace(/"/g, "'") +
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
             (Math.abs(r.scaleX - 1) > 0.002 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
@@ -734,9 +736,15 @@
     const words = [];
     for (const [ri, w] of raw.entries()) {
       let t = w.t;
-      // a bar no taller than the letters is the word "I", read as "|"; a
-      // separator printed between columns stands taller than the text
-      if (/^[|¦]$/.test(t) && w.h != null && w.h < (l.size || l.h) * 0.85) t = 'I';
+      // The word "I", read as "|": a bar no taller than the letters, sitting
+      // on the line, followed closely by a word in lower case ("I attest").
+      // A separator between two labels ("name | Nombre") or a piece of a
+      // table border is none of those.
+      if (/^[|¦]$/.test(t) && w.h != null) {
+        const sz = l.size || l.h;
+        const nx = raw[ri + 1];
+        if (w.h < sz * 0.85 && (w.y + w.h) <= (l.base || w.y + w.h) + sz * 0.12 && nx && /^\p{Ll}/u.test(nx.t) && nx.x - (w.x + w.w) < sz * 0.5) t = 'I';
+      }
       let x0 = w.x;
       let x1 = w.x + w.w;
       const y0 = w.y != null ? w.y : l.y;
@@ -1133,9 +1141,10 @@
       if (q) { const before = snap(); q.keep = !q.keep; commit(before); renderOverlay(info); }
       return;
     }
-    // a word read from the scan: correct what OCR read (proofreading, or a word it was unsure of)
+    // proofreading against the scan (Original on): a click on a word corrects
+    // what OCR read; otherwise a click edits, and checking is on right-click
     const fixNode = e.target.closest('[data-fix]');
-    if (fixNode && (S.showOriginal || (S.tool === 'edit' && fixNode.classList.contains('pdf-doubt')))) {
+    if (fixNode && S.showOriginal) {
       e.preventDefault();
       if (S.editing) finishEditing();
       openFix(info, fixNode.dataset.fix);
@@ -1858,7 +1867,7 @@
       const h = y1 - y0;
       if (h < 4 || x1 - x0 < 2) return bb;
       const mx = Math.round(h * 0.5);
-      const my = Math.round(h * 0.3);
+      const my = Math.round(h * 0.15);
       for (let n = 0; n < mx && colInk(x0 - 1, y0, y1); n++) x0--;
       while (x0 < x1 - 1 && !colInk(x0, y0, y1)) x0++;
       for (let n = 0; n < mx && colInk(x1, y0, y1); n++) x1++;
@@ -2156,7 +2165,7 @@
       changed();
       if (made) {
         setTool('edit');
-        api.toast((turned ? 'Turned ' + turned + ' page' + (turned === 1 ? '' : 's') + ' the right way up. ' : '') + (straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: click one to compare it with the scan and correct it.', 9000);
+        api.toast((turned ? 'Turned ' + turned + ' page' + (turned === 1 ? '' : 's') + ' the right way up. ' : '') + (straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: right-click one to check it against the scan.', 9000);
       } else if (found) {
         setTool('edit');
         api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.' +
@@ -2549,6 +2558,8 @@
             q.size = Math.round((median(r) || q.t.size) * 10) / 10;
             continue;
           }
+          // from the printed letters' own height (OCR's line height counts
+          // writing on the same line)
           const h = sizeFromInk(q.t.words, style, q.t.size);
           q.size = clamp(fitSize(q.t.words, style, h), h * 0.88, h * 1.14);
         }
@@ -2746,9 +2757,15 @@
     const box = el('div', { class: 'pdf-fix', role: 'dialog', 'aria-label': 'Correct this word' },
       el('div', { class: 'pdf-fix-label' }, 'Scanned word'), cv,
       el('div', { class: 'pdf-fix-label' }, ref.startsWith('ocr:') ? 'OCR read it as (used only to search and copy; the page shows it as written)' : 'It says'), input,
-      el('div', { class: 'pdf-fix-hint' }, 'Enter saves · Tab saves and goes to the next word to check · Esc cancels'));
+      el('div', { class: 'pdf-fix-hint' }, (tg.w && doubtful(tg.w) ? 'OCR was unsure of this word. ' : '') + 'Enter saves · Tab goes to the next word to check · Esc cancels'),
+      tg.it ? el('button', { type: 'button', class: 'btn btn-sm pdf-fix-edit' }, 'Edit the whole line instead') : null);
     info.el.append(box);
     S.fix = { info, tg, box };
+    const editBtn = box.querySelector('.pdf-fix-edit');
+    if (editBtn) {
+      editBtn.addEventListener('mousedown', (e) => e.preventDefault());
+      editBtn.addEventListener('click', () => { closeFix(false); setTool('edit'); startEditing(tg.it.id); });
+    }
     placeFix();
     input.addEventListener('keydown', (e) => {
       e.stopPropagation();
@@ -2774,6 +2791,67 @@
       g.fillRect(0, 0, cv.width, cv.height);
       await info.page.render(renderOpts(info, g, k, -(w.x0 - pad) * k, -(w.y0 - pad) * k)).promise;
     } catch (e) { /* the box works without the picture */ }
+  }
+
+  // The right-click menu on a word read from a scan: the word as scanned,
+  // what OCR read, a way to correct it, and the usual editing commands.
+  function closeWordMenu() {
+    const m = document.querySelector('.pdf-word-menu');
+    if (m) m.remove();
+    document.removeEventListener('pointerdown', S.menuAway, true);
+    document.removeEventListener('keydown', S.menuKey, true);
+    window.removeEventListener('blur', closeWordMenu);
+  }
+
+  function openWordMenu(e, info, ref) {
+    closeWordMenu();
+    closeFix(true);
+    const tg = fixTarget(info, ref);
+    if (!tg) return;
+    const w = tg.box;
+    const lineText = tg.it ? convLayout(tg.it).map((r) => r.text).join(' ') : tg.t;
+    const item = (label, fn, hint) => {
+      const b = el('button', { type: 'button', role: 'menuitem', class: 'pdf-menu-item' }, el('span', {}, label), hint ? el('span', { class: 'pdf-menu-hint' }, hint) : null);
+      b.addEventListener('click', () => { closeWordMenu(); fn(); });
+      return b;
+    };
+    const copy = async (text) => { try { await navigator.clipboard.writeText(text); } catch (err) { api.toast('Your browser blocked copying.'); } };
+    const cv = el('canvas', { class: 'pdf-menu-scan' });
+    const k = 3;
+    const pad = 2;
+    cv.width = Math.ceil((w.x1 - w.x0 + pad * 2) * k);
+    cv.height = Math.ceil((w.y1 - w.y0 + pad * 2) * k);
+    const doubt = tg.w && doubtful(tg.w);
+    const menu = el('div', { class: 'pdf-word-menu', role: 'menu' },
+      el('div', { class: 'pdf-menu-head' }, cv, el('div', { class: 'pdf-menu-read' }, (doubt ? 'Possibly misread as “' : 'Read as “') + tg.t + '”')),
+      item(doubt ? 'Check and correct this word…' : 'Correct this word…', () => openFix(info, ref)),
+      el('div', { class: 'pdf-menu-sep' }),
+      tg.it ? item('Edit text', () => { setTool('edit'); startEditing(tg.it.id); }) : null,
+      item('Copy word', () => copy(tg.t)),
+      tg.it ? item('Copy line', () => copy(lineText)) : null,
+      item('Copy page text', () => copyPageText()));
+    document.body.append(menu);
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.max(4, Math.min(e.clientX, innerWidth - r.width - 4)) + 'px';
+    menu.style.top = Math.max(4, Math.min(e.clientY, innerHeight - r.height - 4)) + 'px';
+    S.menuAway = (ev) => { if (!menu.contains(ev.target)) closeWordMenu(); };
+    S.menuKey = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); closeWordMenu(); return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        const items = [...menu.querySelectorAll('.pdf-menu-item')];
+        const i = items.indexOf(document.activeElement);
+        items[(i + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+      }
+    };
+    document.addEventListener('pointerdown', S.menuAway, true);
+    document.addEventListener('keydown', S.menuKey, true);
+    window.addEventListener('blur', closeWordMenu);
+    menu.querySelector('.pdf-menu-item').focus();
+    const g = cv.getContext('2d');
+    g.fillStyle = paperOf(info);
+    g.fillRect(0, 0, cv.width, cv.height);
+    info.page.render(renderOpts(info, g, k, -(w.x0 - pad) * k, -(w.y0 - pad) * k)).promise.catch(() => {});
   }
 
   // under its word, at the current zoom (the page can be re-fitted while the
@@ -2912,7 +2990,9 @@
       for (const w of it.words) {
         const chars = [...w.t];
         if (w.c != null && w.c < 90) continue;
-        if (chars.length > 24) continue;
+        // one-letter words are left out: a bar or a speck read as "I" or "l"
+        // would teach the font the wrong shape
+        if (chars.length > 24 || chars.length < 2) continue;
         const pad = 2;
         const X0 = Math.max(0, Math.floor(w.x0 * k) - pad);
         const Y0 = Math.max(0, Math.floor((Math.min(w.y0, it.base - it.size)) * k) - pad);
@@ -3567,22 +3647,36 @@
           if (dark[i] && (x === x0 || x === x1 - 1 || y === y0 || y === y1 - 1)) queue.push(x, y);
         }
       }
-      // ink that carries on past the edge: the rest of the same letter
+      // Ink that carries on past the edge: the rest of the same letter, taken
+      // whole. Only if it ends close by: a stroke that runs on (writing that
+      // touches the printed word) is something else and stays.
+      const reachX = em * 0.3;
+      const reachY = em * 0.25;
       while (queue.length) {
-        const y = queue.pop();
-        const x = queue.pop();
-        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < wx0 || ny < wy0 || nx >= wx1 || ny >= wy1) continue;
-          const i = idx(nx, ny);
-          if (erase[i] || prot[i] || !dark[i]) continue;
-          // never along the soft edge of a line that stays, into what it joins
-          if ((nx > wx0 && prot[i - 1]) || (nx < wx1 - 1 && prot[i + 1]) || (ny > wy0 && prot[i - ww]) || (ny < wy1 - 1 && prot[i + ww])) continue;
-          erase[i] = 2;
-          queue.push(nx, ny);
+        const sy = queue.pop();
+        const sx = queue.pop();
+        const got = [];
+        const st = [[sx, sy]];
+        let far = false;
+        while (st.length && !far) {
+          const [x, y] = st.pop();
+          for (let dy = -1; dy <= 1 && !far; dy++) for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < wx0 || ny < wy0 || nx >= wx1 || ny >= wy1) { far = true; break; }
+            const i = idx(nx, ny);
+            if (erase[i] || prot[i] || !dark[i]) continue;
+            // never along the soft edge of a line that stays, into what it joins
+            if ((nx > wx0 && prot[i - 1]) || (nx < wx1 - 1 && prot[i + 1]) || (ny > wy0 && prot[i - ww]) || (ny < wy1 - 1 && prot[i + ww])) continue;
+            if (nx < x0 - reachX || nx >= x1 + reachX || ny < y0 - reachY || ny >= y1 + reachY) { far = true; break; }
+            erase[i] = 2;
+            got.push(i);
+            st.push([nx, ny]);
+          }
         }
+        if (far) for (const i of got) erase[i] = 3; // found to run on: left, and not tried again
       }
+      for (let i = 0; i < erase.length; i++) if (erase[i] === 3) erase[i] = 0;
       for (let y = wy0; y < wy1; y++) {
         for (let x = wx0; x < wx1; x++) {
           const i = idx(x, y);

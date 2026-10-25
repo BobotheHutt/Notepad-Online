@@ -1132,7 +1132,7 @@ body:not(.pdf-mode) [data-pdf-only], body.pdf-mode [data-doc-only] { display: no
 .pdf-conv-box { position: absolute; outline: 2px solid var(--accent); outline-offset: 2px; pointer-events: none; }
 body.pdf-show-original .pdf-conv { visibility: hidden; }
 /* words OCR was unsure of, and proofreading against the scan */
-.pdf-stage[data-tool="edit"] .pdf-doubt { box-shadow: inset 0 -2px 0 rgba(217, 119, 6, 0.75); cursor: help; }
+.pdf-stage[data-tool="edit"] .pdf-doubt { box-shadow: inset 0 -2px 0 rgba(217, 119, 6, 0.75); }
 /* handwriting left as scanned: found when the page is read, erasable */
 .pdf-hand { position: absolute; border-radius: 3px; }
 .pdf-stage[data-tool="edit"] .pdf-hand, .pdf-stage[data-tool="select"] .pdf-hand { cursor: pointer; }
@@ -1156,6 +1156,23 @@ body.pdf-show-original .pdf-conv { visibility: hidden; }
 .pdf-fix-input { width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; padding: 6px 8px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--surface); color: var(--ink); }
 .pdf-fix-input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 .pdf-fix-hint { margin-top: 6px; font-size: 11px; color: var(--ink-3); }
+.pdf-fix-edit { margin-top: 8px; width: 100%; }
+.pdf-word-menu {
+  position: fixed; z-index: 50; min-width: 220px; max-width: 320px; padding: 4px; box-sizing: border-box;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  font: 13px/1.4 var(--ui);
+}
+.pdf-menu-head { padding: 6px 8px 8px; }
+.pdf-menu-scan { display: block; max-width: 100%; height: auto; max-height: 64px; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+.pdf-menu-read { margin-top: 4px; font-size: 12px; color: var(--ink-3); overflow-wrap: anywhere; }
+.pdf-menu-item {
+  display: flex; justify-content: space-between; gap: 16px; width: 100%; padding: 6px 10px; border: 0; border-radius: 6px;
+  background: none; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pdf-menu-item:hover, .pdf-menu-item:focus-visible { background: var(--hover); outline: none; }
+.pdf-menu-hint { color: var(--ink-3); }
+.pdf-menu-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+.pdf-stage[data-tool="edit"] .pdf-doubt { cursor: text; }
 .pdf-handle {
   position: absolute;
   right: -7px;

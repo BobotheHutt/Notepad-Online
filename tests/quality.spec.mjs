@@ -52,7 +52,7 @@ test('no sideways scrolling on small screens', async ({ app: p }) => {
 
 test('works offline once loaded', async ({ app: p, context }) => {
   await p.click('#editor'); await p.keyboard.type('Written before going offline');
-  await expect(p.locator('#save-status')).toHaveText('Saved', { timeout: 10000 });
+  await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack', { timeout: 10000 });
   await p.evaluate(() => navigator.serviceWorker.ready);
   await p.reload(); await p.waitForSelector('body.ready');
   await context.setOffline(true);

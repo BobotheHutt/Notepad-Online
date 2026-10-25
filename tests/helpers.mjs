@@ -38,7 +38,25 @@ export const test = base.extend({
     await use(errors);
     expect(errors, 'errors in the page').toEqual([]);
   },
-  app: async ({ page, errors }, use) => {
+  // Whether the browser can write to files on disk (Chrome and Edge can;
+  // Firefox and Safari cannot). Off by default, so Save puts a copy in
+  // Downloads. On, the save and open dialogs hand out files in the browser's
+  // private storage (OPFS): real, writable files, as a test cannot click a
+  // system dialog.
+  filePickers: [false, { option: true }],
+  app: async ({ page, errors, filePickers }, use) => {
+    if (!filePickers) await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
+    else {
+      await page.addInitScript(() => {
+        window.__picked = [];
+        window.showSaveFilePicker = async (o) => {
+          if (window.__cancelNext) { window.__cancelNext = false; throw new DOMException('cancelled', 'AbortError'); }
+          window.__picked.push(o.suggestedName);
+          return (await navigator.storage.getDirectory()).getFileHandle(o.suggestedName, { create: true });
+        };
+        window.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle(window.__openName)];
+      });
+    }
     await page.goto('/');
     await page.waitForSelector('body.ready');
     await use(page);
@@ -65,3 +83,12 @@ export const newestDoc = (page) => page.evaluate(async () => {
 });
 
 export const saveNow = async (page) => { await page.keyboard.press('Control+s'); await page.waitForTimeout(1200); };
+
+// files on disk, when filePickers is on
+export const putFile = (page, name, bytes) => page.evaluate(async ([name, b64]) => {
+  const h = await (await navigator.storage.getDirectory()).getFileHandle(name, { create: true });
+  const w = await h.createWritable(); await w.write(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))); await w.close();
+}, [name, Buffer.from(bytes).toString('base64')]);
+export const getFile = (page, name) => page.evaluate(async (name) => {
+  try { return [...new Uint8Array(await (await (await (await navigator.storage.getDirectory()).getFileHandle(name)).getFile()).arrayBuffer())]; } catch (e) { return null; }
+}, name);

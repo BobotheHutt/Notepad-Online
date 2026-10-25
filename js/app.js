@@ -153,6 +153,9 @@
     return (d.titleAuto ? autoTitle(d.text) : d.title) || 'Untitled document';
   }
 
+  // the document is kept in this browser as you work; saving to a file is Save
+  const savedText = () => (NpStore.persistent ? 'Saved in Noteshack' : 'Not saved — temporary');
+
   function setStatus(text, kind) {
     const s = $('#save-status');
     s.textContent = text;
@@ -193,7 +196,7 @@
           doc.lastVersion = doc.updated;
           await NpStore.putDoc(doc);
         }
-        if (doc === current) setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
+        if (doc === current) setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
         if (channel) channel.postMessage({ type: 'saved', id: doc.id, updated: doc.updated });
         requestPersistence();
       } catch (e) {
@@ -239,13 +242,9 @@
       saveSettings();
       updateTitle();
       renderDocList();
-      setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
+      setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
       if (mobile) setSidebar(false, true);
-      // an image downloads as the same kind of image; the PDF stays a choice
-      const kind = doc.origin ? NpImages.label(doc.origin) : 'PDF';
-      $('#export-own').hidden = !doc.origin;
-      $('#export-own span').textContent = kind + ' with your changes';
-      $('.pdf-download').title = 'Download the ' + kind + ' with your changes';
+      updateSaveUi();
       // the original file is stored apart from the record, and read when opened
       if (!doc.sources) doc.sources = (await NpStore.getSources(doc)) || [];
       await NpPdf.open(doc);
@@ -262,8 +261,9 @@
     updateTitle();
     renderDocList();
     refreshMetrics();
-    setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
+    setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
     workspace.scrollTop = 0;
+    updateSaveUi();
     if (!opts.noFocus && !matchMedia('(max-width: 899px)').matches) placeCaretAtStart();
     if (matchMedia('(max-width: 899px)').matches) setSidebar(false, true);
   }
@@ -816,6 +816,9 @@
     dragDepth = 0;
     $('#drop-hint').hidden = true;
     const files = Array.from(e.dataTransfer.files);
+    // the files on disk, for Save (asked for now: the list is gone after this event)
+    const items = Array.from(e.dataTransfer.items || []).filter((it) => it.kind === 'file');
+    const handles = items.length === files.length && items[0] && items[0].getAsFileSystemHandle ? items.map((it) => it.getAsFileSystemHandle().catch(() => null)) : [];
     // into a text document an image goes in as a picture; otherwise it
     // opens as a document of its own, to read and edit
     const images = pdfMode() ? [] : files.filter((f) => f.type.startsWith('image/'));
@@ -827,7 +830,7 @@
       }
       images.forEach(insertImageFile);
     }
-    if (others.length) openFiles(others);
+    if (others.length) Promise.all(handles).then((hs) => openFiles(others, others.map((f) => hs[files.indexOf(f)] || null)));
   });
 
   /* ----- selection tracking ----- */
@@ -1145,25 +1148,6 @@
 
   const pdfMode = () => !!current && current.type === 'pdf';
 
-  // as a PDF, or ('own') as what was opened: an image comes back as one
-  async function downloadPdf(kind) {
-    NpPdf.finishEditing();
-    await saveNow();
-    const origin = kind === 'own' && current.origin;
-    setStatus(origin ? 'Preparing the ' + NpImages.label(origin) + '…' : 'Preparing PDF…', 'pending');
-    try {
-      const blob = await NpPdf.export(current);
-      if (origin) {
-        const out = await NpImages.fromPdf(blob, origin, displayTitle(current), safeFileName);
-        download(out.blob, out.filename);
-        if (out.fellBack) toast('This browser cannot save WebP images, so it was saved as PNG.', 6000);
-      } else download(blob, safeFileName(displayTitle(current), 'pdf'));
-    } catch (e) {
-      toast((origin ? 'Could not make the image: ' : 'Could not make the PDF: ') + (e.message || e), 7000);
-    }
-    setStatus('Saved', 'ok');
-  }
-
   // Print a PDF from a preview of exactly what will print (the file with
   // your changes), drawn here; printing goes from the preview straight to
   // the printer, with no other tab to wait for.
@@ -1258,11 +1242,12 @@
 
   const ACTIONS = {
     'new': () => createDoc(),
-    open: () => $('#file-open').click(),
+    open: openPicker,
+    save: saveFile,
+    'save-as': (arg) => current && saveAs(arg === 'own' ? ownKind(current) : arg),
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
-    'export': (arg) => (pdfMode() ? downloadPdf(arg) : exportAs(arg)),
     print: () => (pdfMode() ? printPdf() : printDoc()),
     'page-setup': pageSetupDialog,
     backup: backupAll,
@@ -1353,8 +1338,9 @@
     const code = e.code;
     const run = (fn) => { e.preventDefault(); fn(); };
 
-    if (k === 's' && !e.shiftKey) return run(() => { saveNow('Saved by you').then(() => toast(!NpStore.persistent ? 'Saved for this visit only' : pdfMode() ? 'Saved' : 'Saved — a restore point was added to version history')); });
-    if (k === 'o' && !e.shiftKey) return run(() => $('#file-open').click());
+    if (k === 's' && !e.shiftKey) return run(saveFile);
+    if (k === 's' && e.shiftKey) return run(() => current && saveAs(ownKind(current)));
+    if (k === 'o' && !e.shiftKey) return run(openPicker);
     if (k === 'p' && !e.shiftKey) return run(() => (pdfMode() ? printPdf() : printDoc()));
     if (k === 'f' && e.shiftKey) return run(toggleFocus);
     if (pdfMode()) {
@@ -1615,7 +1601,7 @@
     if (!current) return;
     await saveNow();
     const list = await NpStore.listVersions(current.id);
-    const preview = el('div', { class: 'hist-preview editor' }, el('p', { class: 'muted' }, list.length ? 'Pick a version to preview it.' : 'No earlier versions yet. A restore point is saved every 10 minutes while you write, and whenever you press Ctrl+S.'));
+    const preview = el('div', { class: 'hist-preview editor' }, el('p', { class: 'muted' }, list.length ? 'Pick a version to preview it.' : 'No earlier versions yet. A restore point is saved every 10 minutes while you write, and whenever you save.'));
     let chosen = null;
     const items = el('ul', { class: 'hist-list' }, list.map((v) => el('li', {},
       el('button', { type: 'button', class: 'hist-item', onclick: async (e) => {
@@ -1648,7 +1634,7 @@
     const groups = [
       ['Text', [['Bold', 'Ctrl+B'], ['Italic', 'Ctrl+I'], ['Underline', 'Ctrl+U'], ['Strikethrough', 'Ctrl+Shift+X'], ['Inline code', 'Ctrl+E'], ['Superscript / subscript', 'Ctrl+. / Ctrl+,'], ['Link', 'Ctrl+K'], ['Clear formatting', 'Ctrl+\\']]],
       ['Paragraphs', [['Normal text', 'Ctrl+Alt+0'], ['Heading 1–3', 'Ctrl+Alt+1 / Ctrl+Alt+3'], ['Numbered list', 'Ctrl+Shift+7'], ['Bulleted list', 'Ctrl+Shift+8'], ['Checklist', 'Ctrl+Shift+9'], ['Align left / center / right / justify', 'Ctrl+Shift+L / Ctrl+Shift+E / Ctrl+Shift+R / Ctrl+Shift+J'], ['Indent list item', 'Tab / Shift+Tab'], ['Page break', 'Ctrl+Enter']]],
-      ['Document', [['Save a restore point', 'Ctrl+S'], ['Open a file', 'Ctrl+O'], ['New document', 'Ctrl+Alt+N'], ['Find / replace', 'Ctrl+F / Ctrl+H'], ['Print', 'Ctrl+P'], ['Word count', 'Ctrl+Shift+C'], ['Focus mode', 'Ctrl+Shift+F'], ['Paste without formatting', 'Ctrl+Shift+V']]],
+      ['Document', [['Save', 'Ctrl+S'], ['Save as', 'Ctrl+Shift+S'], ['Open a file', 'Ctrl+O'], ['New document', 'Ctrl+Alt+N'], ['Find / replace', 'Ctrl+F / Ctrl+H'], ['Print', 'Ctrl+P'], ['Word count', 'Ctrl+Shift+C'], ['Focus mode', 'Ctrl+Shift+F'], ['Paste without formatting', 'Ctrl+Shift+V']]],
       ['PDF tools (single keys, while a PDF is open)', [['Select and move', 'V'], ['Edit the PDF’s text', 'E'], ['Add text', 'T'], ['Highlight', 'H'], ['White-out', 'W'], ['Draw', 'D'], ['Box', 'B'], ['Delete what is selected', 'Delete'], ['Nudge what is selected', 'Arrow keys']]],
       ['Markdown shortcuts (type, then space)', [['Heading 1, 2, 3', '# / ## / ###'], ['Bulleted list', '- / *'], ['Numbered list', '1.'], ['Checklist', '[ ]'], ['Quote', '>'], ['Code block', '```'], ['Horizontal line (then Enter)', '---']]]
     ];
@@ -2154,33 +2140,158 @@
     ].join('\n');
   }
 
-  async function exportAs(kind) {
-    if (!current) return;
-    await saveNow();
-    const name = displayTitle(current);
-    try {
-      if (kind === 'txt') {
-        download(new Blob([textIndex(true).text.replace(/\n{3,}/g, '\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }), safeFileName(name, 'txt'));
-      } else if (kind === 'md') {
-        download(new Blob([NpMarkdown.fromDom(editor)], { type: 'text/markdown;charset=utf-8' }), safeFileName(name, 'md'));
-      } else if (kind === 'html') {
-        const html = '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + escapeHtml(name) +
-          '</title>\n<style>\n' + exportCss() + '\n</style>\n</head>\n<body>\n<article>' + serialize() + '</article>\n</body>\n</html>\n';
-        download(new Blob([html], { type: 'text/html;charset=utf-8' }), safeFileName(name, 'html'));
-      } else if (kind === 'docx') {
-        setStatus('Preparing Word file…', 'pending');
-        const s = docSettings();
-        const blob = await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins });
-        download(blob, safeFileName(name, 'docx'));
-        setStatus('Saved', 'ok');
-      } else if (kind === 'pdf') {
-        toast('In the print window, choose “Save as PDF” as the printer.', 5000);
-        setTimeout(printDoc, 400);
-      }
-    } catch (e) {
-      setStatus('Saved', 'ok');
-      toast('Export failed: ' + (e.message || e), 6000);
+  /* ----- saving to files: Save and Save as ----- */
+
+  // Chrome and Edge on a computer let a page write to a file on disk (the
+  // File System Access API): Save as shows the system's own Save dialog, and
+  // Save writes straight back to the file a document was opened from or last
+  // saved as. Other browsers let no page write to disk, so there both put a
+  // copy in Downloads. Either way the document itself is kept in Noteshack.
+  const canWriteFiles = () => typeof window.showSaveFilePicker === 'function';
+
+  const KINDS = {
+    docx: { ext: 'docx', exts: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'Word document' },
+    md: { ext: 'md', exts: ['md', 'markdown'], mime: 'text/markdown', label: 'Markdown' },
+    html: { ext: 'html', exts: ['html', 'htm'], mime: 'text/html', label: 'Web page' },
+    txt: { ext: 'txt', exts: ['txt', 'text'], mime: 'text/plain', label: 'Plain text' },
+    pdf: { ext: 'pdf', exts: ['pdf'], mime: 'application/pdf', label: 'PDF' }
+  };
+  const kindInfo = (kind) => KINDS[kind] || NpImages.kind(kind);
+
+  // what a file is, as something Noteshack can save back to
+  function kindOfFile(file) {
+    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    for (const [k, v] of Object.entries(KINDS)) if (v.exts.includes(ext)) return k;
+    return NpImages.formatOf(file);
+  }
+
+  // what Save writes when there is no file yet: what the document came as
+  const ownKind = (doc) => (doc.file && doc.file.kind) || doc.kind || (doc.type === 'pdf' ? (doc.origin ? doc.origin.format : 'pdf') : 'docx');
+
+  // The document as a file of a kind: { blob, filename, zip, fellBack }
+  async function makeFile(doc, kind) {
+    const name = displayTitle(doc);
+    const info = kindInfo(kind);
+    const out = (blob) => ({ blob, filename: safeFileName(name, info.ext) });
+    if (doc.type === 'pdf') {
+      const pdf = await NpPdf.export(doc);
+      if (kind === 'pdf') return out(pdf);
+      const img = await NpImages.fromPdf(pdf, Object.assign({}, doc.origin, { format: kind }), name, safeFileName);
+      return Object.assign(img, { zip: img.blob.type === 'application/zip' });
     }
+    if (kind === 'txt') return out(new Blob([textIndex(true).text.replace(/\n{3,}/g, '\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }));
+    if (kind === 'md') return out(new Blob([NpMarkdown.fromDom(editor)], { type: 'text/markdown;charset=utf-8' }));
+    if (kind === 'html') {
+      return out(new Blob(['<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + escapeHtml(name) +
+        '</title>\n<style>\n' + exportCss() + '\n</style>\n</head>\n<body>\n<article>' + serialize() + '</article>\n</body>\n</html>\n'], { type: 'text/html;charset=utf-8' }));
+    }
+    const s = docSettings();
+    return out(await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins }));
+  }
+
+  // Write the document into a file on disk (handle), or, without one, put a
+  // copy in Downloads.
+  async function writeOut(kind, handle) {
+    const doc = current;
+    if (doc.type === 'pdf') NpPdf.finishEditing();
+    await saveNow('Saved by you');
+    const info = kindInfo(kind);
+    setStatus('Saving the ' + info.label + '…', 'pending');
+    try {
+      const out = await makeFile(doc, kind);
+      if (handle && !out.zip) {
+        const w = await handle.createWritable();
+        await w.write(out.blob);
+        await w.close();
+        doc.file = { kind, name: handle.name };
+        await NpStore.putDoc(doc);
+        await NpStore.putHandle(doc.id, handle);
+        toast('Saved to “' + handle.name + '”');
+      } else {
+        download(out.blob, out.filename);
+        if (out.zip) toast('One ' + info.label + ' holds one page, so the ' + info.label + 's were saved together in a zip.', 7000);
+        else if (!canWriteFiles()) toast('Saved to your Downloads. (This browser does not let websites save over a file, so each save is a new copy.)', 7000);
+      }
+      if (out.fellBack) toast('This browser cannot save WebP images, so it was saved as PNG.', 6000);
+    } catch (e) {
+      toast('Could not save: ' + (e.message || e), 7000);
+    }
+    setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
+    updateSaveUi();
+  }
+
+  // Save as: choose the name, place (where the browser allows) and kind
+  async function saveAs(kind) {
+    if (!current) return;
+    // a text document becomes a PDF by printing it
+    if (kind === 'pdf' && !pdfMode()) {
+      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
+      setTimeout(printDoc, 400);
+      return;
+    }
+    let handle = null;
+    if (canWriteFiles()) {
+      const info = kindInfo(kind);
+      // the name comes from the first line, which may have just been typed
+      if (!pdfMode()) current.text = plainText().slice(0, 200000);
+      // asked first: the browser shows the dialog only straight after a click or key
+      try {
+        handle = await window.showSaveFilePicker({ id: 'noteshack', suggestedName: safeFileName(displayTitle(current), info.ext), types: [{ description: info.label, accept: { [info.mime]: info.exts.map((x) => '.' + x) } }] });
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+      }
+    }
+    await writeOut(kind, handle);
+  }
+
+  // Save: back into the document's own file, or, the first time, Save as
+  async function saveFile() {
+    if (!current) return;
+    const f = current.file;
+    if (f && canWriteFiles()) {
+      try {
+        const handle = await NpStore.getHandle(current.id);
+        if (!handle) throw new Error('no file');
+        const ok = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted' || (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
+        // A Word file or web page made elsewhere may hold things Noteshack
+        // does not open (comments, tracked changes, scripts…): saving over
+        // it loses them, so that is asked once.
+        if (ok && f.imported) {
+          const v = await dialog({
+            title: 'Save over “' + f.name + '”?',
+            body: el('p', { class: 'dlg-text' }, 'Noteshack opened the everyday parts of this ' + kindInfo(f.kind).label.toLowerCase() + '. Anything it could not open (comments, tracked changes, headers and footers, text boxes, a page’s scripts) would be lost from the file. Save as keeps the original as it is.'),
+            actions: [{ label: 'Cancel', value: '' }, { label: 'Save as…', value: 'as' }, { label: 'Save over it', value: 'over', primary: true }]
+          });
+          if (v === 'as') return saveAs(f.kind);
+          if (v !== 'over') return;
+        }
+        if (ok) {
+          if (f.imported) { delete f.imported; await NpStore.putDoc(current); }
+          return writeOut(f.kind, handle);
+        }
+      } catch (e) { /* the file is gone or out of reach: choose again */ }
+    }
+    return saveAs(ownKind(current));
+  }
+
+  // The File menu and the PDF toolbar say where Save goes.
+  function updateSaveUi() {
+    const f = current && current.file;
+    const where = f && canWriteFiles() ? 'Save to “' + f.name + '”' : 'Save';
+    $('#save-item span').textContent = where;
+    $('.pdf-download').title = where + ' (Ctrl+S)';
+    const own = current && current.type === 'pdf' && current.origin;
+    $('#export-own').hidden = !own;
+    if (own) $('#export-own span').textContent = NpImages.label(current.origin) + ' (.' + NpImages.kind(current.origin.format).ext + ')';
+  }
+
+  // Link a newly opened document to the file it came from, so Save writes back to it.
+  async function linkFile(doc, handle, kind) {
+    if (!doc) return;
+    doc.kind = kind;
+    if (handle && kind) doc.file = { kind, name: handle.name, imported: kind === 'docx' || kind === 'html' || undefined };
+    await NpStore.putDoc(doc);
+    if (handle && kind) await NpStore.putHandle(doc.id, handle);
   }
 
   function printDoc() {
@@ -2192,15 +2303,19 @@
     document.title = prev;
   }
 
-  async function openFiles(files) {
+  // handles: the files on disk, where the browser gives them (see Save)
+  async function openFiles(files, handles = []) {
     let last = null;
-    for (const file of files) {
+    for (const [i, file] of files.entries()) {
       try {
         const name = file.name.replace(/\.[^.]+$/, '');
         const ext = (file.name.split('.').pop() || '').toLowerCase();
+        const kind = kindOfFile(file);
         let html;
-        if (ext === 'pdf' || file.type === 'application/pdf') { last = (await createPdfDoc(file, name)) || last; continue; }
-        if (NpImages.formatOf(file)) { last = (await createPdfDoc(file, name, true)) || last; continue; }
+        let doc = null;
+        if (ext === 'pdf' || file.type === 'application/pdf') doc = await createPdfDoc(file, name);
+        else if (NpImages.formatOf(file)) doc = await createPdfDoc(file, name, true);
+        if (doc) { await linkFile(doc, handles[i], kind); last = doc; continue; }
         if (ext === 'docx') html = NpSanitize.html(await NpDocx.import(await file.arrayBuffer()));
         else if (ext === 'doc') { toast('Old .doc files cannot be opened. In Word, use Save As → .docx first.', 6000); continue; }
         else if (ext === 'md' || ext === 'markdown' || file.type === 'text/markdown') html = NpSanitize.html(NpMarkdown.toHtml(await file.text()));
@@ -2210,12 +2325,30 @@
           const text = (await file.text()).replace(/\r\n?/g, '\n');
           html = text.split('\n').map((l) => '<p>' + (escapeHtml(l) || '<br>') + '</p>').join('');
         } else { toast('“' + file.name + '” is not a file type Noteshack can open.'); continue; }
-        last = await createDoc(html || '<p><br></p>', name, { keepFocus: true });
+        doc = await createDoc(html || '<p><br></p>', name, { keepFocus: true });
+        if (doc) { await linkFile(doc, handles[i], kind); last = doc; updateSaveUi(); }
       } catch (e) {
         toast('Could not open “' + file.name + '”: ' + (e.message || e), 6000);
       }
     }
-    if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); }
+    if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); updateSaveUi(); }
+  }
+
+  // Open with the system's own dialog where the browser has one, which also
+  // lets Save write back to the file; elsewhere the plain file picker.
+  async function openPicker() {
+    if (typeof window.showOpenFilePicker !== 'function') { $('#file-open').click(); return; }
+    let handles;
+    try {
+      handles = await window.showOpenFilePicker({ id: 'noteshack', multiple: true, types: [{
+        description: 'Documents, PDFs and images',
+        accept: { 'application/octet-stream': $('#file-open').accept.split(',').filter((x) => x.startsWith('.')) }
+      }] });
+    } catch (e) {
+      if (e.name !== 'AbortError') $('#file-open').click();
+      return;
+    }
+    openFiles(await Promise.all(handles.map((h) => h.getFile())), handles);
   }
 
   $('#file-open').addEventListener('change', (e) => {
@@ -2230,7 +2363,7 @@
     const src = current;
     if (src.type === 'pdf') {
       const now = Date.now();
-      const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
+      const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null, file: null }))), {
         id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
         scanFonts: src.scanFonts ? Object.fromEntries(Object.entries(src.scanFonts).map(([k, b]) => [k, b instanceof ArrayBuffer ? b.slice(0) : b])) : undefined
       });
@@ -2246,7 +2379,8 @@
     await saveNow();
     const all = [];
     for (const d of await NpStore.allDocs()) {
-      all.push(d.type === 'pdf' ? Object.assign({}, d, { sources: ((await NpStore.getSources(d)) || []).map(bufToB64) }) : d);
+      const { file, ...rec } = d; // the link to a file on this computer stays on it
+      all.push(rec.type === 'pdf' ? Object.assign(rec, { sources: ((await NpStore.getSources(rec)) || []).map(bufToB64) }) : rec);
     }
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);
@@ -2281,7 +2415,7 @@
         ...(num(p.skew) && Math.abs(num(p.skew)) <= 10 ? { skew: num(p.skew), paper: /^#[0-9a-f]{6}$/i.test(p.paper) ? p.paper : '#ffffff' } : {}) })),
       pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {},
       // an image opened as a PDF: what to download it as
-      origin: raw.origin && ['jpeg', 'png', 'webp', 'tiff'].includes(raw.origin.format) && Array.isArray(raw.origin.dpi)
+      origin: raw.origin && ['jpeg', 'png', 'webp', 'tiff', 'bmp'].includes(raw.origin.format) && Array.isArray(raw.origin.dpi)
         ? { format: raw.origin.format, dpi: raw.origin.dpi.map(num).filter((d) => d > 0) } : undefined
     });
   }

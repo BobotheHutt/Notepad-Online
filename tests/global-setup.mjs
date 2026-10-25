@@ -115,6 +115,21 @@ export default async function globalSetup() {
     files['scan.jpg'] = b64(await blob(straight, 'image/jpeg'));
     files['scan.png'] = b64(await blob(straight, 'image/png'));
     files['scan.webp'] = b64(await blob(straight, 'image/webp'));
+    // a BMP, written here (browsers cannot): 24-bit, rows bottom to top, top-down header avoided
+    {
+      const { width: w, height: h, data } = straight.getContext('2d').getImageData(0, 0, straight.width, straight.height);
+      const row = (w * 3 + 3) & ~3;
+      const out = new Uint8Array(54 + row * h);
+      const d = new DataView(out.buffer);
+      d.setUint16(0, 0x424d); d.setUint32(2, out.length, true); d.setUint32(10, 54, true); d.setUint32(14, 40, true);
+      d.setInt32(18, w, true); d.setInt32(22, h, true); d.setUint16(26, 1, true); d.setUint16(28, 24, true);
+      d.setInt32(38, 7874, true); d.setInt32(42, 7874, true); // 200 dpi
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4, o = 54 + (h - 1 - y) * row + x * 3;
+        out[o] = data[i + 2]; out[o + 1] = data[i + 1]; out[o + 2] = data[i];
+      }
+      files['scan.bmp'] = b64(out);
+    }
     const side = await blob(scanPage(form1, { sideways: true }), 'image/jpeg');
     const app1 = [0xff, 0xe1, 0, 34, 0x45, 0x78, 0x69, 0x66, 0, 0, 0x4d, 0x4d, 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 8, 0, 0, 0, 0, 0, 0];
     files['photo-sideways.jpg'] = b64(new Uint8Array([...side.slice(0, 2), ...app1, ...side.slice(2)]));

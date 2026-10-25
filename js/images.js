@@ -1,5 +1,5 @@
 /* Noteshack — images as documents.
-   A JPG, PNG, WebP or TIFF opens in the PDF editor, each image a page, so
+   A JPG, PNG, WebP, TIFF or BMP opens in the PDF editor, each image a page, so
    every tool works on it: reading its text, straightening, editing. It is
    downloaded again as the same kind of file, at the same size in pixels,
    with the changes drawn in. A TIFF keeps all its pages; the others hold one
@@ -12,7 +12,8 @@
     jpeg: { ext: 'jpg', mime: 'image/jpeg', name: 'JPG' },
     png: { ext: 'png', mime: 'image/png', name: 'PNG' },
     webp: { ext: 'webp', mime: 'image/webp', name: 'WebP' },
-    tiff: { ext: 'tif', mime: 'image/tiff', name: 'TIFF' }
+    tiff: { ext: 'tif', mime: 'image/tiff', name: 'TIFF' },
+    bmp: { ext: 'bmp', mime: 'image/bmp', name: 'BMP' }
   };
 
   function formatOf(file) {
@@ -21,6 +22,7 @@
     if (ext === 'png' || file.type === 'image/png') return 'png';
     if (ext === 'webp' || file.type === 'image/webp') return 'webp';
     if (ext === 'tif' || ext === 'tiff' || file.type === 'image/tiff') return 'tiff';
+    if (ext === 'bmp' || file.type === 'image/bmp') return 'bmp';
     return null;
   }
 
@@ -93,6 +95,11 @@
     return 0;
   }
 
+  function bmpDpi(buf) {
+    const d = new DataView(buf);
+    return d.byteLength >= 46 && d.getUint16(0) === 0x424d && d.getUint32(14, true) >= 40 ? d.getInt32(38, true) * 0.0254 : 0;
+  }
+
   // Dots per inch: the file's own if it is believable, else a guess that
   // makes the longer side about 11 inches, the size of a letter page.
   const dpiFor = (own, w, h) => (own >= 50 && own <= 2400 ? own : Math.min(600, Math.max(72, Math.max(w, h) / 11)));
@@ -125,12 +132,17 @@
     } else {
       // createImageBitmap turns a photo upright by its EXIF orientation
       const bmp = await createImageBitmap(new Blob([buf], { type: FORMATS[format].mime }));
-      const info = format === 'jpeg' ? jpegInfo(buf) : { orientation: 1, dpi: format === 'png' ? pngDpi(buf) : 0 };
+      const info = format === 'jpeg' ? jpegInfo(buf) : { orientation: 1, dpi: format === 'png' ? pngDpi(buf) : format === 'bmp' ? bmpDpi(buf) : 0 };
       const pg = { w: bmp.width, h: bmp.height, dpi: dpiFor(info.dpi, bmp.width, bmp.height) };
       // kept as it came where possible, so it is not compressed twice
       if (format === 'jpeg' && info.orientation <= 1) pg.jpg = new Uint8Array(buf);
       else if (format === 'png') pg.png = new Uint8Array(buf);
-      else {
+      else if (format === 'bmp') {
+        // no loss: kept as PNG inside the PDF
+        const c = canvasOf(bmp.width, bmp.height);
+        c.getContext('2d').drawImage(bmp, 0, 0);
+        pg.png = (await toBytes(c, 'image/png')).bytes;
+      } else {
         const c = canvasOf(bmp.width, bmp.height);
         const g = c.getContext('2d');
         g.fillStyle = '#fff';
@@ -173,6 +185,7 @@
         g.fillRect(0, 0, c.width, c.height);
         await page.render({ canvasContext: g, viewport: vp }).promise;
         if (tiff) { await tiff.add(g.getImageData(0, 0, c.width, c.height), dpi); continue; }
+        if (origin.format === 'bmp') { files.push({ bytes: bmpBytes(g.getImageData(0, 0, c.width, c.height), dpi), ext: 'bmp' }); continue; }
         let out = await toBytes(c, f.mime, 0.92);
         // a browser that cannot write WebP gives PNG instead
         if (!out || out.type !== f.mime) { out = await toBytes(c, 'image/png'); fellBack = true; }
@@ -189,6 +202,35 @@
       filename: safeName(title, 'zip'),
       fellBack
     };
+  }
+
+  /* ----- a BMP writer: 24-bit, uncompressed, as BMPs nearly always are ----- */
+
+  function bmpBytes(img, dpi) {
+    const { width: w, height: h, data } = img;
+    const row = (w * 3 + 3) & ~3; // rows are padded to four bytes
+    const out = new Uint8Array(54 + row * h);
+    const d = new DataView(out.buffer);
+    d.setUint16(0, 0x424d); // "BM"
+    d.setUint32(2, out.length, true);
+    d.setUint32(10, 54, true);
+    d.setUint32(14, 40, true);
+    d.setInt32(18, w, true);
+    d.setInt32(22, h, true); // positive: rows bottom to top
+    d.setUint16(26, 1, true);
+    d.setUint16(28, 24, true);
+    d.setUint32(34, row * h, true);
+    const ppm = Math.round(dpi / 0.0254);
+    d.setInt32(38, ppm, true);
+    d.setInt32(42, ppm, true);
+    for (let y = 0; y < h; y++) {
+      let o = 54 + (h - 1 - y) * row;
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        out[o++] = data[i + 2]; out[o++] = data[i + 1]; out[o++] = data[i]; // blue, green, red
+      }
+    }
+    return out;
   }
 
   /* ----- a TIFF writer: any number of pages, Deflate-compressed ----- */
@@ -260,5 +302,11 @@
     return { add, finish: () => new Blob(parts, { type: 'image/tiff' }) };
   }
 
-  window.NpImages = { formatOf, toPdf, fromPdf, label: (origin) => FORMATS[origin.format].name, ext: (origin) => FORMATS[origin.format].ext };
+  // what Save as needs to know of each kind: its file endings and type
+  const kind = (format) => FORMATS[format] && {
+    ext: FORMATS[format].ext, mime: FORMATS[format].mime, label: FORMATS[format].name + ' image',
+    exts: format === 'jpeg' ? ['jpg', 'jpeg'] : format === 'tiff' ? ['tif', 'tiff'] : [FORMATS[format].ext]
+  };
+
+  window.NpImages = { formatOf, toPdf, fromPdf, kind, label: (origin) => FORMATS[origin.format].name };
 })();

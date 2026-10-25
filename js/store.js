@@ -5,7 +5,10 @@
    NpStore.persistent is false so the app can warn.
    A PDF's original file (its sources) is kept in a store of its own and
    written only when it changes, not on every save of the edits; records
-   come back without it, and getSources fetches it when the PDF is opened. */
+   come back without it, and getSources fetches it when the PDF is opened.
+   The link to a file on disk that Save writes to (a FileSystemFileHandle,
+   Chrome and Edge only) is kept apart too, and read only when Save needs
+   it, never while the app starts. */
 (function () {
   'use strict';
 
@@ -34,9 +37,10 @@
     if (!('indexedDB' in window)) return false;
     try {
       db = await new Promise((resolve, reject) => {
-        const r = indexedDB.open(DB_NAME, 2);
+        const r = indexedDB.open(DB_NAME, 3);
         r.onupgradeneeded = () => {
           const d = r.result;
+          if (!d.objectStoreNames.contains('handles')) d.createObjectStore('handles');
           if (!d.objectStoreNames.contains('sources')) d.createObjectStore('sources');
           if (!d.objectStoreNames.contains('docs')) d.createObjectStore('docs', { keyPath: 'id' });
           if (!d.objectStoreNames.contains('versions')) {
@@ -102,9 +106,10 @@
       mem.versions = mem.versions.filter((v) => v.docId !== id);
       return;
     }
-    const tx = db.transaction(['docs', 'versions', 'sources'], 'readwrite');
+    const tx = db.transaction(['docs', 'versions', 'sources', 'handles'], 'readwrite');
     tx.objectStore('docs').delete(id);
     tx.objectStore('sources').delete(id);
+    tx.objectStore('handles').delete(id);
     written.delete(id);
     const idx = tx.objectStore('versions').index('docId');
     idx.openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
@@ -148,10 +153,26 @@
     return (await req(db.transaction('versions').objectStore('versions').get(vid))) || null;
   }
 
+  // the file on disk a document saves to; null removes it
+  const handles = new Map(); // this visit's, so a Save need not read storage
+  async function putHandle(id, handle) {
+    if (handle) handles.set(id, handle); else handles.delete(id);
+    if (!db) return;
+    const tx = db.transaction('handles', 'readwrite');
+    if (handle) tx.objectStore('handles').put(handle, id); else tx.objectStore('handles').delete(id);
+    await done(tx);
+  }
+  async function getHandle(id) {
+    if (handles.has(id) || !db) return handles.get(id) || null;
+    const h = (await req(db.transaction('handles').objectStore('handles').get(id))) || null;
+    if (h) handles.set(id, h);
+    return h;
+  }
+
   window.NpStore = {
     open,
     get persistent() { return !!db; },
-    allDocs, getDoc, getSources, putDoc, deleteDoc,
+    allDocs, getDoc, getSources, putDoc, deleteDoc, putHandle, getHandle,
     addVersion, listVersions, getVersion
   };
 })();

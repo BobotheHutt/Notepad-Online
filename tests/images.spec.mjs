@@ -5,11 +5,11 @@ import { test, expect, openFile, waitToast } from './helpers.mjs';
 
 // width, height and kind of a downloaded image, as the browser reads it
 async function inspect(p, file, type) {
-  const bytes = [...fs.readFileSync(file)];
-  return p.evaluate(async ([bytes, type]) => {
-    const b = await createImageBitmap(new Blob([new Uint8Array(bytes)], { type }));
+  const b64 = fs.readFileSync(file).toString('base64');
+  return p.evaluate(async ([b64, type]) => {
+    const b = await createImageBitmap(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))], { type }));
     return [b.width, b.height];
-  }, [bytes, type]);
+  }, [b64, type]);
 }
 
 async function download(p, selector) {
@@ -32,7 +32,7 @@ test('a JPG: read, edit, and download as a JPG the same size, with the change in
   await p.locator('.pdf-conv', { hasText: 'Springfield' }).first().click();
   await p.evaluate(() => { const n = document.querySelector('.pdf-textbox.editing'); n.textContent = n.textContent.replace('Springfield', 'Shelbyville'); });
   await p.keyboard.press('Escape');
-  await expect(p.locator('.pdf-download')).toHaveAttribute('title', 'Download the JPG with your changes');
+  await expect(p.locator('.pdf-download')).toHaveText('Save');
   const out = await download(p, '.pdf-download');
   expect(out.name).toBe('scan.jpg');
   expect(await inspect(p, out.file, 'image/jpeg')).toEqual([1700, 2200]);
@@ -49,8 +49,8 @@ test('a JPG: read, edit, and download as a JPG the same size, with the change in
 test('a JPG can still be downloaded as a PDF', async ({ app: p }) => {
   await openFile(p, 'scan.jpg');
   await p.click('.menu-btn:has-text("File")');
-  await expect(p.locator('#export-own')).toHaveText('JPG with your changes');
-  const out = await download(p, '[data-action="export"][data-arg="pdf"]');
+  await expect(p.locator('#export-own')).toHaveText('JPG (.jpg)');
+  const out = await download(p, '[data-action="save-as"][data-arg="pdf"]');
   expect(out.name).toBe('scan.pdf');
   expect(fs.readFileSync(out.file).subarray(0, 5).toString()).toBe('%PDF-');
 });
@@ -63,7 +63,7 @@ test('a phone photo stored sideways opens upright', async ({ app: p }) => {
   expect(await inspect(p, out.file, 'image/jpeg')).toEqual([1700, 2200]);
 });
 
-for (const [name, type] of [['scan.png', 'image/png'], ['scan.webp', 'image/webp']]) {
+for (const [name, type] of [['scan.png', 'image/png'], ['scan.webp', 'image/webp'], ['scan.bmp', 'image/bmp']]) {
   test(`${name.split('.')[1].toUpperCase()} comes back as ${name.split('.')[1].toUpperCase()}`, async ({ app: p }) => {
     await openFile(p, name);
     const out = await download(p, '.pdf-download');

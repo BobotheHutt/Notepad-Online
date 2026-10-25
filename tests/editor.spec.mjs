@@ -44,11 +44,11 @@ test('find and replace touches the text, not the markup', async ({ app: p }) => 
 test('saving, reloading, exporting and a second document', async ({ app: p }) => {
   await p.click('#editor');
   await p.keyboard.type('# Kept'); await p.keyboard.press('Enter'); await p.keyboard.type('This survives a reload.');
-  await expect(p.locator('#save-status')).toHaveText('Saved', { timeout: 10000 });
+  await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack', { timeout: 10000 });
   await p.reload(); await p.waitForSelector('body.ready');
   await expect(p.locator('#editor')).toContainText('This survives a reload.');
   for (const kind of ['docx', 'md', 'html', 'txt']) {
-    const [dl] = await Promise.all([p.waitForEvent('download'), p.evaluate((k) => document.querySelector(`[data-action="export"][data-arg="${k}"]`).click(), kind)]);
+    const [dl] = await Promise.all([p.waitForEvent('download'), p.evaluate((k) => document.querySelector(`[data-action="save-as"][data-arg="${k}"]`).click(), kind)]);
     expect(dl.suggestedFilename()).toBe('Kept.' + kind);
     if (kind === 'docx') await dl.saveAs(test.info().outputPath('Kept copy.docx'));
   }

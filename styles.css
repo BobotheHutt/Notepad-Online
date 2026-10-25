@@ -1243,3 +1243,7 @@ body.pdf-show-original .pdf-conv { visibility: hidden; }
 @media print {
   body.pdf-mode .pdf-stage { display: none !important; }
 }
+
+.about-more { border-top: 1px solid var(--line); padding-top: 8px; }
+.about-more summary { cursor: pointer; font-weight: 600; }
+.about-more p, .about-more ul { margin: 8px 0 0; }

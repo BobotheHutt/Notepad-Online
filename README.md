@@ -1,7 +1,7 @@
 # Notepad Online
 
 A fast, private word processor and PDF editor that runs entirely in your
-browser. No account, no server, no tracking. What you write stays on your
+browser. No account, no server, no tracking. Your documents stay on your
 device. It saves as you type, works offline, opens and saves Word documents,
 and lets you edit and sign PDFs.
 
@@ -73,6 +73,54 @@ documents** to keep a copy, or to move them.
 Upgrading from the first version? Your old draft is moved into the
 documents list automatically the first time you open the new version.
 
+## Privacy
+
+There is no account, no analytics, no ads and no cookies, and documents are
+never uploaded. Two things are fetched from the internet:
+
+- **Font files.** When a PDF needs a font, it is downloaded from the free
+  [Fontsource](https://fontsource.org) library through jsDelivr
+  (`cdn.jsdelivr.net`). Like any website, jsDelivr sees the visitor's IP
+  address; nothing from the document is sent.
+- **Linked pictures.** A picture in a document that links to a web address
+  (for example, pasted from a web page) is loaded from that address.
+
+Everything else, text recognition included, runs on the device.
+
+## Disclaimer
+
+Notepad Online is provided as is, without warranty of any kind. Text
+recognition and font matching can be wrong: check a PDF before sending,
+submitting or signing it, and keep backups of anything important.
+
+Users are responsible for the documents they change. Do not alter a document
+in a way that misleads anyone, such as a form or record someone else filled
+in or signed.
+
+## Credits and licenses
+
+Notepad Online uses these open-source projects, kept unmodified in `vendor/`
+with their license texts:
+
+- [PDF.js](https://mozilla.github.io/pdf.js/) (Mozilla), Apache License 2.0
+- [pdf-lib](https://pdf-lib.js.org) and @pdf-lib/fontkit, MIT License
+- [Tesseract.js](https://tesseract.projectnaptha.com), Tesseract OCR and its
+  English data, Apache License 2.0
+- [opentype.js](https://opentype.js.org), MIT License
+
+Fonts come from [Fontsource](https://fontsource.org) when needed and are
+not stored in this repository; each is under its own free license (SIL Open
+Font License or Apache License 2.0). Fonts made from a scan's letters are
+changed copies of those fonts, so they are renamed (Notepad Scan 1, 2…) and
+keep their license notices, as the Open Font License asks.
+
+## Trademarks
+
+Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and
+Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks
+of The Monotype Corporation. They are named only to describe compatibility;
+Notepad Online is not affiliated with or endorsed by them.
+
 ## Running it
 
 It is a static site with no build step and no dependencies.
@@ -96,7 +144,7 @@ js/zip.js              the zip reading and writing .docx needs
 js/pdf.js              the PDF editor
 js/fonts.js            identifies and downloads the font a PDF was set in
 js/scanfont.js         builds a font from a scan's own letters
-vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans) and opentype.js (builds fonts from scans), loaded only when needed
+vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans) and opentype.js (builds fonts from scans), with their licenses; loaded only when needed
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

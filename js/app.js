@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-23';
+  const APP_VERSION = '2026.10.25-24';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1655,13 +1655,29 @@
     let persisted = false;
     try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; } catch (e) { /* not available */ }
     const body = el('div', { class: 'stack about' },
-      el('p', {}, 'Notepad Online is a word processor that runs entirely in your browser. Nothing you write is sent anywhere — documents are stored on this device, in this browser.'),
+      el('p', {}, 'Notepad Online is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.'),
       el('ul', { class: 'facts' },
         el('li', {}, el('strong', {}, String(docs.length)), ' document' + (docs.length === 1 ? '' : 's') + (usage ? ' · ' + usage : '')),
         el('li', {}, NpStore.persistent ? (persisted ? 'Storage is marked persistent: the browser will not clear it to free space.' : 'Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.') : 'This browser is not allowing storage (private window?). Work is kept only until you close the tab.'),
         el('li', {}, 'Works offline once loaded, and can be installed as an app from your browser’s menu.'),
         el('li', {}, 'Version ' + APP_VERSION)),
-      el('p', { class: 'muted' }, 'Tip: File → Back up all documents saves everything to one file you can restore on another computer.'));
+      el('p', { class: 'muted' }, 'Tip: File → Back up all documents saves everything to one file you can restore on another computer.'),
+      el('details', { class: 'about-more' }, el('summary', {}, 'Privacy'),
+        el('p', {}, 'There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.'),
+        el('p', {}, 'Two things are fetched from the internet: when a PDF needs a font, the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document; and pictures in your documents that link to a web address are loaded from that address.')),
+      el('details', { class: 'about-more' }, el('summary', {}, 'Disclaimer'),
+        el('p', {}, 'Notepad Online is provided as is, without warranty of any kind. Text recognition and font matching can be wrong: check a PDF before you send, submit or sign it. Keep backups of anything important.'),
+        el('p', {}, 'You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.')),
+      el('details', { class: 'about-more' }, el('summary', {}, 'Credits and licenses'),
+        el('ul', { class: 'facts' },
+          el('li', {}, 'PDF.js (Mozilla), Apache License 2.0: shows PDF pages'),
+          el('li', {}, 'pdf-lib and @pdf-lib/fontkit, MIT License: write PDFs'),
+          el('li', {}, 'Tesseract.js, Tesseract OCR and its English data, Apache License 2.0: read text on scans'),
+          el('li', {}, 'opentype.js, MIT License: builds fonts from a scan’s letters'),
+          el('li', {}, 'Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks')),
+        el('p', {}, 'The full license texts are in the vendor folder of the app’s source.')),
+      el('details', { class: 'about-more' }, el('summary', {}, 'Trademarks'),
+        el('p', {}, 'Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Notepad Online is not affiliated with or endorsed by them.')));
     dialog({ title: 'About and storage', body });
   }
 

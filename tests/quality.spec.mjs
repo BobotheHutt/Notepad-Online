@@ -87,3 +87,17 @@ test.describe('with JavaScript off', () => {
     await p.screenshot({ path: test.info().outputPath('noscript.png') });
   });
 });
+
+test('menus open over the toolbars, PDF ones included', async ({ app: p }) => {
+  const menuOnTop = () => p.evaluate(() => {
+    const m = [...document.querySelectorAll('.menu-pop')].find((x) => x.offsetParent);
+    const r = m.getBoundingClientRect();
+    return [0.2, 0.5, 0.8].every((f) => m.contains(document.elementFromPoint(r.left + r.width * f, r.top + 30)));
+  });
+  await p.click('.menu-btn:has-text("File")');
+  expect(await menuOnTop()).toBe(true);
+  await p.keyboard.press('Escape');
+  await openFile(p, 'scan.jpg');
+  await p.click('.menu-btn:has-text("File")');
+  expect(await menuOnTop()).toBe(true);
+});

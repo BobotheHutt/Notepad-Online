@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-34';
+  const APP_VERSION = '2026.10.25-35';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1255,7 +1255,7 @@
     'new': () => createDoc(),
     open: openPicker,
     save: saveFile,
-    'save-as': (arg) => current && saveAs(arg === 'own' ? ownKind(current) : arg),
+    'save-as': () => saveAs(),
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
@@ -1350,7 +1350,7 @@
     const run = (fn) => { e.preventDefault(); fn(); };
 
     if (k === 's' && !e.shiftKey) return run(saveFile);
-    if (k === 's' && e.shiftKey) return run(() => current && saveAs(ownKind(current)));
+    if (k === 's' && e.shiftKey) return run(() => saveAs());
     if (k === 'o' && !e.shiftKey) return run(openPicker);
     if (k === 'p' && !e.shiftKey) return run(() => (pdfMode() ? printPdf() : printDoc()));
     if (k === 'f' && e.shiftKey) return run(toggleFocus);
@@ -2182,6 +2182,14 @@
     return NpImages.formatOf(file);
   }
 
+  // The kinds a document can be saved as, its own first. A PDF (or an image,
+  // which is one inside) can also become images, a Word document or text.
+  function saveKinds(doc) {
+    const all = doc.type === 'pdf' ? ['pdf', 'jpeg', 'png', 'webp', 'tiff', 'bmp', 'docx', 'txt'] : ['docx', 'pdf', 'md', 'html', 'txt'];
+    const own = ownKind(doc);
+    return [own, ...all.filter((k) => k !== own)];
+  }
+
   // what Save writes when there is no file yet: what the document came as
   const ownKind = (doc) => (fileLinks.has(doc.id) && fileLinks.get(doc.id).kind) || doc.kind || (doc.type === 'pdf' ? (doc.origin ? doc.origin.format : 'pdf') : 'docx');
 
@@ -2193,7 +2201,17 @@
     if (doc.type === 'pdf') {
       const pdf = await NpPdf.export(doc);
       if (kind === 'pdf') return out(pdf);
-      const img = await NpImages.fromPdf(pdf, Object.assign({}, doc.origin, { format: kind }), name, safeFileName);
+      // text and Word: the words of the saved PDF, read back (so edits, and
+      // what was read from scans, are in it), as paragraphs and headings
+      if (kind === 'txt' || kind === 'docx') {
+        const pages = await pdfParagraphs(pdf);
+        if (kind === 'txt') return out(new Blob([pages.map((pg) => pg.map((q) => q.runs.map((r) => r.text).join('')).join('\n\n')).join('\n\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }));
+        const root = document.createElement('div');
+        root.innerHTML = pages.map((pg) => pg.map((q) => '<' + q.tag + '>' + q.runs.map((r) => (r.bold ? '<b>' + escapeHtml(r.text) + '</b>' : escapeHtml(r.text))).join('') + '</' + q.tag + '>').join('')).join('<hr class="page-break">');
+        return out(await NpDocx.export(root, { title: name, fontCss: fontByKey('arial').css, size: 11, lineHeight: 1.15, page: 'letter', margins: 'normal' }));
+      }
+      // images: a picture of each page, at the image's own resolution or 200 dpi
+      const img = await NpImages.fromPdf(pdf, { format: kind, dpi: (doc.origin && doc.origin.dpi) || [200] }, name, safeFileName);
       return Object.assign(img, { zip: img.blob.type === 'application/zip' });
     }
     if (kind === 'txt') return out(new Blob([textIndex(true).text.replace(/\n{3,}/g, '\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }));
@@ -2204,6 +2222,58 @@
     }
     const s = docSettings();
     return out(await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins }));
+  }
+
+  // A PDF's words as paragraphs, page by page: [[{ tag, runs: [{ text, bold }] }]].
+  // Lines join into a paragraph until a gap or a change of size; large text
+  // becomes a heading.
+  async function pdfParagraphs(pdfBlob) {
+    const view = await NpPdf.view(pdfBlob);
+    const pages = [];
+    try {
+      for (let i = 0; i < view.count; i++) {
+        const page = await view.page(i);
+        const tc = await page.getTextContent();
+        // the fonts' real names (for bold) are known once the page's drawing is read
+        try { await page.getOperatorList(); } catch (e) { /* ignore */ }
+        const fontName = (id) => { try { const f = page.commonObjs.get(id); return (f && f.name) || ''; } catch (e) { return ''; } };
+        const lines = [];
+        let line = null;
+        for (const it of tc.items) {
+          if (!line) line = { runs: [], y: it.transform[5], size: 0 };
+          if (it.str) {
+            const size = Math.hypot(it.transform[2], it.transform[3]);
+            line.size = Math.max(line.size, size);
+            line.runs.push({ text: it.str, bold: /bold|black|heavy|semibold|demi/i.test(fontName(it.fontName)) });
+          }
+          if (it.hasEOL) { if (line.runs.length) lines.push(line); line = null; }
+        }
+        if (line && line.runs.length) lines.push(line);
+        // the body text's size: the one most of the words are set in
+        const bySize = new Map();
+        for (const l of lines) { const k = Math.round(l.size); bySize.set(k, (bySize.get(k) || 0) + l.runs.reduce((t, r) => t + r.text.length, 0)); }
+        const body = [...bySize].sort((a, b) => b[1] - a[1])[0]?.[0] || 12;
+        const paras = [];
+        let prev = null;
+        for (const l of lines) {
+          const text = l.runs.map((r) => r.text).join('');
+          if (!text.trim()) { prev = null; continue; }
+          const tag = l.size >= body * 1.8 ? 'h1' : l.size >= body * 1.3 ? 'h2' : 'p';
+          const gap = prev ? Math.abs(prev.y - l.y) : 0;
+          const joins = prev && prev.tag === tag && tag === 'p' && gap < l.size * 1.6 && Math.abs(prev.size - l.size) < 1;
+          if (joins) {
+            const last = paras[paras.length - 1];
+            last.runs.push({ text: ' ', bold: false }, ...l.runs);
+          } else paras.push({ tag, runs: l.runs.slice() });
+          prev = { y: l.y, size: l.size, tag };
+        }
+        for (const q of paras) q.runs = q.runs.map((r) => ({ text: r.text.replace(/\s+/g, ' '), bold: r.bold }));
+        pages.push(paras);
+      }
+    } finally {
+      view.destroy();
+    }
+    return pages;
   }
 
   // Write the document into a file on disk (handle), or, without one, put a
@@ -2235,26 +2305,51 @@
     updateSaveUi();
   }
 
-  // Save as: choose the name, place (where the browser allows) and kind
+  // Save as: choose the name, place and kind. Chrome and Edge show their
+  // own Save dialog, with every kind in its type list (the document's own
+  // first); other browsers get Noteshack's, to pick the kind, and save to
+  // Downloads. kind, when given, is the one to save as without asking.
   async function saveAs(kind) {
     if (!current) return;
-    // a text document becomes a PDF by printing it
-    if (kind === 'pdf' && !pdfMode()) {
-      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
-      setTimeout(printDoc, 400);
-      return;
-    }
+    const doc = current;
+    if (!pdfMode()) doc.text = plainText().slice(0, 200000); // the name may come from a line just typed
+    const kinds = kind ? [kind] : saveKinds(doc);
     let handle = null;
     if (canWriteFiles()) {
-      const info = kindInfo(kind);
-      // the name comes from the first line, which may have just been typed
-      if (!pdfMode()) current.text = plainText().slice(0, 200000);
       // asked first: the browser shows the dialog only straight after a click or key
       try {
-        handle = await window.showSaveFilePicker({ id: 'noteshack', suggestedName: safeFileName(displayTitle(current), info.ext), types: [{ description: info.label, accept: { [info.mime]: info.exts.map((x) => '.' + x) } }] });
+        handle = await window.showSaveFilePicker({
+          id: 'noteshack', excludeAcceptAllOption: true,
+          suggestedName: safeFileName(displayTitle(doc), kindInfo(kinds[0]).ext),
+          types: kinds.map((k) => { const i = kindInfo(k); return { description: i.label + ' (.' + i.ext + ')', accept: { [i.mime]: i.exts.map((x) => '.' + x) } }; })
+        });
       } catch (e) {
         if (e.name === 'AbortError') return;
       }
+      if (handle) {
+        // the kind chosen in the dialog shows in the file's ending
+        const ext = (handle.name.split('.').pop() || '').toLowerCase();
+        kind = kinds.find((k) => kindInfo(k).exts.includes(ext)) || kinds[0];
+      }
+    }
+    if (!kind) {
+      const select = el('select', { class: 'input', 'aria-label': 'File type' },
+        kinds.map((k) => el('option', { value: k }, kindInfo(k).label + ' (.' + kindInfo(k).ext + ')')));
+      const v = await dialog({
+        title: 'Save as',
+        body: el('label', { class: 'field' }, el('span', {}, 'File type'), select),
+        actions: [{ label: 'Cancel', value: '' }, { label: 'Save', value: 'save', primary: true }],
+        onOpen: () => select.focus()
+      });
+      if (v !== 'save') return;
+      kind = select.value;
+    }
+    // a text document becomes a PDF by printing it
+    if (kind === 'pdf' && doc.type !== 'pdf') {
+      if (handle && handle.remove) handle.remove().catch(() => {});
+      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
+      setTimeout(printDoc, 400);
+      return;
     }
     await writeOut(kind, handle);
   }
@@ -2276,7 +2371,7 @@
             body: el('p', { class: 'dlg-text' }, 'Noteshack opened the everyday parts of this ' + kindInfo(f.kind).label.toLowerCase() + '. Anything it could not open (comments, tracked changes, headers and footers, text boxes, a page’s scripts) would be lost from the file. Save as keeps the original as it is.'),
             actions: [{ label: 'Cancel', value: '' }, { label: 'Save as…', value: 'as' }, { label: 'Save over it', value: 'over', primary: true }]
           });
-          if (v === 'as') return saveAs(f.kind);
+          if (v === 'as') return saveAs();
           if (v !== 'over') return;
         }
         if (ok) {
@@ -2285,7 +2380,8 @@
         }
       } catch (e) { /* the file is gone or out of reach: choose again */ }
     }
-    return saveAs(ownKind(current));
+    // with no Save dialog in this browser, Save saves as the document's own kind
+    return canWriteFiles() ? saveAs() : saveAs(ownKind(current));
   }
 
   // The File menu and the PDF toolbar say where Save goes.
@@ -2294,9 +2390,6 @@
     const where = f && canWriteFiles() ? 'Save to “' + f.name + '”' : 'Save';
     $('#save-item span').textContent = where;
     $('.pdf-download').title = where + ' (Ctrl+S)';
-    const own = current && current.type === 'pdf' && current.origin;
-    $('#export-own').hidden = !own;
-    if (own) $('#export-own span').textContent = NpImages.label(current.origin) + ' (.' + NpImages.kind(current.origin.format).ext + ')';
   }
 
   // Link a newly opened document to the file it came from, so Save writes back to it.

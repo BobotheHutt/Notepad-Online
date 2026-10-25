@@ -52,7 +52,11 @@ export const test = base.extend({
         window.showSaveFilePicker = async (o) => {
           if (window.__cancelNext) { window.__cancelNext = false; throw new DOMException('cancelled', 'AbortError'); }
           window.__picked.push(o.suggestedName);
-          return (await navigator.storage.getDirectory()).getFileHandle(o.suggestedName, { create: true });
+          window.__types = o.types.map((t) => t.description);
+          // the type picked in the dialog's list shows in the name's ending
+          const name = window.__pickExt ? o.suggestedName.replace(/\.[^.]+$/, '.' + window.__pickExt) : o.suggestedName;
+          window.__pickExt = null;
+          return (await navigator.storage.getDirectory()).getFileHandle(name, { create: true });
         };
         window.showOpenFilePicker = async () => [await (await navigator.storage.getDirectory()).getFileHandle(window.__openName)];
       });
@@ -92,3 +96,14 @@ export const putFile = (page, name, bytes) => page.evaluate(async ([name, b64]) 
 export const getFile = (page, name) => page.evaluate(async (name) => {
   try { return [...new Uint8Array(await (await (await (await navigator.storage.getDirectory()).getFileHandle(name)).getFile()).arrayBuffer())]; } catch (e) { return null; }
 }, name);
+
+// File → Save as…, where the browser has no Save dialog: pick the type in
+// Noteshack's own, and the file arrives as a download
+export async function saveAsType(page, kind) {
+  const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), (async () => {
+    await page.evaluate(() => document.querySelector('[data-action="save-as"]').click());
+    await page.locator('dialog[open] select').selectOption(kind);
+    await page.locator('dialog[open]').getByRole('button', { name: 'Save', exact: true }).click();
+  })()]);
+  return dl;
+}

@@ -1,4 +1,4 @@
-import { test, expect } from './helpers.mjs';
+import { test, expect, saveAsType } from './helpers.mjs';
 
 test('writing with Markdown shortcuts, tables and undo', async ({ app: p }) => {
   await p.click('#editor');
@@ -48,7 +48,7 @@ test('saving, reloading, exporting and a second document', async ({ app: p }) =>
   await p.reload(); await p.waitForSelector('body.ready');
   await expect(p.locator('#editor')).toContainText('This survives a reload.');
   for (const kind of ['docx', 'md', 'html', 'txt']) {
-    const [dl] = await Promise.all([p.waitForEvent('download'), p.evaluate((k) => document.querySelector(`[data-action="save-as"][data-arg="${k}"]`).click(), kind)]);
+    const dl = await saveAsType(p, kind);
     expect(dl.suggestedFilename()).toBe('Kept.' + kind);
     if (kind === 'docx') await dl.saveAs(test.info().outputPath('Kept copy.docx'));
   }

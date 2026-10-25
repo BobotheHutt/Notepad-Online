@@ -2,7 +2,7 @@
 // Save writes back to the file a document came from or was saved as;
 // elsewhere every save is a copy in Downloads.
 import fs from 'node:fs';
-import { test, expect, fixture, putFile, getFile } from './helpers.mjs';
+import { test, expect, fixture, putFile, getFile, saveAsType } from './helpers.mjs';
 
 const isJpeg = (b) => b && b[0] === 0xff && b[1] === 0xd8;
 const isZip = (b) => b && b[0] === 0x50 && b[1] === 0x4b;
@@ -59,14 +59,16 @@ test.describe('where the browser can write to files', () => {
     expect(isZip(first)).toBe(true);
     await p.keyboard.type(' Second draft.');
     await p.keyboard.press('Control+s');
-    await expect.poll(async () => (await getFile(p, 'Plans.docx')).length).not.toBe(first.length);
+    await expect.poll(async () => (await getFile(p, 'Plans.docx'))?.length).not.toBe(first.length); // null while the file is being written
     expect(await p.evaluate(() => window.__picked.length)).toBe(1);
-    // Save as Markdown makes a second file, and Save follows it
+    // Save as, picking Markdown in the dialog's type list, makes a second file, and Save follows it
+    await p.evaluate(() => { window.__pickExt = 'md'; });
     await p.click('.menu-btn:has-text("File")');
-    await p.click('[data-action="save-as"][data-arg="md"]');
+    await p.click('[data-action="save-as"]');
     await expect(p.locator('#toast')).toContainText('Saved to “Plans.md”');
     expect(new TextDecoder().decode(new Uint8Array(await getFile(p, 'Plans.md')))).toContain('# Plans');
     await expect(p.locator('#save-item')).toContainText('Save to “Plans.md”');
+    expect(await p.evaluate(() => window.__types)).toEqual(['Word document (.docx)', 'PDF (.pdf)', 'Markdown (.md)', 'Web page (.html)', 'Plain text (.txt)']);
   });
 
   test('cancelling Save as does nothing', async ({ app: p }) => {
@@ -84,7 +86,8 @@ test.describe('where the browser can write to files', () => {
   test('a Word file made elsewhere: Save asks before saving over it', async ({ app: p }) => {
     // a Word file, made by Noteshack as it happens, but opened as any other
     await p.click('#editor'); await p.keyboard.type('From another program');
-    const [dl] = await Promise.all([p.waitForEvent('download'), p.evaluate(() => { window.showSaveFilePicker = undefined; document.querySelector('[data-action="save-as"][data-arg="docx"]').click(); })]);
+    await p.evaluate(() => { window.showSaveFilePicker = undefined; });
+    const dl = await saveAsType(p, 'docx');
     await putFile(p, 'Report.docx', fs.readFileSync(await dl.path()));
     await p.reload(); await p.waitForSelector('body.ready');
     await p.evaluate(() => { window.__openName = 'Report.docx'; });

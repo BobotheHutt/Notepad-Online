@@ -1,7 +1,7 @@
 // Images open in the PDF editor, read and edit like a scan, and download as
 // the same kind of image, the same size in pixels.
 import fs from 'node:fs';
-import { test, expect, openFile, waitToast } from './helpers.mjs';
+import { test, expect, openFile, waitToast, saveAsType } from './helpers.mjs';
 
 // width, height and kind of a downloaded image, as the browser reads it
 async function inspect(p, file, type) {
@@ -46,13 +46,14 @@ test('a JPG: read, edit, and download as a JPG the same size, with the change in
   expect(text).not.toContain('Springfield');
 });
 
-test('a JPG can still be downloaded as a PDF', async ({ app: p }) => {
+test('a JPG can be saved as other kinds, its own first', async ({ app: p }) => {
   await openFile(p, 'scan.jpg');
-  await p.click('.menu-btn:has-text("File")');
-  await expect(p.locator('#export-own')).toHaveText('JPG (.jpg)');
-  const out = await download(p, '[data-action="save-as"][data-arg="pdf"]');
-  expect(out.name).toBe('scan.pdf');
-  expect(fs.readFileSync(out.file).subarray(0, 5).toString()).toBe('%PDF-');
+  await p.evaluate(() => document.querySelector('[data-action="save-as"]').click());
+  await expect(p.locator('dialog[open] select option')).toHaveText(['JPG image (.jpg)', 'PDF (.pdf)', 'PNG image (.png)', 'WebP image (.webp)', 'TIFF image (.tif)', 'BMP image (.bmp)', 'Word document (.docx)', 'Plain text (.txt)']);
+  await p.keyboard.press('Escape');
+  const dl = await saveAsType(p, 'pdf');
+  expect(dl.suggestedFilename()).toBe('scan.pdf');
+  expect(fs.readFileSync(await dl.path()).subarray(0, 5).toString()).toBe('%PDF-');
 });
 
 test('a phone photo stored sideways opens upright', async ({ app: p }) => {

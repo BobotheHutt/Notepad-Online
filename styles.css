@@ -383,7 +383,7 @@ body:not(.ready) .sidebar { transition: none; }
   row-gap: 2px;
   flex: none;
 }
-.topbar { position: relative; z-index: 10; }
+.topbar { position: relative; z-index: 35; } /* above the PDF toolbar (30), so menus open over it */
 .toolbar { position: relative; z-index: 5; }
 
 .tb {

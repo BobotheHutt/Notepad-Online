@@ -1186,13 +1186,24 @@
     })();
     const choice = await dialog({
       title: 'Print preview', wide: true, body: list,
-      actions: [{ label: 'Close', value: '' }, { label: 'Download', value: 'download' }, { label: 'Open in a new tab', value: 'tab' }, { label: 'Print', value: 'print', primary: true }]
+      actions: [{ label: 'Close', value: '' }, { label: 'Save as PDF…', value: 'save' }, { label: 'Open in a new tab', value: 'tab' }, { label: 'Print', value: 'print', primary: true }]
     });
     if (!choice) { await ready; if (view) view.destroy(); return; }
+    // where to save, asked straight after the click (the browser allows the dialog only then)
+    let handle = null;
+    if (choice === 'save' && canWriteFiles()) {
+      try { handle = await window.showSaveFilePicker({ id: 'noteshack', suggestedName: safeFileName(displayTitle(rec), 'pdf'), types: [{ description: 'PDF', accept: { 'application/pdf': ['.pdf'] } }] }); } catch (e) {
+        if (e.name === 'AbortError') { await ready; if (view) view.destroy(); return; }
+      }
+    }
     toast(blob ? 'One moment…' : 'Making the PDF…', 2000);
     await ready;
     if (failed || !blob) { if (view) view.destroy(); return; }
-    if (choice === 'download') download(blob, safeFileName(displayTitle(rec), 'pdf'));
+    if (choice === 'save') {
+      if (handle) {
+        try { const w = await handle.createWritable(); await w.write(blob); await w.close(); toast('Saved to “' + handle.name + '”'); } catch (e) { toast('Could not save: ' + (e.message || e), 7000); }
+      } else download(blob, safeFileName(displayTitle(rec), 'pdf'));
+    }
     else if (choice === 'tab') {
       const url = URL.createObjectURL(blob);
       if (!window.open(url, '_blank')) download(blob, safeFileName(displayTitle(rec), 'pdf'));

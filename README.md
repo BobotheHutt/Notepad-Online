@@ -20,7 +20,9 @@ and lets you edit and sign PDFs.
 - Unlimited documents, with a searchable sidebar
 - Autosave plus **version history**: browse earlier versions and restore any of them
 - **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window (PDFs and images open in the PDF editor, below)
-- **Download** as Word (`.docx`), PDF, Markdown, web page or plain text
+- **Save** and **Save as** Word (`.docx`), PDF, Markdown, web page or plain text. Everything is also kept in Noteshack as you work ("Saved in Noteshack").
+  - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog, and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
+  - **Firefox, Safari and phones** do not let websites write to a file on disk, so there each save is a new copy in Downloads.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
 - Back up every document to one file and restore it anywhere
 
@@ -30,7 +32,7 @@ and lets you edit and sign PDFs.
 - **The original font**: the app works out which font the words were set in (from the font's name in the PDF, or, on a scan, by comparing the letters with 31 common document fonts) and downloads it, so new words match. Paid fonts like Arial, Times New Roman and Calibri are matched with free fonts drawn to the same shapes and widths (Arimo, Tinos, Carlito).
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
-- **Images too**: open a JPG, PNG, WebP or TIFF (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Download** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) File → Download → PDF with your changes is there too.
+- **Images too**: open a JPG, PNG, WebP, TIFF or BMP (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Save** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) File → Save as → PDF is there too.
 - **Scanned pages become editable text (OCR)**: with Edit text, click a scanned page and the app reads that page (a few seconds; the line you clicked then opens for editing), takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
@@ -46,11 +48,11 @@ and lets you edit and sign PDFs.
   - English only for now; needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
-- **Download** a new PDF with your changes. The original file is never touched.
-- **Print** shows a preview of exactly what will print (your changes included), then prints straight from it; Download and Open in a new tab are there too.
+- **Save** writes the PDF with your changes: back over the file you opened (Chrome and Edge, see Save above), or as a new copy. Save as makes a new file and leaves the original as it was.
+- **Print** shows a preview of exactly what will print (your changes included), then prints straight from it; Save and Open in a new tab are there too.
 
 What PDF editing cannot do, so nothing surprises you:
-- Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. That includes scanned pages and other pictures: the covered pixels are painted over inside the image itself. Only drawings (lines and shapes) under a white-out stay in the file, hidden. The app tells you when that happens.
+- Text you change or white-out is **erased from the file** when you save, not just covered, and the rest of the line stays exactly where it was. That includes scanned pages and other pictures: the covered pixels are painted over inside the image itself. Only drawings (lines and shapes) under a white-out stay in the file, hidden. The app tells you when that happens.
 - A color scan you have erased part of is saved again as JPEG, so that page's file size can roughly double. Black-and-white scans stay small.
 - OCR can misread faint, tiny or handwritten text. Check what it read (the Original button) before relying on it.
 - Redrawing a scanned page needs its fonts. Offline, the page stays as scanned and Edit text changes single words instead; choose Pages → Make this page's text editable when you are back online.

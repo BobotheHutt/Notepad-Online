@@ -151,6 +151,12 @@ body:not(.ready) .sidebar { transition: none; }
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; margin: 0; }
 .bars { display: contents; }
+/* shown only with JavaScript off, over the app that cannot run */
+.noscript { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+.noscript-card { max-width: 460px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); line-height: 1.5; }
+.noscript-card h2 { margin: 0 0 12px; font-size: 18px; }
+.noscript-card p { margin: 0 0 10px; color: var(--ink-2); }
+.noscript-card p:last-child { margin-bottom: 0; }
 
 .sb-search { position: relative; padding: 4px 12px 8px; }
 .sb-search-icon { position: absolute; left: 22px; top: 50%; transform: translateY(-62%); color: var(--ink-3); }

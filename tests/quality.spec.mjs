@@ -77,3 +77,13 @@ test('the security policy blocks injected scripts and outside sites', async ({ p
   expect(ran).toEqual([undefined, undefined, false]);
   expect(blocked).toEqual(expect.arrayContaining(['script-src-elem', 'script-src-attr', 'connect-src']));
 });
+
+test.describe('with JavaScript off', () => {
+  test.use({ javaScriptEnabled: false });
+  test('says why the app needs it, instead of a dead page', async ({ page: p }) => {
+    await p.goto('/');
+    await expect(p.locator('.noscript')).toBeVisible();
+    await expect(p.locator('.noscript h2')).toHaveText('Noteshack needs JavaScript');
+    await p.screenshot({ path: test.info().outputPath('noscript.png') });
+  });
+});

@@ -44,6 +44,7 @@ and lets you edit and sign PDFs.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
 - **Download** a new PDF with your changes. The original file is never touched.
+- **Print** shows a preview of exactly what will print (your changes included), then prints straight from it; Download and Open in a new tab are there too.
 
 What PDF editing cannot do, so nothing surprises you:
 - Text you change or white-out is **erased from the file** when you download, not just covered, and the rest of the line stays exactly where it was. That includes scanned pages and other pictures: the covered pixels are painted over inside the image itself. Only drawings (lines and shapes) under a white-out stay in the file, hidden. The app tells you when that happens.

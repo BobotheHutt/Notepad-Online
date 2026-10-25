@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-21';
+  const APP_VERSION = '2026.10.25-22';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1151,19 +1151,96 @@
     setStatus('Saved', 'ok');
   }
 
+  // Print a PDF from a preview of exactly what will print (the file with
+  // your changes), drawn here; printing goes from the preview straight to
+  // the printer, with no other tab to wait for.
   async function printPdf() {
     NpPdf.finishEditing();
-    const w = window.open('', '_blank');
-    try {
-      const blob = await NpPdf.export(current);
+    const rec = current;
+    const list = el('div', { class: 'print-pages' }, el('p', { class: 'print-wait' }, 'Making the PDF…'));
+    let view = null;
+    let blob = null;
+    let failed = false;
+    const ready = (async () => {
+      try {
+        blob = await NpPdf.export(rec);
+        view = await NpPdf.view(blob);
+        list.replaceChildren();
+        const width = Math.min(720, (list.clientWidth || 720) - 32);
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        for (let i = 0; i < view.count; i++) {
+          const page = await view.page(i);
+          const vp1 = page.getViewport({ scale: 1 });
+          const scale = width / vp1.width;
+          const c = el('canvas', { class: 'print-page', 'aria-label': 'Page ' + (i + 1) });
+          c.width = Math.round(vp1.width * scale * dpr);
+          c.height = Math.round(vp1.height * scale * dpr);
+          c.style.width = Math.round(vp1.width * scale) + 'px';
+          list.append(c, el('div', { class: 'print-num' }, 'Page ' + (i + 1) + ' of ' + view.count));
+          const g = c.getContext('2d');
+          g.fillStyle = '#fff';
+          g.fillRect(0, 0, c.width, c.height);
+          await page.render({ canvasContext: g, viewport: page.getViewport({ scale: scale * dpr }) }).promise;
+        }
+      } catch (e) {
+        failed = true;
+        list.replaceChildren(el('p', { class: 'print-wait' }, 'Could not make the PDF: ' + (e.message || e)));
+      }
+    })();
+    const choice = await dialog({
+      title: 'Print preview', wide: true, body: list,
+      actions: [{ label: 'Close', value: '' }, { label: 'Download', value: 'download' }, { label: 'Open in a new tab', value: 'tab' }, { label: 'Print', value: 'print', primary: true }]
+    });
+    if (!choice) { await ready; if (view) view.destroy(); return; }
+    toast(blob ? 'One moment…' : 'Making the PDF…', 2000);
+    await ready;
+    if (failed || !blob) { if (view) view.destroy(); return; }
+    if (choice === 'download') download(blob, safeFileName(displayTitle(rec), 'pdf'));
+    else if (choice === 'tab') {
       const url = URL.createObjectURL(blob);
-      if (w) { w.location.href = url; toast('Your PDF opened in a new tab. Print it from there.', 4000); }
-      else download(blob, safeFileName(displayTitle(current), 'pdf'));
+      if (!window.open(url, '_blank')) download(blob, safeFileName(displayTitle(rec), 'pdf'));
       setTimeout(() => URL.revokeObjectURL(url), 120000);
-    } catch (e) {
-      if (w) w.close();
-      toast('Could not make the PDF: ' + (e.message || e), 7000);
+    } else if (choice === 'print') await printPages(view, displayTitle(rec));
+    view.destroy();
+  }
+
+  // The pages as images at print resolution, in a hidden frame that is printed.
+  async function printPages(view, title) {
+    toast('Getting the pages ready to print…', 3000);
+    const urls = [];
+    const sizes = [];
+    const dpi = 200;
+    for (let i = 0; i < view.count; i++) {
+      const page = await view.page(i);
+      const vp = page.getViewport({ scale: dpi / 72 });
+      const c = document.createElement('canvas');
+      c.width = Math.round(vp.width);
+      c.height = Math.round(vp.height);
+      const g = c.getContext('2d');
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: g, viewport: vp }).promise;
+      const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+      urls.push(URL.createObjectURL(b));
+      const v1 = page.getViewport({ scale: 1 });
+      sizes.push([v1.width, v1.height]);
     }
+    const [w0, h0] = sizes[0];
+    const frame = el('iframe', { class: 'print-frame', 'aria-hidden': 'true', tabindex: '-1' });
+    document.body.append(frame);
+    const doc = frame.contentDocument;
+    doc.open();
+    doc.write('<!doctype html><html><head><meta charset="utf-8"><title>' + escapeHtml(title) + '</title><style>' +
+      '@page{size:' + w0 + 'pt ' + h0 + 'pt;margin:0}html,body{margin:0;padding:0}' +
+      'img{display:block;break-after:page;page-break-after:always}img:last-child{break-after:auto;page-break-after:auto}' +
+      '</style></head><body>' + urls.map((u, i) => '<img src="' + u + '" style="width:' + sizes[i][0] + 'pt;height:' + sizes[i][1] + 'pt" alt="">').join('') + '</body></html>');
+    doc.close();
+    await Promise.all([...doc.images].map((im) => (im.complete ? null : new Promise((r) => { im.onload = im.onerror = r; }))));
+    const done = () => { frame.remove(); urls.forEach((u) => URL.revokeObjectURL(u)); };
+    frame.contentWindow.addEventListener('afterprint', () => setTimeout(done, 500));
+    setTimeout(done, 10 * 60 * 1000);
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
   }
 
   const ACTIONS = {

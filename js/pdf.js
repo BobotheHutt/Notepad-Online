@@ -4827,6 +4827,12 @@
     get lastMatch() { return S.lastMatch; },
     init, open, close, newRecord,
     export: exportPdf,
+    // a finished PDF (as a Blob) opened for viewing: { count, page(i), destroy() }
+    view: async (blob) => {
+      await loadLibs();
+      const doc = await loadPdfJs(await blob.arrayBuffer());
+      return { count: doc.numPages, page: (i) => doc.getPage(i + 1), destroy: () => { try { doc.destroy(); } catch (e) { /* ignore */ } } };
+    },
     undo, redo, zoom,
     setTool, onKey,
     rotateCurrent: (dir) => { const c = currentPage(); if (c) rotatePage(c.entry.uid, dir); },

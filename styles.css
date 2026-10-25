@@ -814,6 +814,11 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
   box-shadow: var(--shadow-pop);
 }
 .dialog.wide { width: min(780px, calc(100vw - 24px)); }
+.print-pages { display: flex; flex-direction: column; align-items: center; gap: 6px; max-height: min(68vh, 900px); overflow: auto; padding: 16px; margin: -4px 0; background: var(--bg); border-radius: 6px; }
+.print-page { display: block; max-width: 100%; height: auto; background: #fff; box-shadow: var(--shadow); }
+.print-num { font-size: 12px; color: var(--ink-3); margin-bottom: 10px; }
+.print-wait { color: var(--ink-2); padding: 40px 0; }
+.print-frame { position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0; visibility: hidden; }
 .dialog::backdrop { background: rgba(10, 12, 16, 0.45); }
 .dialog form { display: flex; flex-direction: column; max-height: calc(100dvh - 34px); }
 .dlg-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 6px 20px; }

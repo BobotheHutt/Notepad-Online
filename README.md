@@ -21,7 +21,7 @@ and lets you edit and sign PDFs.
 - Autosave plus **version history**: browse earlier versions and restore any of them
 - **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window (PDFs and images open in the PDF editor, below)
 - **Save** and **Save as** Word (`.docx`), PDF, Markdown, web page or plain text. Everything is also kept in Noteshack as you work ("Saved in Noteshack").
-  - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog, and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
+  - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog, and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. This lasts while the tab is open: after a reload or a new visit, the first Save shows the dialog again, in the same folder with the same name. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
   - **Firefox, Safari and phones** do not let websites write to a file on disk, so there each save is a new copy in Downloads.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
 - Back up every document to one file and restore it anywhere

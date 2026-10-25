@@ -35,7 +35,7 @@ test('a PDF saved the old way (file inside the record) still opens, and moves it
   await p.mouse.move(bb.x + 100, bb.y + 300); await p.mouse.down(); await p.mouse.move(bb.x + 200, bb.y + 360, { steps: 2 }); await p.mouse.up();
   await p.keyboard.press('Escape');
   await saveNow(p);
-  expect(await dbState(p, 'legacy1')).toEqual({ version: 3, docs: 1, sources: [1], recHasSources: false, items: 1 });
+  expect(await dbState(p, 'legacy1')).toEqual({ version: 2, docs: 1, sources: [1], recHasSources: false, items: 1 });
   await p.reload(); await p.waitForSelector('body.ready'); await p.waitForSelector('.pdf-page canvas');
   await expect(p.locator('.pdf-box')).toHaveCount(1);
   // the backup still carries the PDF itself

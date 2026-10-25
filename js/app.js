@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-33';
+  const APP_VERSION = '2026.10.25-34';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2160,6 +2160,12 @@
   // copy in Downloads. Either way the document itself is kept in Noteshack.
   const canWriteFiles = () => typeof window.showSaveFilePicker === 'function';
 
+  // Each document's file on disk, for this visit: { handle, kind, name,
+  // imported }. Not kept past a reload (Chromium can crash reading a stored
+  // file link back), so the first Save of a visit asks where again, in the
+  // same folder with the same name.
+  const fileLinks = new Map();
+
   const KINDS = {
     docx: { ext: 'docx', exts: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'Word document' },
     md: { ext: 'md', exts: ['md', 'markdown'], mime: 'text/markdown', label: 'Markdown' },
@@ -2177,7 +2183,7 @@
   }
 
   // what Save writes when there is no file yet: what the document came as
-  const ownKind = (doc) => (doc.file && doc.file.kind) || doc.kind || (doc.type === 'pdf' ? (doc.origin ? doc.origin.format : 'pdf') : 'docx');
+  const ownKind = (doc) => (fileLinks.has(doc.id) && fileLinks.get(doc.id).kind) || doc.kind || (doc.type === 'pdf' ? (doc.origin ? doc.origin.format : 'pdf') : 'docx');
 
   // The document as a file of a kind: { blob, filename, zip, fellBack }
   async function makeFile(doc, kind) {
@@ -2214,9 +2220,7 @@
         const w = await handle.createWritable();
         await w.write(out.blob);
         await w.close();
-        doc.file = { kind, name: handle.name };
-        await NpStore.putDoc(doc);
-        await NpStore.putHandle(doc.id, handle);
+        fileLinks.set(doc.id, { handle, kind, name: handle.name });
         toast('Saved to “' + handle.name + '”');
       } else {
         download(out.blob, out.filename);
@@ -2258,11 +2262,10 @@
   // Save: back into the document's own file, or, the first time, Save as
   async function saveFile() {
     if (!current) return;
-    const f = current.file;
+    const f = fileLinks.get(current.id);
     if (f && canWriteFiles()) {
       try {
-        const handle = await NpStore.getHandle(current.id);
-        if (!handle) throw new Error('no file');
+        const handle = f.handle;
         const ok = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted' || (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
         // A Word file or web page made elsewhere may hold things Noteshack
         // does not open (comments, tracked changes, scripts…): saving over
@@ -2277,7 +2280,7 @@
           if (v !== 'over') return;
         }
         if (ok) {
-          if (f.imported) { delete f.imported; await NpStore.putDoc(current); }
+          delete f.imported;
           return writeOut(f.kind, handle);
         }
       } catch (e) { /* the file is gone or out of reach: choose again */ }
@@ -2287,7 +2290,7 @@
 
   // The File menu and the PDF toolbar say where Save goes.
   function updateSaveUi() {
-    const f = current && current.file;
+    const f = current && fileLinks.get(current.id);
     const where = f && canWriteFiles() ? 'Save to “' + f.name + '”' : 'Save';
     $('#save-item span').textContent = where;
     $('.pdf-download').title = where + ' (Ctrl+S)';
@@ -2300,9 +2303,8 @@
   async function linkFile(doc, handle, kind) {
     if (!doc) return;
     doc.kind = kind;
-    if (handle && kind) doc.file = { kind, name: handle.name, imported: kind === 'docx' || kind === 'html' || undefined };
+    if (handle && kind) fileLinks.set(doc.id, { handle, kind, name: handle.name, imported: kind === 'docx' || kind === 'html' });
     await NpStore.putDoc(doc);
-    if (handle && kind) await NpStore.putHandle(doc.id, handle);
   }
 
   function printDoc() {
@@ -2374,7 +2376,7 @@
     const src = current;
     if (src.type === 'pdf') {
       const now = Date.now();
-      const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null, file: null }))), {
+      const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
         id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
         scanFonts: src.scanFonts ? Object.fromEntries(Object.entries(src.scanFonts).map(([k, b]) => [k, b instanceof ArrayBuffer ? b.slice(0) : b])) : undefined
       });
@@ -2390,8 +2392,7 @@
     await saveNow();
     const all = [];
     for (const d of await NpStore.allDocs()) {
-      const { file, ...rec } = d; // the link to a file on this computer stays on it
-      all.push(rec.type === 'pdf' ? Object.assign(rec, { sources: ((await NpStore.getSources(rec)) || []).map(bufToB64) }) : rec);
+      all.push(d.type === 'pdf' ? Object.assign({}, d, { sources: ((await NpStore.getSources(d)) || []).map(bufToB64) }) : d);
     }
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);

@@ -29,25 +29,24 @@ test.describe('where the browser can write to files', () => {
     expect(isJpeg(saved)).toBe(true);
     expect(Buffer.from(saved).equals(original)).toBe(false);
     expect(await p.evaluate(() => window.__picked.length)).toBe(0); // no dialog: it went straight back
-    // the link to the file is remembered (read from storage only when Save is pressed)
-    await p.reload(); await p.waitForSelector('body.ready'); await p.waitForSelector('.pdf-page canvas');
-    await expect(p.locator('.pdf-download')).toHaveAttribute('title', 'Save to “scan.jpg” (Ctrl+S)');
   });
 
-  // Reading a stored file link back after a reload crashes headless Chromium
-  // in some sandboxes (not GitHub's runners, nor real Chrome), so this one is
-  // run where NOTESHACK_RELOAD_SAVE is set: in CI.
-  test('after a reload, Save still writes to the same file', async ({ app: p }) => {
-    test.skip(!process.env.CI && !process.env.NOTESHACK_RELOAD_SAVE, 'needs a browser that can read stored file links');
+  // The link lasts the visit: after a reload the first Save asks again (with
+  // the same name), as Chromium can crash reading a stored file link back.
+  test('after a reload, the first Save asks again, then goes straight there', async ({ app: p }) => {
     await p.click('#editor'); await p.keyboard.type('# Kept'); await p.keyboard.press('Enter'); await p.keyboard.type('Before.');
     await p.keyboard.press('Control+s');
     await expect(p.locator('#toast')).toContainText('Saved to “Kept.docx”');
     await p.reload(); await p.waitForSelector('body.ready');
+    await expect(p.locator('#save-item span')).toHaveText('Save');
     await p.click('#editor'); await p.keyboard.press('Control+End'); await p.keyboard.type(' After.');
-    const before = (await getFile(p, 'Kept.docx')).length;
     await p.keyboard.press('Control+s');
-    await expect.poll(async () => (await getFile(p, 'Kept.docx')).length).not.toBe(before);
-    expect(await p.evaluate(() => window.__picked.length)).toBe(0);
+    await expect(p.locator('#toast')).toContainText('Saved to “Kept.docx”');
+    expect(await p.evaluate(() => window.__picked)).toEqual(['Kept.docx']);
+    await p.keyboard.type(' More.');
+    await p.keyboard.press('Control+s');
+    await expect(p.locator('#toast')).toContainText('Saved to “Kept.docx”');
+    expect(await p.evaluate(() => window.__picked.length)).toBe(1);
   });
 
   test('a new document: the first Save asks where, the next goes straight there', async ({ app: p }) => {

@@ -1247,3 +1247,19 @@ body.pdf-show-original .pdf-conv { visibility: hidden; }
 .about-more { border-top: 1px solid var(--line); padding-top: 8px; }
 .about-more summary { cursor: pointer; font-weight: 600; }
 .about-more p, .about-more ul { margin: 8px 0 0; }
+
+/* Read whole document: a switch in the PDF toolbar, with an info bubble */
+.pdf-toolbar { position: relative; z-index: 30; }
+.tb-toggle { display: inline-flex; align-items: center; gap: 7px; padding: 0 6px; font-size: 13px; color: var(--ink-2); white-space: nowrap; cursor: pointer; }
+.tb-info { position: relative; width: 20px; height: 20px; min-width: 20px; padding: 0; border-radius: 50%; border: 1px solid var(--line-2); font: italic 600 12px/1 Georgia, serif; color: var(--ink-3); }
+.tb-tip {
+  display: none; position: fixed; z-index: 60; top: 0; left: 0; width: 300px; max-width: calc(100vw - 24px);
+  padding: 10px 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); border-radius: var(--radius); box-shadow: var(--shadow-pop);
+  font: 13px/1.45 var(--ui); font-style: normal; text-align: left; white-space: normal; cursor: default;
+}
+.tb-info:hover .tb-tip, .tb-info:focus-visible .tb-tip, .tb-info.open .tb-tip { display: block; }
+.pdf-reading {
+  position: absolute; left: 50%; top: 40px; transform: translateX(-50%); z-index: 4; padding: 8px 14px; border-radius: 999px;
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); font: 13px var(--ui); pointer-events: none;
+}
+.pdf-stage[data-tool="edit"] .pdf-page:has(.pdf-reading) { cursor: progress; }

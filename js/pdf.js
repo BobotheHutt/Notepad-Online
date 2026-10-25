@@ -80,6 +80,7 @@
     undo: [],
     redo: [],
     boldStroke: 0.16,
+    bgAt: new Map(),      // page uid → when the background reader last changed it
     observer: null,
     thumbObserver: null,
     style: Object.assign({ family: 'sans', size: 12, color: '#111111', bold: false, italic: false, ink: '#d93025', inkWidth: 2, box: '#d93025', boxWidth: 2, hl: '#fde047', white: '#ffffff' },
@@ -156,13 +157,17 @@
 
   /* ============================================================ state */
 
+  // A snapshot carries the time it was taken (t), so work done in the
+  // background after it (pages read and made editable) is kept when the
+  // snapshot is restored by undo or redo.
   function snap() {
     const r = S.rec;
-    return JSON.stringify({ pages: r.pages, items: r.items, fields: r.fields });
+    return JSON.stringify({ t: Date.now(), pages: r.pages, items: r.items, fields: r.fields });
   }
+  const sameState = (a, b) => a.slice(a.indexOf(',"pages"')) === b.slice(b.indexOf(',"pages"'));
 
   function commit(before) {
-    if (before === snap()) return;
+    if (sameState(before, snap())) return;
     S.undo.push(before);
     if (S.undo.length > 150) S.undo.shift();
     S.redo = [];
@@ -179,6 +184,14 @@
   async function restore(json) {
     const prevPages = JSON.stringify(S.rec.pages);
     const st = JSON.parse(json);
+    // pages the background reader changed after this snapshot keep its work
+    for (const [uidv, at] of S.bgAt) {
+      if (st.t && at <= st.t) continue;
+      const cur = S.rec.pages.find((q) => q.uid === uidv);
+      const k = st.pages.findIndex((q) => q.uid === uidv);
+      if (cur && k >= 0) st.pages[k] = JSON.parse(JSON.stringify(cur));
+      st.items = st.items.filter((i) => !(i.page === uidv && i.conv)).concat(S.rec.items.filter((i) => i.page === uidv && i.conv));
+    }
     S.rec.pages = st.pages;
     S.rec.items = st.items;
     S.rec.fields = st.fields;
@@ -276,9 +289,14 @@
     setTool(S.tool === 'image' || S.tool === 'sign' ? 'select' : S.tool);
     updateUndoButtons();
     toggleOriginal(false);
-    suggestOcr(rec);
+    S.lex = new Map();
+    for (const o of Object.values(rec.ocr || {})) learnWords(S.lex, o.lines || []);
+    updateReadAllUi();
+    // reading the whole document carries on where it stopped
+    if (rec.readAll) setReadAll(true);
+    else suggestOcr(rec);
     if (rec.ocr && Object.values(rec.ocr).some((o) => !o.rules)) {
-      api.toast('This PDF’s text was read by an older version of the app. Click “Read text” again for better edits; for an edit made before, select it and choose Restore original.', 9000);
+      api.toast('This PDF’s text was read by an older version of the app. Read the page again (Pages → Keep this page as scanned, then click it with Edit text) for better edits.', 9000);
     }
     // matched fonts from earlier sessions (and those made from the scan's
     // letters): load them, then redraw with them
@@ -290,6 +308,16 @@
   }
 
   function close() {
+    // stop reading pages of the document being closed (its work so far is saved)
+    if (S.rec && saveSoon) { clearTimeout(saveSoon); saveSoon = 0; api.changed(); }
+    RQ.gen++;
+    RQ.want = [];
+    RQ.running = new Map();
+    for (const list of RQ.waiting.values()) list.forEach((res) => res());
+    RQ.waiting = new Map();
+    RQ.total = 0;
+    RQ.whole = false;
+    S.bgAt = new Map();
     if (S.observer) S.observer.disconnect();
     if (S.thumbObserver) S.thumbObserver.disconnect();
     for (const d of S.docs) { try { d.destroy(); } catch (e) { /* ignore */ } }
@@ -1184,7 +1212,8 @@
       if (item && item.type === 'text') { e.preventDefault(); startEditing(item.id); return; }
       if (target) { e.preventDefault(); editOriginal(info, target.dataset.key); return; }
       if (isConv(info.entry.uid)) { e.preventDefault(); startEraseArea(e, info, x, y); return; }
-      if (info.text && !info.text.length) api.toast('This page is a scan, so its words are a picture. Click “Read text” first, then you can edit them.', 4500);
+      // a scanned page not read yet: read it now
+      if (info.text && !info.text.length && info.page) { e.preventDefault(); clickRead(info, x, y); return; }
       return;
     }
     if (t === 'draw') { e.preventDefault(); startInk(e, info, x, y); return; }
@@ -1761,23 +1790,166 @@
   // and become Edit-text targets, plus an invisible, searchable text layer in
   // the downloaded file.
 
-  let ocrWorker = null;
+  // Several readers at once, as many as the computer can spare, on
+  // Tesseract's fast model; and one careful reader on the accurate model,
+  // for the lines the fast ones were unsure of.
+  const OCR = { pool: null, best: null };
 
-  async function getOcr(progress) {
+  function poolSize() {
+    const cores = navigator.hardwareConcurrency || 2;
+    const mem = navigator.deviceMemory || 4;
+    return clamp(Math.min(cores - 1, mem <= 2 ? 1 : mem <= 4 ? 2 : 4), 1, 4);
+  }
+
+  async function tesseract() {
     if (!/^https?:$/.test(location.protocol)) {
-      throw new Error('Reading text needs the app opened from its web address (your GitHub Pages site), not from a file on this computer.');
+      throw new Error('Reading text needs the app opened from its web address, not from a file on this computer.');
     }
-    if (ocrWorker) return ocrWorker;
     if (typeof Tesseract === 'undefined') await loadScript(VENDOR + 'tesseract/tesseract.min.js');
+  }
+
+  function newReader(model) {
     const abs = (path) => new URL(VENDOR + 'tesseract/' + path, location.href).href;
-    ocrWorker = await Tesseract.createWorker('eng', 1, {
+    return Tesseract.createWorker('eng', 1, {
       workerPath: abs('worker.min.js'),
       corePath: abs('tesseract-core-simd-lstm.wasm.js'),
-      langPath: abs('').replace(/\/$/, ''),
-      cacheMethod: 'none',
-      logger: (m) => progress && progress(m)
+      langPath: abs(model === 'fast' ? 'fast' : '').replace(/\/$/, ''),
+      cacheMethod: 'none'
     });
-    return ocrWorker;
+  }
+
+  // { recognize(image) } that hands each page to whichever reader is free
+  async function getOcr() {
+    await tesseract();
+    if (!OCR.pool) {
+      OCR.pool = (async () => {
+        api.status('Getting text recognition ready…', 'pending');
+        const sch = Tesseract.createScheduler();
+        const ws = await Promise.all(Array.from({ length: poolSize() }, () => newReader('fast')));
+        ws.forEach((w) => sch.addWorker(w));
+        return { recognize: (img) => sch.addJob('recognize', img), size: ws.length };
+      })();
+      OCR.pool.catch(() => { OCR.pool = null; });
+    }
+    return OCR.pool;
+  }
+
+  async function getCareful() {
+    await tesseract();
+    if (!OCR.best) {
+      OCR.best = (async () => {
+        const w = await newReader('best');
+        // it is only ever given one line
+        await w.setParameters({ tessedit_pageseg_mode: '7' });
+        return w;
+      })();
+      OCR.best.catch(() => { OCR.best = null; });
+    }
+    return OCR.best;
+  }
+
+  // Lines the fast reader was unsure of, read again by the careful one; its
+  // reading is kept where it is surer. Line and word boxes are in the
+  // coordinates of the page image c.
+  async function carefulLines(lines, c) {
+    // a word mixing letters and digits ("condici6n") is almost always a misread
+    const odd = (t) => /\p{L}\d|\d\p{L}/u.test(t) && !/^\d+(st|nd|rd|th|s)$/i.test(t);
+    const unsure = lines.filter((l) => l.text && l.text.trim() && (l.confidence < 85 || (l.words || []).some((w) => w.confidence < 80 || odd((w.text || '').replace(/[^\p{L}\p{N}]/gu, '')))));
+    if (!unsure.length) return lines;
+    let best;
+    try { best = await getCareful(); } catch (e) { return lines; }
+    const out = lines.slice();
+    for (const l of unsure) {
+      const b = l.bbox;
+      const pad = Math.round((b.y1 - b.y0) * 0.25) + 2;
+      const x0 = Math.max(0, b.x0 - pad);
+      const y0 = Math.max(0, b.y0 - pad);
+      const x1 = Math.min(c.width, b.x1 + pad);
+      const y1 = Math.min(c.height, b.y1 + pad);
+      if (x1 - x0 < 4 || y1 - y0 < 4) continue;
+      const crop = document.createElement('canvas');
+      crop.width = x1 - x0;
+      crop.height = y1 - y0;
+      crop.getContext('2d').drawImage(c, x0, y0, crop.width, crop.height, 0, 0, crop.width, crop.height);
+      let data;
+      try { ({ data } = await best.recognize(crop)); } catch (e) { continue; }
+      const words = (data.words || []).filter((w) => w.text && w.text.trim()).map((w) => Object.assign({}, w, { bbox: { x0: w.bbox.x0 + x0, y0: w.bbox.y0 + y0, x1: w.bbox.x1 + x0, y1: w.bbox.y1 + y0 } }));
+      if (!words.length) continue;
+      // word by word: each word of the line takes the careful reading of the
+      // same spot when that is surer, or when the fast one mixed letters and digits
+      const core = (t) => (t || '').replace(/[^\p{L}\p{N}]/gu, '');
+      let better = 0;
+      const merged = (l.words || []).map((w) => {
+        let pick = null;
+        let ov = 0;
+        for (const n of words) {
+          const o = Math.min(w.bbox.x1, n.bbox.x1) - Math.max(w.bbox.x0, n.bbox.x0);
+          if (o > ov) { ov = o; pick = n; }
+        }
+        if (!pick || ov < Math.min(w.bbox.x1 - w.bbox.x0, pick.bbox.x1 - pick.bbox.x0) * 0.5) return w;
+        const wins = (odd(core(w.text)) && !odd(core(pick.text))) || pick.confidence > w.confidence + 3;
+        if (!wins || pick.text.trim() === w.text.trim()) return w;
+        better++;
+        return Object.assign({}, w, { text: pick.text.trim(), confidence: Math.max(pick.confidence, w.confidence) });
+      });
+      if (!better) continue;
+      out[out.indexOf(l)] = Object.assign({}, l, { text: merged.map((w) => w.text).join(' '), words: merged });
+    }
+    return out;
+  }
+
+  /* ----- words learned from the document ----- */
+
+  // Words read surely anywhere in the document are collected; a word read
+  // unsurely that is one letter away from one of them, seen at least twice,
+  // is taken to be it ("condicién" → "condición").
+  function learnWords(lex, lines) {
+    for (const l of lines) for (const w of l.words || []) {
+      const core = (w.t || '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+      if (w.c == null || w.c < 92 || core.length < 4 || !/^\p{L}+$/u.test(core)) continue;
+      const k = core.toLowerCase();
+      lex.set(k, (lex.get(k) || 0) + 1);
+    }
+  }
+
+  function oneApart(a, b) {
+    if (a === b || Math.abs(a.length - b.length) > 1) return false;
+    let i = 0;
+    while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    const ra = a.slice(i + (a.length >= b.length ? 1 : 0));
+    const rb = b.slice(i + (b.length >= a.length ? 1 : 0));
+    return ra === rb;
+  }
+
+  function fixFromWords(lex, lines) {
+    let fixed = 0;
+    for (const l of lines) {
+      let changedLine = false;
+      for (const w of l.words || []) {
+        if (w.c == null || w.c >= 85) continue;
+        const m = (w.t || '').match(/^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/u);
+        const core = m[2];
+        if (core.length < 4) continue;
+        const low = core.toLowerCase();
+        const cands = [];
+        for (const [form, n] of lex) if (n >= 2 && oneApart(low, form)) cands.push([form, n]);
+        if (!cands.length) continue;
+        cands.sort((p, q) => q[1] - p[1]);
+        // two words it could equally be: left for a person to check
+        if (cands.length > 1 && cands[1][1] * 2 > cands[0][1]) continue;
+        let fix = cands[0][0];
+        // in the misread word's own capitals
+        if (core.length > 1 && core === core.toUpperCase()) fix = fix.toUpperCase();
+        else if (core[0] === core[0].toUpperCase()) fix = fix[0].toUpperCase() + fix.slice(1);
+        w.t = m[1] + fix + m[3];
+        w.c = 90;
+        w.learned = true;
+        changedLine = true;
+        fixed++;
+      }
+      if (changedLine) l.text = l.words.map((w) => w.t).join(' ');
+    }
+    return fixed;
   }
 
   // A copy of the page with long straight lines (table borders, underlines,
@@ -1853,6 +2025,7 @@
     const px = g.getImageData(0, 0, c.width, c.height).data;
     const clean = withoutRules(c, px);
     const { data } = await worker.recognize(clean);
+    data.lines = await carefulLines(data.lines || [], clean);
     // OCR's word boxes can be off by a letter's stem: move each edge to where
     // the ink actually starts and ends (on the copy without borders)
     const cd = clean.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, clean.width, clean.height).data;
@@ -2076,108 +2249,227 @@
     return info.nativeCount;
   }
 
-  async function runOcr(scope) {
-    if (!S.rec || S.ocrBusy) return;
+  /* ----- reading pages: one when it is clicked, or the whole document ----- */
+
+  // A queue of pages to read, worked on by all the readers at once. A page
+  // someone clicks goes to the front. Each page, once read, is made editable
+  // there and then. Pages read in the background add no undo steps, and an
+  // undo of anything else keeps them (see restore).
+  const RQ = { want: [], running: new Map(), waiting: new Map(), gen: 0, total: 0, whole: false, stats: { turned: 0, straightened: 0, made: 0, found: 0 } };
+
+  // whether a page is a scan still to read
+  async function needsReading(info) {
+    if (!info.page) return false;
+    if (S.rec.ocr && ocrFits(S.rec.ocr[info.entry.uid], info.entry, info.rot)) return false;
+    return (await nativeTextCount(info)) < 3;
+  }
+
+  // Read one page now (ahead of any others); resolves when it is editable.
+  function readPage(info) {
+    const uidv = info.entry.uid;
+    if (RQ.running.has(uidv)) return RQ.running.get(uidv);
+    RQ.want = RQ.want.filter((u) => u !== uidv);
+    RQ.want.unshift(uidv);
+    const done = new Promise((res) => { if (!RQ.waiting.has(uidv)) RQ.waiting.set(uidv, []); RQ.waiting.get(uidv).push(res); });
+    pump();
+    return done;
+  }
+
+  // Keep every reader busy.
+  function pump() {
     const rec = S.rec;
-    const cur = currentPage();
-    let targets = [];
-    for (const info of S.info.values()) {
-      if (!info.page) continue;
-      if (scope === 'current' && info !== cur) continue;
-      if (scope !== 'current' && (await nativeTextCount(info)) >= 3) continue;
-      targets.push(info);
+    const gen = RQ.gen;
+    const start = (uidv) => {
+      const p = (async () => {
+        try { await readOne(rec, gen, uidv); } catch (e) { /* the page stays as it was */ } finally {
+          (RQ.waiting.get(uidv) || []).forEach((res) => res());
+          RQ.waiting.delete(uidv);
+          if (gen === RQ.gen) RQ.running.delete(uidv);
+          if (S.rec === rec && gen === RQ.gen) { progress(); pump(); }
+        }
+      })();
+      RQ.running.set(uidv, p);
+    };
+    while (RQ.want.length && RQ.running.size < Math.max(1, OCR.size || poolSize())) start(RQ.want.shift());
+    if (!RQ.want.length && !RQ.running.size && S.rec === rec) finished();
+  }
+
+  function progress() {
+    if (!RQ.whole || !RQ.total) return;
+    const left = RQ.want.length + RQ.running.size;
+    if (left) api.status('Reading the document: page ' + Math.min(RQ.total, RQ.total - left + 1) + ' of ' + RQ.total + '…', 'pending');
+  }
+
+  let saveSoon = 0;
+  // Saving a large document after every page would be slow: background work
+  // is saved every 15 seconds, and when reading stops.
+  function bgChanged(now) {
+    if (now) { clearTimeout(saveSoon); saveSoon = 0; changed(); return; }
+    if (!saveSoon) saveSoon = setTimeout(() => { saveSoon = 0; if (S.rec) changed(); }, 15000);
+  }
+
+  // one page: turn it upright, straighten it, read it, make it editable
+  async function readOne(rec, gen, uidv) {
+    const alive = () => S.rec === rec && gen === RQ.gen;
+    const info = S.info.get(uidv);
+    if (!info || !alive() || !(await needsReading(info))) return;
+    const ocr = await getOcr();
+    OCR.size = ocr.size;
+    const mark = () => S.bgAt.set(uidv, Date.now());
+    if (!rec.items.some((i) => i.page === uidv)) {
+      const turn = await detectTurn(ocr, info);
+      if (!alive()) return;
+      if (turn) {
+        info.entry.rotate = (info.entry.rotate + turn) % 360;
+        delete info.entry.skew;
+        delete info.entry.paper;
+        mark();
+        await relayout(info);
+        RQ.stats.turned++;
+      }
+      const { skew, paper } = await detectSkew(info);
+      if (!alive()) return;
+      if (skew !== (info.entry.skew || 0)) {
+        if (skew) { info.entry.skew = skew; info.entry.paper = paper; } else { delete info.entry.skew; delete info.entry.paper; }
+        mark();
+        info.text = null;
+        renderPage(info);
+        const li = document.querySelector('.pdf-thumb[data-uid="' + uidv + '"]');
+        if (li) renderThumb(li);
+        if (skew) RQ.stats.straightened++;
+      }
     }
-    if (!targets.length) {
-      api.toast('This PDF already has real text, so Edit text works on it directly. To read one page anyway, use Pages → Read text on this page.', 6000);
+    const { lines, rules } = await ocrPage(ocr, info);
+    if (!alive()) return;
+    // words learned from the document so far, this page's sure words included
+    learnWords(S.lex, lines);
+    fixFromWords(S.lex, lines);
+    rec.ocr = rec.ocr || {};
+    rec.ocr[uidv] = { rot: info.rot, skew: info.entry.skew || 0, lines, rules };
+    if (lines.length) RQ.stats.found++;
+    rec.text = ((rec.text || '') + '\n' + lines.map((l) => l.text).join('\n')).trim().slice(0, 200000);
+    info.text = null;
+    info.nativeCount = undefined;
+    mark();
+    // pages are made editable one at a time: it draws, and builds fonts
+    S.convLock = (S.convLock || Promise.resolve()).then(async () => {
+      if (!alive() || !lines.length || isConv(uidv)) return;
+      if (await convertPage(info)) { RQ.stats.made++; mark(); }
+    }).catch(() => {});
+    await S.convLock;
+    if (!alive()) return;
+    renderOverlay(info);
+    bgChanged();
+  }
+
+  // A page turned a quarter or half turn: its size and drawing again.
+  async function relayout(info) {
+    const m = await measure(info.entry);
+    Object.assign(info, { W: m.W, H: m.H, x0: m.x0, y0: m.y0, rot: m.rot, w: m.w, h: m.h });
+    info.el.style.width = info.w * S.scale + 'px';
+    info.el.style.height = info.h * S.scale + 'px';
+    info.text = null;
+    info.nativeCount = undefined;
+    renderPage(info);
+    renderOverlay(info);
+    const li = document.querySelector('.pdf-thumb[data-uid="' + info.entry.uid + '"]');
+    if (li) renderThumb(li);
+  }
+
+  function finished() {
+    const st = RQ.stats;
+    const whole = RQ.whole;
+    RQ.total = 0;
+    RQ.whole = false;
+    RQ.stats = { turned: 0, straightened: 0, made: 0, found: 0 };
+    bgChanged(true);
+    api.status('Saved', 'ok');
+    if (!whole) return;
+    const parts = [];
+    if (st.turned) parts.push('Turned ' + st.turned + ' page' + (st.turned === 1 ? '' : 's') + ' the right way up.');
+    if (st.straightened) parts.push('Straightened ' + st.straightened + ' crooked page' + (st.straightened === 1 ? '' : 's') + '.');
+    if (st.made) parts.push('The whole document is read: ' + st.made + ' page' + (st.made === 1 ? ' is' : 's are') + ' now editable and searchable.');
+    else if (st.found) parts.push('The whole document is read and searchable.');
+    else parts.push('No readable text was found on the scanned pages.');
+    api.toast(parts.join(' '), 8000);
+  }
+
+  // Read whole document: every scanned page not read yet, in order from the
+  // page in view, in the background.
+  async function setReadAll(on) {
+    const rec = S.rec;
+    if (!rec) return;
+    rec.readAll = !!on;
+    updateReadAllUi();
+    changed();
+    if (!on) {
+      // pages being read finish; the rest wait until it is turned on again
+      RQ.want = [];
+      RQ.whole = false;
+      if (!RQ.running.size) api.status('Saved', 'ok');
       return;
     }
-    S.ocrBusy = true;
-    const btn = $('#pdf-toolbar [data-pdf="ocr"]');
-    if (btn) btn.disabled = true;
-    let found = 0;
-    let straightened = 0;
+    try { await tesseract(); } catch (e) { api.toast(e.message, 7000); rec.readAll = false; updateReadAllUi(); return; }
+    const order = rec.pages.map((q) => S.info.get(q.uid)).filter(Boolean);
+    const at = Math.max(0, order.indexOf(currentPage()));
+    const todo = [];
+    for (const info of order.slice(at).concat(order.slice(0, at))) {
+      if (S.rec === rec && !RQ.running.has(info.entry.uid) && (await needsReading(info))) todo.push(info.entry.uid);
+    }
+    if (S.rec !== rec || !rec.readAll) return;
+    if (!todo.length && !RQ.running.size) {
+      api.toast(order.some((i) => rec.ocr && rec.ocr[i.entry.uid]) ? 'Every scanned page is already read.' : 'This PDF has no scanned pages: its text can be edited directly.', 5000);
+      return;
+    }
+    RQ.want = RQ.want.concat(todo.filter((u) => !RQ.want.includes(u)));
+    RQ.total = RQ.want.length + RQ.running.size;
+    RQ.whole = true;
+    progress();
+    pump();
+  }
+
+  function updateReadAllUi() {
+    const sw = $('#pdf-readall');
+    if (sw) sw.checked = !!(S.rec && S.rec.readAll);
+  }
+
+  // Clicking a scanned page that is not read yet (Edit text): read just it,
+  // then open the line clicked.
+  async function clickRead(info, x, y) {
+    if (info.reading) return;
+    info.reading = true;
+    const note = el('div', { class: 'pdf-reading', role: 'status' }, 'Reading this page…');
+    info.el.append(note);
+    const rec = S.rec;
     try {
-      let n = 0;
-      const worker = await getOcr((m) => {
-        if (m.status === 'recognizing text' && n) api.status('Reading text, page ' + n + ' of ' + targets.length + ' (' + Math.round((m.progress || 0) * 100) + '%)…', 'pending');
-        else if (/load|initializ/.test(m.status || '')) api.status('Getting text recognition ready…', 'pending');
-      });
-      rec.ocr = rec.ocr || {};
-      // a page scanned sideways or upside down is turned upright first (its
-      // own undo step), unless it already has edits placed on it as it is
-      const wasTurned = snap();
-      let turned = 0;
-      for (const info of targets) {
-        if (S.rec !== rec) return;
-        if (rec.items.some((i) => i.page === info.entry.uid)) continue;
-        api.status('Checking which way up the pages are…', 'pending');
-        const turn = await detectTurn(worker, info);
-        if (turn) {
-          info.entry.rotate = (info.entry.rotate + turn) % 360;
-          delete info.entry.skew;
-          delete info.entry.paper;
-          if (rec.ocr) delete rec.ocr[info.entry.uid];
-          turned++;
-        }
-      }
-      if (turned) {
-        commit(wasTurned);
-        await build();
-        targets = targets.map((t) => S.info.get(t.entry.uid)).filter(Boolean);
-      }
-      for (const info of targets) {
-        n++;
-        if (S.rec !== rec) return;
-        api.status('Reading text, page ' + n + ' of ' + targets.length + '…', 'pending');
-        // a crooked scan is straightened first (its own undo step), unless
-        // the page already has edits placed on it as it is
-        if (!rec.items.some((i) => i.page === info.entry.uid)) {
-          const { skew, paper } = await detectSkew(info);
-          if (skew !== (info.entry.skew || 0)) {
-            const was = snap();
-            if (skew) { info.entry.skew = skew; info.entry.paper = paper; } else { delete info.entry.skew; delete info.entry.paper; }
-            commit(was);
-            info.text = null;
-            renderPage(info);
-            const li = document.querySelector('.pdf-thumb[data-uid="' + info.entry.uid + '"]');
-            if (li) renderThumb(li);
-            if (skew) straightened++;
-          }
-        }
-        const { lines, rules } = await ocrPage(worker, info);
-        rec.ocr[info.entry.uid] = { rot: info.rot, skew: info.entry.skew || 0, lines, rules };
-        if (lines.length) found++;
-        info.text = null;
-        info.nativeCount = undefined;
-        renderOverlay(info);
-      }
-      const all = rec.pages.map((p) => (rec.ocr[p.uid] ? rec.ocr[p.uid].lines.map((l) => l.text).join('\n') : '')).join('\n');
-      rec.text = ((rec.text || '') + '\n' + all).trim().slice(0, 200000);
-      // then make what was read real, editable text (one undo step for all pages)
-      const before = snap();
-      S.convNoFont = false;
-      let made = 0;
-      for (const info of targets) {
-        if (S.rec !== rec) return;
-        if (rec.ocr[info.entry.uid] && rec.ocr[info.entry.uid].lines.length && (await convertPage(info))) { made++; renderOverlay(info); }
-      }
-      commit(before);
-      changed();
-      if (made) {
-        setTool('edit');
-        api.toast((turned ? 'Turned ' + turned + ' page' + (turned === 1 ? '' : 's') + ' the right way up. ' : '') + (straightened ? 'Straightened ' + straightened + ' crooked page' + (straightened === 1 ? '' : 's') + '. ' : '') + 'The text on ' + made + ' page' + (made === 1 ? '' : 's') + ' is now editable: click any line to change it. Words underlined in orange may have been misread: right-click one to check it against the scan.', 9000);
-      } else if (found) {
-        setTool('edit');
-        api.toast('Read text on ' + found + ' page' + (found === 1 ? '' : 's') + '. Click any line to edit it. Downloads now include searchable, copyable text.' +
-          (S.convNoFont ? ' The fonts needed to redraw the whole page could not be downloaded, so edits change single words; when you are online, choose Pages → Make this page’s text editable.' : ''), 9000);
-      } else api.toast('No readable text was found. Very faint or handwritten pages may not work.', 6000);
+      await tesseract();
+      await readPage(info);
     } catch (e) {
       api.toast(e.message || 'Text recognition failed.', 7000);
     } finally {
-      S.ocrBusy = false;
-      if (btn) btn.disabled = false;
-      api.status('Saved', 'ok');
+      info.reading = false;
+      note.remove();
     }
+    if (S.rec !== rec) return;
+    if (!isConv(info.entry.uid)) {
+      const o = rec.ocr && rec.ocr[info.entry.uid];
+      api.toast(o && o.lines.length ? 'The text on this page was read: click a word to edit it.' : 'No readable text was found on this page. Very faint or handwritten pages may not work.', 5000);
+      return;
+    }
+    // the line under the click, or the nearest one within reach
+    let hit = null;
+    let best = Infinity;
+    for (const i of S.rec.items) {
+      if (i.page !== info.entry.uid || !i.conv || !i.words.length) continue;
+      const x0 = i.words[0].x0;
+      const x1 = i.words[i.words.length - 1].x1;
+      const y0 = Math.min(...i.words.map((w) => w.y0));
+      const y1 = Math.max(...i.words.map((w) => w.y1));
+      const d = Math.hypot(Math.max(0, x0 - x, x - x1), Math.max(0, y0 - y, y - y1));
+      if (d < best && d <= i.size * 0.9) { best = d; hit = i; }
+    }
+    setTool('edit');
+    if (hit) startEditing(hit.id);
   }
 
   async function copyPageText() {
@@ -2185,7 +2477,7 @@
     if (!info) return;
     const edited = new Map(S.rec.items.filter((i) => i.conv && i.page === info.entry.uid).map((i) => [i.origKey, i.text]));
     const items = (await textItems(info)).map((t) => (edited.has(t.key) ? Object.assign({}, t, { str: edited.get(t.key) }) : t)).filter((t) => t.str);
-    if (!items.length) { api.toast('This page has no text to copy. If it is a scan, click “Read text” first.'); return; }
+    if (!items.length) { api.toast('This page has no text to copy. If it is a scan, click it with Edit text first to read it.'); return; }
     const lines = [];
     let lastBase = null;
     for (const t of items.slice().sort((p, q) => (Math.abs(p.base - q.base) < p.size * 0.5 ? p.x - q.x : p.base - q.base))) {
@@ -2593,7 +2885,7 @@
     if (!info || !S.rec) return;
     if (isConv(info.entry.uid)) { api.toast('This page’s text is already editable. Click a line with Edit text to change it.'); return; }
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
-    if (!ocrFits(ocr, info.entry, info.rot)) { await runOcr('current'); return; }
+    if (!ocrFits(ocr, info.entry, info.rot)) { await clickRead(info, -1, -1); return; }
     const before = snap();
     let n = 0;
     S.convNoFont = false;
@@ -3058,7 +3350,7 @@
 
   async function toggleScanFonts() {
     if (!S.rec) return;
-    if (!S.rec.scanFonts || !Object.keys(S.rec.scanFonts).length) { api.toast('This document has no letters taken from a scan yet. Click “Read text” on a scanned page first.', 5000); return; }
+    if (!S.rec.scanFonts || !Object.keys(S.rec.scanFonts).length) { api.toast('This document has no letters taken from a scan yet. Click a scanned page with Edit text first to read it.', 5000); return; }
     S.rec.scanFontsOff = !S.rec.scanFontsOff;
     useScanFonts();
     await Promise.all(S.rec.items.flatMap(itemFonts).map((f) => NpFonts.load(f).catch(() => null)));
@@ -3711,7 +4003,9 @@
         st.family = fam.value;
         update((i) => { i.family = fam.value; delete i.font; });
       });
-      const sizes = SIZES.includes(Math.round(cur.size)) ? SIZES : SIZES.concat([cur.size]).sort((a, b) => a - b);
+      // the item's own size is always listed (a size read from a scan is rarely a whole number)
+      const own = Math.round(cur.size * 10) / 10;
+      const sizes = SIZES.includes(own) ? SIZES : SIZES.concat([own]).sort((a, b) => a - b);
       const size = el('select', { class: 'tb-select', 'aria-label': 'Size', title: 'Size' }, sizes.map((n) => el('option', { value: n, selected: Math.abs(n - cur.size) < 0.05 }, String(n))));
       size.addEventListener('change', () => { st.size = +size.value; update((i) => { i.size = +size.value; }); });
       const color = el('input', { type: 'color', class: 'pdf-color', value: cur.color || '#000000', 'aria-label': 'Text color', title: 'Text color' });
@@ -4787,11 +5081,34 @@
       if (act === 'zoom-in') zoom('in');
       if (act === 'zoom-out') zoom('out');
       if (act === 'pages') document.body.classList.toggle('pdf-thumbs-open');
-      if (act === 'ocr') runOcr('scanned');
       if (act === 'original') toggleOriginal();
+      if (b.classList.contains('tb-info')) b.classList.toggle('open');
     });
     $('#pdf-scroller').addEventListener('scroll', () => { if (!S.raf) S.raf = requestAnimationFrame(() => { S.raf = 0; updatePageStatus(); }); }, { passive: true });
     window.addEventListener('resize', () => { if (S.rec && S.fit && document.body.classList.contains('pdf-mode')) fitWidth(); });
+    // pages read in the last few seconds are saved when the tab is closed or hidden
+    const flush = () => { if (S.rec && saveSoon) bgChanged(true); };
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
+    const ra = $('#pdf-readall');
+    if (ra) ra.addEventListener('change', () => { if (S.rec) setReadAll(ra.checked); });
+    // the info bubble: placed under its button within the window (the toolbar
+    // scrolls sideways on a phone, and would cut it off); it opens on hover,
+    // focus or tap, and closes on a click elsewhere
+    const info = $('#pdf-toolbar .tb-info');
+    if (info) {
+      const place = () => {
+        const tip = info.querySelector('.tb-tip');
+        const r = info.getBoundingClientRect();
+        const w = Math.min(300, innerWidth - 24);
+        tip.style.left = clamp(r.left + r.width / 2 - w / 2, 12, innerWidth - w - 12) + 'px';
+        tip.style.top = r.bottom + 8 + 'px';
+      };
+      info.addEventListener('mouseenter', place);
+      info.addEventListener('focus', place);
+      info.addEventListener('click', place);
+    }
+    document.addEventListener('pointerdown', (e) => { const i = $('#pdf-toolbar .tb-info.open'); if (i && !i.contains(e.target)) i.classList.remove('open'); });
     const addInput = $('#pdf-add-input');
     addInput.addEventListener('change', async () => {
       const files = Array.from(addInput.files);
@@ -4819,7 +5136,7 @@
     // a PDF whose first page has no text of its own is almost always a scan
     const first = S.info.get(rec.pages[0] && rec.pages[0].uid);
     if (!first || !first.page || (rec.ocr && Object.keys(rec.ocr).length)) return;
-    if ((await nativeTextCount(first)) === 0 && S.rec === rec) api.toast('This PDF has no text the app can edit directly: it is a scan, or its letters were saved as drawn shapes. Click “Read text” to make its words editable and searchable.', 7000);
+    if ((await nativeTextCount(first)) === 0 && S.rec === rec) api.toast('This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
   }
 
   window.NpPdf = {
@@ -4838,7 +5155,8 @@
     rotateCurrent: (dir) => { const c = currentPage(); if (c) rotatePage(c.entry.uid, dir); },
     deleteCurrent: () => { const c = currentPage(); if (c) deletePage(c.entry.uid); },
     insertBlank,
-    ocr: (scope) => runOcr(scope),
+    ocr: (scope) => (scope === 'current' ? (currentPage() && clickRead(currentPage(), -1, -1)) : setReadAll(true)),
+    readAll: (on) => setReadAll(on),
     convert: convertCurrent,
     unconvert: unconvertCurrent,
     toggleScanFonts,

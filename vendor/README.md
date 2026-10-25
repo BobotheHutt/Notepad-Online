@@ -6,7 +6,9 @@ Third-party libraries, unmodified:
               downloaded fonts.
 - tesseract/  Tesseract.js 5.1.1 + core 5.1.1 (SIMD, LSTM) + English data
               (4.0.0_best_int; Tesseract data is Apache-2.0). Apache-2.0. Reads
-              text on scanned pages.
+              text on scanned pages. fast/: Tesseract's fast English model
+              (tessdata_fast), Apache-2.0, read first; the accurate model
+              re-reads the lines it is unsure of.
 - opentype/   opentype.js 1.3.4, MIT. Builds fonts from a scan's own letters.
 
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when

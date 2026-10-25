@@ -97,7 +97,7 @@
               <button role="menuitem" data-action="pdf-blank"><span>Insert blank page</span></button>
               <button role="menuitem" data-action="pdf-add"><span>Add pages from another PDF…</span></button>
               <div class="menu-sep"></div>
-              <button role="menuitem" data-action="pdf-ocr" data-arg="scanned"><span>Read text on scanned pages (OCR)</span></button>
+              <button role="menuitem" data-action="pdf-ocr" data-arg="scanned"><span>Read the whole document (OCR)</span></button>
               <button role="menuitem" data-action="pdf-ocr" data-arg="current"><span>Read text on this page</span></button>
               <button role="menuitem" data-action="pdf-convert"><span>Make this page’s text editable</span></button>
               <button role="menuitem" data-action="pdf-unconvert"><span>Keep this page as scanned</span></button>
@@ -257,7 +257,8 @@
       <button class="tb" data-pdf-tool="box" data-icon="square" title="Box (B)" aria-label="Box"></button>
       <button class="tb" data-pdf="image" data-icon="image" title="Add an image" aria-label="Add an image"></button>
       <button class="tb tb-label" data-pdf="sign" data-icon="signature" title="Add your signature">Sign</button>
-      <button class="tb tb-label" data-pdf="ocr" data-icon="scan" title="Read the text on scanned pages (OCR) and make it editable, searchable and copyable">Read text</button>
+      <label class="tb-toggle" for="pdf-readall"><input type="checkbox" class="switch" id="pdf-readall" role="switch"> Read whole document</label>
+      <button type="button" class="tb tb-info" aria-label="What Read whole document does" aria-describedby="pdf-readall-tip">i<span class="tb-tip" id="pdf-readall-tip" role="tooltip"><strong>Off:</strong> a scanned page is read when you click it with Edit text, and only that page. Nothing else is read, so large documents open and stay quick.<br><br><strong>On:</strong> every scanned page is read in the background, several at a time, so the whole document becomes editable, searchable and copyable. A page you click goes first. Turning it off pauses; it carries on where it stopped next time. It works the computer harder while it runs.</span></button>
       <button class="tb tb-label" data-pdf="original" hidden aria-pressed="false" title="Show the pages as they were scanned, to check what was read">Original</button>
       <span class="grow"></span>
       <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>

@@ -627,21 +627,8 @@
     const sel = it.id === S.sel;
     const editingPara = it.para && S.editPrep && (itemById(S.editPrep) || {}).para === it.para;
     if (editingPara && it.id !== S.editPrep) return document.createDocumentFragment();
-    if (editingPara) {
-      // the whole paragraph, wrapping at its width as it is typed
-      const lines = paraLines(it.para);
-      const g = paraGeom(lines);
-      const top = lines[0];
-      const d = el('div', {
-        class: 'pdf-item pdf-textbox pdf-para', 'data-id': it.id,
-        style: 'left:' + px(g.left) + ';top:' + px(top.base - BASELINE[top.family] * top.size - (g.pitch - top.size * LINE) / 2) + ';width:' + px(g.right - g.left + top.size * 0.2) +
-          ';text-indent:' + px(g.first - g.left) + ';line-height:' + px(g.pitch) + ';font-size:' + px(top.size) + ';font-family:' + familyCss(top).replace(/"/g, "'") +
-          ';color:' + top.color + ';font-weight:' + (top.font ? top.font.weight : top.bold ? 700 : 400) + ';font-style:' + (top.italic ? 'italic' : 'normal') +
-          (top.smallCaps ? ';font-variant:small-caps' : '')
-      });
-      d.textContent = lines.map((l) => l.text.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' ');
-      return d;
-    }
+    // being edited: shown as it will be drawn (see editorEl)
+    if (editingPara || (it.conv && S.editPrep === it.id)) return editorEl(it);
     if (it.type === 'text' && it.conv && S.editPrep !== it.id) {
       const frag = document.createDocumentFragment();
       const lay = convLayout(it);
@@ -896,7 +883,7 @@
     const items = await textItems(info);
     // a newer render has replaced this layer while the text was loading
     if (S.tool !== 'edit' || !info.layer.isConnected || seq !== info.seq) return;
-    const used = new Set(S.rec.items.filter((i) => i.origKey).map((i) => i.origKey));
+    const used = new Set(S.rec.items.flatMap((i) => i.keys || (i.origKey ? [i.origKey] : [])));
     const frag = document.createDocumentFragment();
     for (const t of items) {
       if (used.has(t.key)) continue;
@@ -2495,7 +2482,7 @@
       if (main && NpFonts.score) {
         // judged on plain words: a misread mark ("*" read as "™") draws
         // nothing like what is on the page and would make print look like writing
-        const plainWord = (w) => /^[\p{L}\p{N}]+$/u.test(w.t);
+        const plainWord = (w) => /^[\p{L}\p{N}.,:;'’"()\/-]+$/u.test(w.t) && /[\p{L}\p{N}]{2}/u.test(w.t);
         for (const q of mine) {
           q.samp = samplesOf(q.t.words.filter(plainWord), 6);
           q.sc = q.samp.length ? await NpFonts.score(q.samp, main) : null;
@@ -2595,8 +2582,31 @@
         const chars = t.words.map((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
         return chars >= 3 && conf < 82;
       };
-      for (const t of left.filter(handLike)) {
-        S.rec.items.push({ id: uid(), type: 'hand', page: info.entry.uid, origKey: t.key, words: t.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 })), erased: false });
+      // Writing carries on along its line: what was left as scanned beside a
+      // piece of it, on the same line and close by, is part of it (a name
+      // OCR read the first half of surely is still one name).
+      const others = left.filter((t) => !handLike(t));
+      const hgt = (t) => median(t.words.map((w) => w.y1 - w.y0));
+      const beside = (a, b) => {
+        const sz = Math.max(a.size, b.size);
+        if (Math.abs(a.base - b.base) > sz * 0.6 || hgt(a) > hgt(b) * 2 || hgt(b) > hgt(a) * 2) return false;
+        const ax0 = a.words[0].x0;
+        const ax1 = a.words[a.words.length - 1].x1;
+        const bx0 = b.words[0].x0;
+        const bx1 = b.words[b.words.length - 1].x1;
+        return Math.max(bx0 - ax1, ax0 - bx1) < sz * 3;
+      };
+      for (const gp of left.filter(handLike).map((t) => [t])) {
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (const t of others.slice()) if (gp.some((h) => beside(h, t))) { gp.push(t); others.splice(others.indexOf(t), 1); grew = true; }
+        }
+        gp.sort((a, b) => a.words[0].x0 - b.words[0].x0);
+        S.rec.items.push({
+          id: uid(), type: 'hand', page: info.entry.uid, origKey: gp[0].key, keys: gp.map((t) => t.key),
+          words: gp.flatMap((t) => t.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 }))), erased: false
+        });
       }
     }
     return out.length;
@@ -2732,7 +2742,7 @@
     const input = el('input', { type: 'text', class: 'pdf-fix-input', value: tg.t, 'aria-label': 'What this word says', spellcheck: 'true' });
     const box = el('div', { class: 'pdf-fix', role: 'dialog', 'aria-label': 'Correct this word' },
       el('div', { class: 'pdf-fix-label' }, 'Scanned word'), cv,
-      el('div', { class: 'pdf-fix-label' }, 'It says'), input,
+      el('div', { class: 'pdf-fix-label' }, ref.startsWith('ocr:') ? 'OCR read it as (used only to search and copy; the page shows it as written)' : 'It says'), input,
       el('div', { class: 'pdf-fix-hint' }, 'Enter saves · Tab saves and goes to the next word to check · Esc cancels'));
     info.el.append(box);
     S.fix = { info, tg, box };
@@ -2848,8 +2858,10 @@
     const runs = [];
     let end = null;
     // new words take the look of the word they replace (or the one before
-    // them), or the look they had before a paragraph was rewrapped (tv)
+    // them), or the look they had before a paragraph was rewrapped (tv), and
+    // the line's narrowing
     const vNew = (orig[Math.min(p, orig.length - 1)] || {}).v;
+    const fitNew = p < neu.length ? lineFit(it) : 1;
     neu.forEach((t, i) => {
       const o = i < p ? orig[i] : i >= neu.length - s ? orig[orig.length - (neu.length - i)] : null;
       const v = o ? o.v : it.tv && it.tv[i] !== undefined ? it.tv[i] : vNew;
@@ -2859,7 +2871,7 @@
       // like ordinary text
       const x0 = i < p ? o.x0 : flow;
       // an unchanged word never grows past the room it had on the page
-      const sx = o ? Math.max(0.85, Math.min(1, ((o.x1 - o.x0) * 1.02) / (ink.w || 1))) : 1;
+      const sx = o ? Math.max(0.85, Math.min(1, ((o.x1 - o.x0) * 1.02) / (ink.w || 1))) : fitNew;
       runs.push({ text: t, x0, w: ink.w * sx, lsb: ink.lsb, sx, o, v });
       end = x0 + ink.w * sx;
     });
@@ -2875,6 +2887,58 @@
       for (let i = p; i < runs.length; i++) { runs[i].x0 = from + (runs[i].x0 - from) * f; runs[i].w *= f; runs[i].sx *= f; }
     }
     return runs.map((r) => ({ text: r.text, x: r.x0 - r.lsb * r.sx, base: it.base, scaleX: r.sx, overflow, o: r.o, v: r.v, st: runStyle(it, r.v) }));
+  }
+
+  // How much narrower the scan's letters are than the matched font's, for a
+  // line: its words are fitted to their places on the page by it, and new
+  // words take it too, so a line is of a piece (and the editing box can show
+  // the line as it will be drawn).
+  function lineFit(it) {
+    if (!it.words.length) return it.fitX || 1;
+    const f = it.words.filter((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '').length >= 2)
+      .map((w) => clamp(((w.x1 - w.x0) * 1.02) / (measureRun(w.t, runStyle(it, w.v), it.smallCaps).w || 1), 0.85, 1));
+    return median(f) || 1;
+  }
+
+  // The box a converted line (or its whole paragraph) is edited in, set as
+  // the line is drawn: the same fonts word by word, the same narrowing, the
+  // scan's word spacing, and for a paragraph its width and line spacing, so
+  // what is typed looks as it will once done, and wraps where it will.
+  function editorEl(it) {
+    const lines = it.para ? paraLines(it.para) : [it];
+    const top = lines[0];
+    const g = it.para ? paraGeom(lines) : null;
+    const f = median(lines.map(lineFit)) || 1;
+    const gaps = [];
+    for (const l of lines) for (let k = 1; k < l.words.length; k++) { const gp = l.words[k].x0 - l.words[k - 1].x1; if (gp > 0) gaps.push(gp); }
+    const gap = median(gaps);
+    const space = textWidth(' ', top);
+    const lay0 = convLayout(top);
+    const x = g ? g.left : lay0[0] ? lay0[0].x : lineStart(top);
+    const lineH = g ? g.pitch : top.size * LINE;
+    const weight = (st) => (st.font ? st.font.weight : st.bold ? 700 : 400);
+    const d = el('div', {
+      class: 'pdf-item pdf-textbox pdf-edit' + (g ? ' pdf-para' : ''), 'data-id': it.id,
+      style: 'left:' + px(x) + ';top:' + px(top.base - BASELINE[top.family] * top.size - (lineH - top.size * LINE) / 2) +
+        (g ? ';width:' + px((g.right - g.left) / f + top.size * 0.2) + ';text-indent:' + px((g.first - g.left) / f) : '') +
+        ';line-height:' + px(lineH) + ';font-size:' + px(top.size) + ';font-family:' + familyCss(top).replace(/"/g, "'") + ';color:' + top.color +
+        ';font-weight:' + weight(top) + ';font-style:' + (top.italic ? 'italic' : 'normal') + (top.smallCaps ? ';font-variant:small-caps' : '') +
+        (gap ? ';word-spacing:' + px(gap / f - space) : '') + (f < 0.999 ? ';transform:scaleX(' + f.toFixed(3) + ');transform-origin:0 0' : '')
+    });
+    let first = true;
+    for (const l of lines) {
+      for (const r of convLayout(l)) {
+        if (!first) d.append(' ');
+        first = false;
+        const st = r.st;
+        const same = familyCss(st) === familyCss(top) && weight(st) === weight(top) && !!st.italic === !!top.italic && l.color === top.color && Math.abs(l.size - top.size) < 0.05;
+        d.append(same ? document.createTextNode(r.text) : el('span', {
+          style: 'font-family:' + familyCss(st).replace(/"/g, "'") + ';font-weight:' + weight(st) + ';font-style:' + (st.italic ? 'italic' : 'normal') + ';color:' + l.color +
+            (Math.abs(l.size - top.size) >= 0.05 ? ';font-size:' + px(l.size) : '')
+        }, r.text));
+      }
+    }
+    return d;
   }
 
   // Where a converted line starts: its first word on the page, or for a line
@@ -3030,7 +3094,7 @@
       const last = lines[lines.length - 1];
       const base = last.base + g.pitch * (q.j - lines.length + 1);
       const it = {
-        id: uid(), type: 'text', page: last.page, conv: true, para: pid, words: [], origText: '', text: q.text, tv: q.tv, lineX: g.left,
+        id: uid(), type: 'text', page: last.page, conv: true, para: pid, words: [], origText: '', text: q.text, tv: q.tv, lineX: g.left, fitX: lineFit(last),
         base, size: last.size, heightSize: last.heightSize, color: last.color, bg: last.bg, limit: last.limit, smallCaps: last.smallCaps,
         family: last.family, font: last.font ? Object.assign({}, last.font) : undefined, bold: last.bold, italic: last.italic
       };
@@ -3118,7 +3182,7 @@
     const em = printedEm(info.entry.uid);
     // the words of printed text read on the page (made editable, or left as
     // scanned but not writing)
-    const handKeys = new Set(S.rec.items.filter((i) => i.type === 'hand' && i.origKey).map((i) => i.origKey));
+    const handKeys = new Set(S.rec.items.filter((i) => i.type === 'hand').flatMap((i) => i.keys || (i.origKey ? [i.origKey] : [])));
     const printed = [];
     for (const i of S.rec.items) if (i.page === info.entry.uid && i.conv) printed.push(...i.words);
     for (const t of (await textItems(info))) if (t.scan && !handKeys.has(t.key) && !S.rec.items.some((i) => i.conv && i.origKey === t.key)) printed.push(...t.words);
@@ -3508,6 +3572,22 @@
       bar.replaceChildren(...[b, hint].filter(Boolean));
       bar.hidden = false;
       return;
+    }
+    if (it && it.conv && it.words.length) {
+      // OCR read some writing surely enough to retype it: put it back as written
+      const hw = el('button', { type: 'button', class: 'btn btn-sm', title: 'This line is handwriting: show it as it was written, not retyped (it can then be erased to clear the form)' }, 'Handwriting');
+      hw.addEventListener('mousedown', (e) => e.preventDefault());
+      hw.addEventListener('click', () => {
+        const before = snap();
+        S.rec.items = S.rec.items.filter((i) => i !== it);
+        const h = { id: uid(), type: 'hand', page: it.page, origKey: it.origKey, keys: it.origKey ? [it.origKey] : [], words: it.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 })), erased: false };
+        S.rec.items.push(h);
+        S.sel = h.id;
+        commit(before);
+        renderOverlay(S.info.get(it.page));
+        renderStyleBar();
+      });
+      parts.push(hw);
     }
     if (it) {
       if (it.cover) {

@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-35';
+  const APP_VERSION = '2026.10.25-36';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1256,6 +1256,7 @@
     open: openPicker,
     save: saveFile,
     'save-as': () => saveAs(),
+    'export': exportAs,
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
@@ -1652,6 +1653,25 @@
     const html = groups.map(([g, rows]) => '<h3>' + escapeHtml(g) + '</h3><table class="keys">' +
       rows.map(([a, b]) => '<tr><td>' + escapeHtml(a) + '</td><td>' + (g.startsWith('Markdown') ? b.split(' / ').map((x) => '<code>' + escapeHtml(x) + '</code>').join(' ') : k(b)) + '</td></tr>').join('') + '</table>').join('');
     dialog({ title: 'Keyboard shortcuts', body: el('div', { class: 'keys-wrap', html }), wide: true });
+  }
+
+  // What Noteshack does, shown when the site opens until someone ticks
+  // "Don't show this again".
+  const WELCOME_KEY = 'np.welcome';
+  async function welcomeDialog() {
+    try { if (localStorage.getItem(WELCOME_KEY) === 'hidden') return; } catch (e) { /* storage blocked: show it */ }
+    const feature = (title, text) => el('li', {}, el('strong', {}, title), el('span', {}, text));
+    const check = el('input', { type: 'checkbox', id: 'welcome-hide' });
+    const body = el('div', { class: 'welcome' },
+      el('p', { class: 'dlg-text' }, 'A free word processor and PDF editor that works right in your browser.'),
+      el('ul', { class: 'welcome-list' },
+        feature('Write', 'A full word processor. Open and save Word documents, Markdown, web pages and plain text.'),
+        feature('Edit any PDF', 'Change its text in the original font, fill in forms, sign, highlight, add notes and pages.'),
+        feature('Scans become editable', 'Open a scanned PDF or a photo of a page, click it, and its words become real text you can change, set in letters taken from the scan itself.'),
+        feature('Private', 'Everything happens on your computer. Nothing you open or write is uploaded, and it works offline.')),
+      el('label', { class: 'welcome-hide' }, check, el('span', {}, 'Don’t show this again')));
+    await dialog({ title: 'Welcome to Noteshack', body, actions: [{ label: 'Get started', value: 'ok', primary: true }] });
+    try { if (check.checked) localStorage.setItem(WELCOME_KEY, 'hidden'); } catch (e) { /* ignore */ }
   }
 
   async function aboutDialog() {
@@ -2182,12 +2202,19 @@
     return NpImages.formatOf(file);
   }
 
-  // The kinds a document can be saved as, its own first. A PDF (or an image,
-  // which is one inside) can also become images, a Word document or text.
+  // Save as keeps a document what it is: one written here can be any of the
+  // kinds that hold writing (Word first), a PDF stays a PDF, an image its own
+  // type. Turning it into something else is Export, which makes a separate
+  // file and leaves Save going where it went.
   function saveKinds(doc) {
-    const all = doc.type === 'pdf' ? ['pdf', 'jpeg', 'png', 'webp', 'tiff', 'bmp', 'docx', 'txt'] : ['docx', 'pdf', 'md', 'html', 'txt'];
+    if (doc.type === 'pdf') return [ownKind(doc)];
     const own = ownKind(doc);
-    return [own, ...all.filter((k) => k !== own)];
+    return [own, ...['docx', 'html', 'md', 'txt'].filter((k) => k !== own)];
+  }
+  function exportKinds(doc) {
+    if (doc.type !== 'pdf') return ['pdf'];
+    const own = ownKind(doc);
+    return ['pdf', 'docx', 'txt', 'jpeg', 'png', 'webp', 'tiff', 'bmp'].filter((k) => k !== own);
   }
 
   // what Save writes when there is no file yet: what the document came as
@@ -2278,7 +2305,8 @@
 
   // Write the document into a file on disk (handle), or, without one, put a
   // copy in Downloads.
-  async function writeOut(kind, handle) {
+  // exporting: a separate file, which Save does not then follow
+  async function writeOut(kind, handle, exporting) {
     const doc = current;
     if (doc.type === 'pdf') NpPdf.finishEditing();
     await saveNow('Saved by you');
@@ -2290,11 +2318,12 @@
         const w = await handle.createWritable();
         await w.write(out.blob);
         await w.close();
-        fileLinks.set(doc.id, { handle, kind, name: handle.name });
-        toast('Saved to “' + handle.name + '”');
+        if (!exporting) fileLinks.set(doc.id, { handle, kind, name: handle.name });
+        toast((exporting ? 'Exported to “' : 'Saved to “') + handle.name + '”');
       } else {
         download(out.blob, out.filename);
         if (out.zip) toast('One ' + info.label + ' holds one page, so the ' + info.label + 's were saved together in a zip.', 7000);
+        else if (exporting) toast('Exported to your Downloads.');
         else if (!canWriteFiles()) toast('Saved to your Downloads. (This browser does not let websites save over a file, so each save is a new copy.)', 7000);
       }
       if (out.fellBack) toast('This browser cannot save WebP images, so it was saved as PNG.', 6000);
@@ -2305,15 +2334,24 @@
     updateSaveUi();
   }
 
-  // Save as: choose the name, place and kind. Chrome and Edge show their
-  // own Save dialog, with every kind in its type list (the document's own
-  // first); other browsers get Noteshack's, to pick the kind, and save to
-  // Downloads. kind, when given, is the one to save as without asking.
-  async function saveAs(kind) {
+  // Save as and Export: choose the name, place and kind. Chrome and Edge
+  // show their own Save dialog, with the kinds in its type list; other
+  // browsers get Noteshack's, to pick the kind (when there is a choice), and
+  // save to Downloads. kind, when given, is the one to use without asking.
+  async function saveAs(kind) { return chooseAndWrite(kind ? [kind] : saveKinds(current || {}), false); }
+  async function exportAs() { return chooseAndWrite(exportKinds(current || {}), true); }
+
+  async function chooseAndWrite(kinds, exporting) {
     if (!current) return;
     const doc = current;
     if (!pdfMode()) doc.text = plainText().slice(0, 200000); // the name may come from a line just typed
-    const kinds = kind ? [kind] : saveKinds(doc);
+    // a document written here becomes a PDF by printing it
+    if (kinds.length === 1 && kinds[0] === 'pdf' && doc.type !== 'pdf') {
+      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
+      setTimeout(printDoc, 400);
+      return;
+    }
+    let kind = kinds.length === 1 ? kinds[0] : null;
     let handle = null;
     if (canWriteFiles()) {
       // asked first: the browser shows the dialog only straight after a click or key
@@ -2336,22 +2374,15 @@
       const select = el('select', { class: 'input', 'aria-label': 'File type' },
         kinds.map((k) => el('option', { value: k }, kindInfo(k).label + ' (.' + kindInfo(k).ext + ')')));
       const v = await dialog({
-        title: 'Save as',
+        title: exporting ? 'Export' : 'Save as',
         body: el('label', { class: 'field' }, el('span', {}, 'File type'), select),
-        actions: [{ label: 'Cancel', value: '' }, { label: 'Save', value: 'save', primary: true }],
+        actions: [{ label: 'Cancel', value: '' }, { label: exporting ? 'Export' : 'Save', value: 'save', primary: true }],
         onOpen: () => select.focus()
       });
       if (v !== 'save') return;
       kind = select.value;
     }
-    // a text document becomes a PDF by printing it
-    if (kind === 'pdf' && doc.type !== 'pdf') {
-      if (handle && handle.remove) handle.remove().catch(() => {});
-      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
-      setTimeout(printDoc, 400);
-      return;
-    }
-    await writeOut(kind, handle);
+    await writeOut(kind, handle, exporting);
   }
 
   // Save: back into the document's own file, or, the first time, Save as
@@ -2818,6 +2849,7 @@
     else await createDoc('', '', { keepFocus: true });
     renderDocList();
     document.body.classList.add('ready');
+    welcomeDialog();
 
     // Save before the tab goes away or into the background.
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) saveNow(); });

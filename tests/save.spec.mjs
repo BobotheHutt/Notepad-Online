@@ -68,7 +68,7 @@ test.describe('where the browser can write to files', () => {
     await expect(p.locator('#toast')).toContainText('Saved to “Plans.md”');
     expect(new TextDecoder().decode(new Uint8Array(await getFile(p, 'Plans.md')))).toContain('# Plans');
     await expect(p.locator('#save-item')).toContainText('Save to “Plans.md”');
-    expect(await p.evaluate(() => window.__types)).toEqual(['Word document (.docx)', 'PDF (.pdf)', 'Markdown (.md)', 'Web page (.html)', 'Plain text (.txt)']);
+    expect(await p.evaluate(() => window.__types)).toEqual(['Word document (.docx)', 'Web page (.html)', 'Markdown (.md)', 'Plain text (.txt)']);
   });
 
   test('cancelling Save as does nothing', async ({ app: p }) => {
@@ -111,4 +111,20 @@ test('elsewhere, Save puts a copy in Downloads, as the same kind of file', async
   expect(dl.suggestedFilename()).toBe('Notes.docx');
   await expect(p.locator('#toast')).toContainText('Saved to your Downloads');
   await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack');
+});
+
+test.describe('exporting, where the browser can write to files', () => {
+  test.use({ filePickers: true });
+  test('Export makes a separate file; Save keeps going to the original', async ({ app: p }) => {
+    await putFile(p, 'letter.pdf', fs.readFileSync(fixture('letter.pdf')));
+    await p.evaluate(() => { window.__openName = 'letter.pdf'; });
+    await p.keyboard.press('Control+o');
+    await p.waitForSelector('.pdf-page canvas');
+    await p.evaluate(() => { window.__pickExt = 'txt'; });
+    await p.evaluate(() => document.querySelector('[data-action="export"]').click());
+    await expect(p.locator('#toast')).toContainText('Exported to “letter.txt”', { timeout: 30000 });
+    expect(await p.evaluate(() => window.__types[0])).toBe('Word document (.docx)'); // a PDF's exports: not PDF
+    expect(new TextDecoder().decode(new Uint8Array(await getFile(p, 'letter.txt')))).toContain('Total due: $450.00');
+    await expect(p.locator('#save-item span')).toHaveText('Save to “letter.pdf”');
+  });
 });

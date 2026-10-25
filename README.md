@@ -18,9 +18,10 @@ and lets you edit and sign PDFs.
 
 **Documents**
 - Unlimited documents, with a searchable sidebar
+- A welcome on opening that sums up what Noteshack does (tick "Don't show this again" to stop it)
 - Autosave plus **version history**: browse earlier versions and restore any of them
 - **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window (PDFs and images open in the PDF editor, below)
-- **Save** (Ctrl+S) and **Save as…** (Ctrl+Shift+S), as Word (`.docx`), PDF, Markdown, web page or plain text. Everything is also kept in Noteshack as you work ("Saved in Noteshack").
+- **Save** (Ctrl+S) writes over the document's file; the first time, it is Save as. **Save as…** (Ctrl+Shift+S) picks the name, folder and kind: Word (`.docx`), web page, Markdown or plain text. **Export…** makes a PDF (through Print). Everything is also kept in Noteshack as you work ("Saved in Noteshack").
   - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog (pick the kind of file in its type list), and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. This lasts while the tab is open: after a reload or a new visit, the first Save shows the dialog again, in the same folder with the same name. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
   - **Firefox, Safari and phones** do not let websites write to a file on disk, so there each save is a new copy in Downloads; Save as asks which kind of file.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
@@ -32,7 +33,7 @@ and lets you edit and sign PDFs.
 - **The original font**: the app works out which font the words were set in (from the font's name in the PDF, or, on a scan, by comparing the letters with 31 common document fonts) and downloads it, so new words match. Paid fonts like Arial, Times New Roman and Calibri are matched with free fonts drawn to the same shapes and widths (Arimo, Tinos, Carlito).
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
-- **Images too**: open a JPG, PNG, WebP, TIFF or BMP (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Save** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) Save as… also makes it a PDF.
+- **Images too**: open a JPG, PNG, WebP, TIFF or BMP (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Save** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) Export… makes it a PDF, a Word document, text or another kind of image.
 - **Scanned pages become editable text (OCR)**: with Edit text, click a scanned page and the app reads that page (a few seconds; the line you clicked then opens for editing), takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
@@ -48,7 +49,7 @@ and lets you edit and sign PDFs.
   - English only for now; needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
-- **Save as…** turns a PDF (or an image) into another kind of file too: images (JPG, PNG, WebP, BMP, one per page, or one multi-page TIFF), plain text, or a Word document of its words as paragraphs and headings (not its exact layout). Text read from scanned pages comes along.
+- **Export…** turns a PDF (or an image) into another kind of file, as a separate file (Save keeps going to the original): images (JPG, PNG, WebP, BMP, one per page, or one multi-page TIFF), plain text, or a Word document of its words as paragraphs and headings (not its exact layout). Text read from scanned pages comes along.
 - **Save** writes the PDF with your changes: back over the file you opened (Chrome and Edge, see Save above), or as a new copy. Save as makes a new file and leaves the original as it was.
 - **Print** shows a preview of exactly what will print (your changes included), then prints straight from it; Save and Open in a new tab are there too.
 

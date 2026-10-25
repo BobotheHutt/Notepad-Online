@@ -837,6 +837,12 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
 .dlg-body { padding: 8px 20px 12px; overflow: auto; }
 .dlg-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 16px; flex-wrap: wrap; }
 .dlg-text { margin: 0; color: var(--ink-2); line-height: 1.5; }
+.welcome { display: flex; flex-direction: column; gap: 14px; }
+.welcome-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.welcome-list li { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; border-left: 3px solid var(--accent); line-height: 1.45; }
+.welcome-list span { color: var(--ink-2); }
+.welcome-hide { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; }
+.welcome-hide input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .muted { color: var(--ink-3); }
 
 .stack { display: flex; flex-direction: column; gap: 14px; }

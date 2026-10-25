@@ -27,7 +27,12 @@ async function localFonts(context) {
 }
 
 export const test = base.extend({
-  context: async ({ context }, use) => { await localFonts(context); await use(context); },
+  context: async ({ context, welcome }, use) => {
+    await localFonts(context);
+    // the welcome popup stays away unless a test is about it
+    if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); } catch (e) { /* ignore */ } });
+    await use(context);
+  },
   errors: async ({ page }, use) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -44,6 +49,8 @@ export const test = base.extend({
   // private storage (OPFS): real, writable files, as a test cannot click a
   // system dialog.
   filePickers: [false, { option: true }],
+  // the welcome popup, off unless a test is about it
+  welcome: [false, { option: true }],
   app: async ({ page, errors, filePickers }, use) => {
     if (!filePickers) await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
     else {
@@ -99,11 +106,14 @@ export const getFile = (page, name) => page.evaluate(async (name) => {
 
 // File → Save as…, where the browser has no Save dialog: pick the type in
 // Noteshack's own, and the file arrives as a download
-export async function saveAsType(page, kind) {
+export const saveAsType = (page, kind) => chooseType(page, 'save-as', 'Save', kind);
+// File → Export…, the same way
+export const exportType = (page, kind) => chooseType(page, 'export', 'Export', kind);
+async function chooseType(page, action, button, kind) {
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), (async () => {
-    await page.evaluate(() => document.querySelector('[data-action="save-as"]').click());
+    await page.evaluate((a) => document.querySelector(`[data-action="${a}"]`).click(), action);
     await page.locator('dialog[open] select').selectOption(kind);
-    await page.locator('dialog[open]').getByRole('button', { name: 'Save', exact: true }).click();
+    await page.locator('dialog[open]').getByRole('button', { name: button, exact: true }).click();
   })()]);
   return dl;
 }

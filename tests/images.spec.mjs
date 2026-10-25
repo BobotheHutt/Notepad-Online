@@ -1,7 +1,7 @@
 // Images open in the PDF editor, read and edit like a scan, and download as
 // the same kind of image, the same size in pixels.
 import fs from 'node:fs';
-import { test, expect, openFile, waitToast, saveAsType } from './helpers.mjs';
+import { test, expect, openFile, waitToast, exportType } from './helpers.mjs';
 
 // width, height and kind of a downloaded image, as the browser reads it
 async function inspect(p, file, type) {
@@ -46,12 +46,15 @@ test('a JPG: read, edit, and download as a JPG the same size, with the change in
   expect(text).not.toContain('Springfield');
 });
 
-test('a JPG can be saved as other kinds, its own first', async ({ app: p }) => {
+test('a JPG: Save as keeps it a JPG; Export makes it anything else', async ({ app: p }) => {
   await openFile(p, 'scan.jpg');
-  await p.evaluate(() => document.querySelector('[data-action="save-as"]').click());
-  await expect(p.locator('dialog[open] select option')).toHaveText(['JPG image (.jpg)', 'PDF (.pdf)', 'PNG image (.png)', 'WebP image (.webp)', 'TIFF image (.tif)', 'BMP image (.bmp)', 'Word document (.docx)', 'Plain text (.txt)']);
+  // only one kind to save as, so no question: it is saved
+  const [same] = await Promise.all([p.waitForEvent('download'), p.evaluate(() => document.querySelector('[data-action="save-as"]').click())]);
+  expect(same.suggestedFilename()).toBe('scan.jpg');
+  await p.evaluate(() => document.querySelector('[data-action="export"]').click());
+  await expect(p.locator('dialog[open] select option')).toHaveText(['PDF (.pdf)', 'Word document (.docx)', 'Plain text (.txt)', 'PNG image (.png)', 'WebP image (.webp)', 'TIFF image (.tif)', 'BMP image (.bmp)']);
   await p.keyboard.press('Escape');
-  const dl = await saveAsType(p, 'pdf');
+  const dl = await exportType(p, 'pdf');
   expect(dl.suggestedFilename()).toBe('scan.pdf');
   expect(fs.readFileSync(await dl.path()).subarray(0, 5).toString()).toBe('%PDF-');
 });

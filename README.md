@@ -97,6 +97,11 @@ Users are responsible for the documents they change. Do not alter a document
 in a way that misleads anyone, such as a form or record someone else filled
 in or signed.
 
+## License
+
+Notepad Online's own code is released under the [MIT License](LICENSE).
+The libraries in `vendor/` keep their own licenses, listed below.
+
 ## Credits and licenses
 
 Notepad Online uses these open-source projects, kept unmodified in `vendor/`
@@ -149,6 +154,7 @@ js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details
 AUDIT.md               what was wrong with the first version, and what changed
+LICENSE                the MIT License, for this project's own code
 ```
 
 After changing any file, bump `CACHE` in `sw.js` so installed copies pick up

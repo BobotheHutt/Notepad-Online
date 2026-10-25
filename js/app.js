@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-24';
+  const APP_VERSION = '2026.10.25-25';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1675,7 +1675,7 @@
           el('li', {}, 'Tesseract.js, Tesseract OCR and its English data, Apache License 2.0: read text on scans'),
           el('li', {}, 'opentype.js, MIT License: builds fonts from a scan’s letters'),
           el('li', {}, 'Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks')),
-        el('p', {}, 'The full license texts are in the vendor folder of the app’s source.')),
+        el('p', {}, 'Notepad Online’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.')),
       el('details', { class: 'about-more' }, el('summary', {}, 'Trademarks'),
         el('p', {}, 'Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Notepad Online is not affiliated with or endorsed by them.')));
     dialog({ title: 'About and storage', body });

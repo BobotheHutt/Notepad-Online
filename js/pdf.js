@@ -13,6 +13,7 @@
   'use strict';
 
   const VENDOR = 'vendor/';
+  const vendorUrl = (path) => new URL(VENDOR + path, document.baseURI).href;
   const $ = (s, r = document) => r.querySelector(s);
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
@@ -105,9 +106,9 @@
   function loadLibs() {
     if (libs) return libs;
     libs = (async () => {
-      await loadScript(VENDOR + 'pdfjs/pdf.min.js');
-      if (/^https?:$/.test(location.protocol)) pdfjsLib.GlobalWorkerOptions.workerSrc = VENDOR + 'pdfjs/pdf.worker.min.js';
-      else await loadScript(VENDOR + 'pdfjs/pdf.worker.min.js'); // file:// cannot start a worker; PDF.js then runs in the page
+      // PDF.js comes as modules; it puts itself on window.pdfjsLib as well
+      try { await import(vendorUrl('pdfjs/pdf.min.mjs')); } catch (e) { throw new Error('Could not load the PDF tools. Check your connection and try again.'); }
+      pdfjsLib.GlobalWorkerOptions.workerSrc = vendorUrl('pdfjs/pdf.worker.min.mjs');
       await loadScript(VENDOR + 'pdf-lib/pdf-lib.min.js');
     })();
     libs.catch(() => { libs = null; });
@@ -117,12 +118,18 @@
   async function loadPdfJs(buffer) {
     return pdfjsLib.getDocument({
       data: new Uint8Array(buffer.slice(0)), // PDF.js takes ownership of what it is given
-      isEvalSupported: false,                 // closes CVE-2024-4367 in this PDF.js version
-      cMapUrl: VENDOR + 'pdfjs/cmaps/',
+      isEvalSupported: false,                 // no code generated from a PDF's contents
+      enableXfa: false,
+      // full addresses: the worker would read a relative one from its own folder
+      cMapUrl: vendorUrl('pdfjs/cmaps/'),
       cMapPacked: true,
-      standardFontDataUrl: VENDOR + 'pdfjs/standard_fonts/'
+      standardFontDataUrl: vendorUrl('pdfjs/standard_fonts/'),
+      wasmUrl: vendorUrl('pdfjs/wasm/'),      // image decoders (fax-compressed scans, JPEG 2000, JBIG2) and color profiles
+      iccUrl: vendorUrl('pdfjs/iccs/')
     }).promise;
   }
+  // a document from loadPdfJs, finished with (its worker and memory freed)
+  const closePdf = (doc) => { try { doc.loadingTask.destroy(); } catch (e) { /* ignore */ } };
 
   /* ============================================================ geometry */
 
@@ -342,7 +349,7 @@
     S.bgAt = new Map();
     if (S.observer) S.observer.disconnect();
     if (S.thumbObserver) S.thumbObserver.disconnect();
-    for (const d of S.docs) { try { d.destroy(); } catch (e) { /* ignore */ } }
+    for (const d of S.docs) closePdf(d);
     S.docs = [];
     S.pageCache.clear();
     S.info.clear();
@@ -2282,10 +2289,13 @@
       const ops = await info.page.getOperatorList();
       const O = pdfjsLib.OPS;
       const pics = new Set([O.paintImageXObject, O.paintInlineImageXObject, O.paintImageMaskXObject, O.paintImageXObjectRepeat, O.paintInlineImageXObjectGroup]);
+      const fillOps = new Set([O.fill, O.eoFill, O.fillStroke, O.eoFillStroke]);
       let fills = 0;
-      for (const f of ops.fnArray) {
+      for (let i = 0; i < ops.fnArray.length; i++) {
+        const f = ops.fnArray[i];
         if (pics.has(f)) { scan = true; break; }
-        if (f === O.fill || f === O.eoFill || f === O.fillStroke || f === O.eoFillStroke) fills++;
+        // a path and how it is painted come as one operation (constructPath, with the paint first)
+        if (fillOps.has(f) || (f === O.constructPath && fillOps.has(ops.argsArray[i] && ops.argsArray[i][0]))) fills++;
       }
       if (fills > 150) scan = true;
     } catch (e) { scan = true; }
@@ -4664,7 +4674,7 @@
     g.fillRect(0, 0, cw, ch);
     const pg = await pdoc.getPage(1);
     await pg.render({ canvasContext: g, viewport: pg.getViewport({ scale: cw / W }) }).promise;
-    pdoc.destroy();
+    closePdf(pdoc);
 
     // page space → image unit square → pixels (image row 0 is the top)
     const [a, b, c, d, e, f] = ctm;
@@ -5202,7 +5212,7 @@
         text += c.items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n';
       }
     } catch (e) { /* text is only for search */ }
-    doc.destroy();
+    closePdf(doc);
     return { pages: Array.from({ length: n }, (_, i) => ({ uid: uid(), src: 0, index: i, rotate: 0 })), text: text.replace(/[ \t]+/g, ' ').trim() };
   }
 
@@ -5222,7 +5232,7 @@
     view: async (blob) => {
       await loadLibs();
       const doc = await loadPdfJs(await blob.arrayBuffer());
-      return { count: doc.numPages, page: (i) => doc.getPage(i + 1), destroy: () => { try { doc.destroy(); } catch (e) { /* ignore */ } } };
+      return { count: doc.numPages, page: (i) => doc.getPage(i + 1), destroy: () => closePdf(doc) };
     },
     undo, redo, zoom,
     setTool, onKey,

@@ -1,6 +1,10 @@
 Third-party libraries, unmodified:
 
-- pdfjs/      PDF.js 3.11.174 (Mozilla), Apache-2.0. Displays PDF pages.
+- pdfjs/      PDF.js 6.4.299 (Mozilla, the "legacy" build, which runs in
+              more browsers), Apache-2.0. Displays PDF pages. wasm/ holds its
+              image decoders (OpenJPEG, BSD-2-Clause; JBIG2 from PDFium,
+              BSD-3-Clause) and color-profile engine (qcms, MIT), with their
+              licenses.
 - pdf-lib/    pdf-lib 1.17.1, MIT. Writes edited PDFs.
               fontkit.umd.min.js: @pdf-lib/fontkit 1.1.1, MIT. Embeds
               downloaded fonts.

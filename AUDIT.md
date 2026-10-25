@@ -23,16 +23,14 @@ the scan reader.
 | 5 | The page description for search engines still described only the word processor. | It now covers PDFs and scans. |
 | 6 | An unused function in `app.js`. | Removed. |
 
-### Left for later
+### Done right after
 
-- ~~A Content Security Policy, as a second line of defense behind the
-  sanitizer.~~ Done: only the app's own scripts run, and the only outside
-  site allowed is the font CDN. A test checks that injected scripts are
-  blocked.
-- Moving to a newer PDF.js. 3.11 is still sound with script evaluation turned
-  off, which it is, but it no longer receives fixes.
-- ~~Automated tests in the repository.~~ Done: `npm test`, run by GitHub on
-  every push.
+- **A Content Security Policy**, as a second line of defense behind the
+  sanitizer: only the app's own scripts run, and the only outside site
+  allowed is the font CDN. A test checks that injected scripts are blocked.
+- **PDF.js 6.4.299**, up from 3.11, which no longer received fixes. It is the
+  build that runs in more browsers.
+- **Automated tests**: `npm test`, run by GitHub on every push.
 
 ## The original Notepad Online
 

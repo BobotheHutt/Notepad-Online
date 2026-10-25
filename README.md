@@ -132,8 +132,10 @@ Noteshack is not affiliated with or endorsed by them.
 
 It is a static site with no build step and no dependencies.
 
-- **Locally:** open `index.html` in a browser. Offline install needs it
-  served over http(s), for example `python3 -m http.server`.
+- **Locally:** serve the folder over http, for example
+  `python3 -m http.server`, and open <http://localhost:8000>. (Opened
+  straight from disk, the word processor works but PDFs do not: browsers
+  will not load PDF.js's modules from a `file://` page.)
 - **GitHub Pages:** Settings → Pages → Deploy from a branch → `main`, root folder.
   The live site is <https://noteshack.org>, set by the `CNAME` file and the
   domain's DNS records (four A records and four AAAA records for GitHub Pages,

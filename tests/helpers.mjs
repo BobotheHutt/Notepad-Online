@@ -6,7 +6,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const fixture = (name) => path.join(ROOT, 'tests', '.fixtures', name);
+// made fresh each run (global-setup.mjs), or kept in tests/files/ when they
+// need a tool the setup does not have (scan-fax.pdf: a fax-compressed scan of
+// the made-up form, by ImageMagick)
+export const fixture = (name) => path.join(ROOT, 'tests', fs.existsSync(path.join(ROOT, 'tests', 'files', name)) ? 'files' : '.fixtures', name);
 
 // Where cdn.jsdelivr.net is out of reach, NOTESHACK_FONTS can name a folder
 // holding the same @fontsource packages to serve from instead.

@@ -58,3 +58,19 @@ test('a read scan: edit a line, check a word, download', async ({ app: p }) => {
   await p.waitForSelector('.pdf-page canvas'); await p.waitForTimeout(800);
   expect((await newestDoc(p)).text).toContain('Shelbyville');
 });
+
+test('a fax-compressed scan (CCITT, as many office scanners save) is drawn and read', async ({ app: p }) => {
+  await openFile(p, 'scan-fax.pdf');
+  // drawn: the page is not blank
+  const dark = await p.evaluate(() => {
+    const c = document.querySelector('.pdf-page canvas');
+    const px = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    let n = 0; for (let i = 0; i < px.length; i += 4) if (px[i] < 100) n++;
+    return n;
+  });
+  expect(dark).toBeGreaterThan(1000);
+  await p.click('label[for="pdf-readall"]');
+  await waitToast(p, /whole document is read/);
+  const text = (await p.locator('.pdf-conv').allTextContents()).join(' ');
+  for (const w of ['APPLICATION', 'Example', 'Springfield']) expect(text).toContain(w);
+});

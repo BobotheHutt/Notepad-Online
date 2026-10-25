@@ -161,9 +161,10 @@ vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (r
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details
-AUDIT.md               what was wrong with the first version, and what changed
+AUDIT.md               audits: the first version, and the app as released
 LICENSE                the MIT License, for this project's own code
 ```
 
 After changing any file, bump `CACHE` in `sw.js` so installed copies pick up
-the update.
+the update. After changing a file under `vendor/`, bump `VENDOR` there too: those
+files are cached apart and are not fetched again otherwise.

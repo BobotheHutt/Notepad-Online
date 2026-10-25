@@ -1,10 +1,43 @@
-# Audit of the original Notepad Online
+# Audits
+
+## October 2026: Noteshack as released
+
+An audit of the app as it now stands: the word processor, the PDF editor and
+the scan reader.
+
+### Checked and fine
+
+- **Privacy.** The only outside site the app contacts is `cdn.jsdelivr.net`,
+  for fonts. Documents, PDFs and scans never leave the browser.
+- No errors in the console. No sideways scrolling at 320, 390 or 768 px.
+  Reloading with the network off works.
+
+### Fixed
+
+| # | Finding | Fixed by |
+|---|---|---|
+| 1 | **Undo copied the whole document for every step.** For a converted 700-page scan that came to about 12 MB a step, up to 150 steps. | A step now shares everything that did not change with the step before it, so it costs about as much as the edit. |
+| 2 | **Each app update deleted the cached libraries** (PDF.js, pdf-lib, Tesseract and its language data), so they were downloaded again after every update. | They have a cache of their own, which updates leave alone. |
+| 3 | **Every save of a PDF wrote the original file again**: several MB each time, for an edit of a few bytes. | The original file is stored once, apart from the edits, and written again only when pages from another PDF are added. |
+| 4 | Accessibility: the name and date of the open document were too faint on the highlighted row; the page had no main heading; the toolbars were outside any landmark; and the scrolling areas could not be reached with the keyboard. | All four fixed. |
+| 5 | The page description for search engines still described only the word processor. | It now covers PDFs and scans. |
+| 6 | An unused function in `app.js`. | Removed. |
+
+### Left for later
+
+- A Content Security Policy, as a second line of defense behind the
+  sanitizer.
+- Moving to a newer PDF.js. 3.11 is still sound with script evaluation turned
+  off, which it is, but it no longer receives fixes.
+- Automated tests in the repository.
+
+## The original Notepad Online
 
 This is an audit of the first version (one `index.html`, `app.js` and
 `styles.css`, about 300 lines of script), and what the rebuild does about
 each finding. They are grouped by how much they could hurt you.
 
-## Could lose or corrupt your writing
+### Could lose or corrupt your writing
 
 | # | Finding | Fixed by |
 |---|---|---|
@@ -15,14 +48,14 @@ each finding. They are grouped by how much they could hurt you.
 | 5 | **No undo past the browser's own, no history.** | Version history: a restore point every 10 minutes while you write, on Ctrl+S, and before any big change. Preview any version and restore it, and undo the restore. |
 | 6 | **No backup.** The only copy was in one browser profile. | **Back up all documents** saves one file, and **Restore from backup** loads it on any computer. |
 
-## Security
+### Security
 
 | # | Finding | Fixed by |
 |---|---|---|
 | 7 | Pasted HTML went in unfiltered and was saved, then reloaded with `innerHTML`. Content like `<img onerror=…>` copied from a web page ran as script every time the page opened. | Everything entering the document (paste, opened files, saved copies, the old draft) passes through an allow-list sanitizer. Scripts, event handlers, `javascript:` links and unknown tags are removed. |
 | 8 | Inline `onclick=` handlers throughout the HTML, calling global functions. | All behavior is attached from the script files, and the app's code no longer leaks into the page's global scope. |
 
-## Broken or misleading features
+### Broken or misleading features
 
 | # | Finding |
 |---|---|
@@ -39,7 +72,7 @@ each finding. They are grouped by how much they could hurt you.
 | 19 | The editor was a fixed 550 px tall box inside the page, with nothing for small screens. It now fills the window and has a proper phone layout. |
 | 20 | Browser `confirm()`/`prompt()`/`alert()` dialogs. These are replaced with in-app dialogs. |
 
-## Missing for a word processor
+### Missing for a word processor
 
 These are now included: headings and paragraph styles; bulleted, numbered and
 check lists; alignment and indent; links; superscript and subscript; inline
@@ -49,7 +82,7 @@ lists them); **open and save Word `.docx`**; PDF through print; Markdown;
 plain text; word-count details and reading time; selection word count; focus
 mode; zoom; works offline and installs as an app.
 
-## What it still cannot do
+### What it still cannot do
 
 Being honest about the limits of a browser-only editor:
 

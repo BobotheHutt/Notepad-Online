@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Noteshack</title>
-  <meta name="description" content="A fast, private word processor that runs in your browser. Works offline, saves as you type, opens and saves Word files.">
+  <meta name="description" content="A free, private word processor and PDF editor that runs in your browser. Edit PDFs and scans, fill forms, open and save Word files. Works offline; nothing is uploaded.">
   <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#16181c" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -22,7 +22,7 @@
   <!-- ===================== Documents panel ===================== -->
   <aside class="sidebar" id="sidebar" aria-label="Documents">
     <div class="sb-head">
-      <span class="brand"><img src="icon.svg" alt="" width="22" height="22"> Noteshack</span>
+      <h1 class="brand"><img src="icon.svg" alt="" width="22" height="22"> Noteshack</h1>
       <button class="btn btn-primary btn-sm" data-action="new" title="New document (Ctrl+Alt+N)"><span data-icon="plus"></span>New</button>
     </div>
     <div class="sb-search">
@@ -201,6 +201,8 @@
       </div>
     </header>
 
+    <!-- the toolbars, as one landmark (display: contents, so layout is unchanged) -->
+    <div class="bars" role="region" aria-label="Toolbars">
     <!-- ===================== Formatting toolbar ===================== -->
     <div class="toolbar" id="toolbar" role="toolbar" aria-label="Formatting" data-doc-only>
       <button class="tb" data-action="cmd" data-arg="undo" data-icon="undo" title="Undo (Ctrl+Z)" aria-label="Undo"></button>
@@ -266,6 +268,7 @@
       <button class="tb" data-pdf="zoom-in" data-icon="zoomIn" title="Zoom in" aria-label="Zoom in"></button>
       <button class="btn btn-primary btn-sm pdf-download" data-action="export" data-arg="pdf" title="Download the PDF with your changes"><span data-icon="download"></span>Download</button>
     </div>
+    </div>
 
     <!-- ===================== PDF pages ===================== -->
     <main class="stage pdf-stage" id="pdf-stage" data-pdf-only data-tool="select">
@@ -276,7 +279,7 @@
           <button class="btn btn-sm" data-action="pdf-add"><span data-icon="filePlus"></span>Add PDF…</button>
         </div>
       </aside>
-      <div class="pdf-scroller" id="pdf-scroller">
+      <div class="pdf-scroller" id="pdf-scroller" tabindex="0" role="region" aria-label="PDF pages">
         <div class="pdf-pages" id="pdf-pages"></div>
       </div>
       <!-- Style of the selected item or the active tool; floats so the page never jumps -->
@@ -285,7 +288,7 @@
 
     <!-- ===================== Writing area ===================== -->
     <main class="stage" data-doc-only>
-      <div class="scroller" id="workspace">
+      <div class="scroller" id="workspace" tabindex="0" role="region" aria-label="Document page">
         <div class="page" id="page">
           <div id="editor" class="editor" contenteditable="true" spellcheck="true" role="textbox" aria-multiline="true" aria-label="Document" data-placeholder="Start writing…"></div>
         </div>

@@ -81,6 +81,7 @@
     redo: [],
     boldStroke: 0.16,
     bgAt: new Map(),      // page uid → when the background reader last changed it
+    nodeBefore: new WeakMap(), // a box being edited → the undo snapshot from before the edit
     observer: null,
     thumbObserver: null,
     style: Object.assign({ family: 'sans', size: 12, color: '#111111', bold: false, italic: false, ink: '#d93025', inkWidth: 2, box: '#d93025', boxWidth: 2, hl: '#fde047', white: '#ffffff' },
@@ -157,14 +158,34 @@
 
   /* ============================================================ state */
 
-  // A snapshot carries the time it was taken (t), so work done in the
+  // An undo snapshot: the pages and form fields as text, and each item as
+  // text plus its word boxes. A converted page's word boxes are most of a
+  // document's size and never change once made (a change gives the item a
+  // new array), so snapshots share them rather than copying them; and an
+  // item unchanged since the last snapshot reuses its text from then. A
+  // snapshot of a 700-page converted document costs a few hundred KB, not
+  // the whole document again.
+  // It also carries the time it was taken (t), so work done in the
   // background after it (pages read and made editable) is kept when the
   // snapshot is restored by undo or redo.
+  const lastItemText = new Map(); // item id → its text in the last snapshot
   function snap() {
     const r = S.rec;
-    return JSON.stringify({ t: Date.now(), pages: r.pages, items: r.items, fields: r.fields });
+    return {
+      t: Date.now(), pages: JSON.stringify(r.pages), fields: JSON.stringify(r.fields),
+      items: r.items.map((it) => {
+        const { words, ...rest } = it;
+        let s = JSON.stringify(rest);
+        const prev = lastItemText.get(it.id);
+        if (prev === s) s = prev; else lastItemText.set(it.id, s);
+        return { id: it.id, s, w: words || null };
+      })
+    };
   }
-  const sameState = (a, b) => a.slice(a.indexOf(',"pages"')) === b.slice(b.indexOf(',"pages"'));
+  const sameState = (a, b) => a.pages === b.pages && a.fields === b.fields && a.items.length === b.items.length &&
+    a.items.every((x, k) => x.s === b.items[k].s && x.w === b.items[k].w);
+  // the items of a snapshot, as objects again
+  const snapItems = (st) => st.items.map((x) => { const o = JSON.parse(x.s); if (x.w) o.words = x.w; return o; });
 
   function commit(before) {
     if (sameState(before, snap())) return;
@@ -181,9 +202,9 @@
     updateUndoButtons();
   }
 
-  async function restore(json) {
+  async function restore(snapshot) {
     const prevPages = JSON.stringify(S.rec.pages);
-    const st = JSON.parse(json);
+    const st = { t: snapshot.t, pages: JSON.parse(snapshot.pages), fields: JSON.parse(snapshot.fields), items: snapItems(snapshot) };
     // pages the background reader changed after this snapshot keep its work
     for (const [uidv, at] of S.bgAt) {
       if (st.t && at <= st.t) continue;
@@ -263,6 +284,7 @@
     rec.fields = rec.fields || {};
     rec.pages = rec.pages || [];
     S.undo = [];
+    lastItemText.clear();
     S.redo = [];
     S.sel = null;
     S.fit = true;
@@ -1388,7 +1410,7 @@
     try { node.contentEditable = 'plaintext-only'; } catch (e) { node.contentEditable = 'true'; }
     if (node.contentEditable !== 'plaintext-only') node.contentEditable = 'true';
     node.spellcheck = true;
-    node.dataset.before = isNew ? '' : snap();
+    if (!isNew) S.nodeBefore.set(node, snap());
     node.dataset.isNew = isNew ? '1' : '';
     node.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') { e.preventDefault(); node.blur(); }
@@ -1417,11 +1439,10 @@
     const info = it && S.info.get(it.page);
     const node = info && info.layer.querySelector('.pdf-textbox[data-id="' + id + '"]');
     if (!it || !node) return;
-    const before = node.dataset.isNew ? null : node.dataset.before;
+    const before = node.dataset.isNew ? null : S.nodeBefore.get(node) || snap();
     let text = node.innerText.replace(/\r/g, '').replace(/\n$/, '');
     if (it.anchored || it.conv) text = text.replace(/\s+/g, ' ').trim();
     if (it.conv && it.para) {
-      const before = node.dataset.before;
       if (reflowPara(it.para, text)) commit(before);
       renderOverlay(info);
       renderStyleBar();
@@ -1437,15 +1458,15 @@
     }
     if (before === null) {
       // a brand-new box: the snapshot before it existed is the undo point
-      const prev = JSON.parse(snap());
-      prev.items = prev.items.filter((i) => i.id !== id);
+      const prev = snap();
+      prev.items = prev.items.filter((x) => x.id !== id);
       if (!text.trim()) {
         S.rec.items = S.rec.items.filter((i) => i.id !== id);
         S.sel = null;
       } else {
         it.text = text;
         measure1(it, node);
-        commit(JSON.stringify(prev));
+        commit(prev);
       }
     } else {
       if (!text.trim() && !it.cover && !it.anchored && !it.conv) {
@@ -1535,7 +1556,7 @@
     renderOverlay(info);
     startEditing(it.id);
     const node = info.layer.querySelector('.pdf-textbox[data-id="' + it.id + '"]');
-    if (node) { node.dataset.before = before; node.dataset.fresh = '1'; }
+    if (node) { S.nodeBefore.set(node, before); node.dataset.fresh = '1'; }
     matchFont(info, t, it, words);
   }
 
@@ -3183,7 +3204,9 @@
         x += wd + ((w.x1 - w.x0) * 0.6) / total;
         return b;
       });
-      it.words.splice(it.words.indexOf(w), 1, ...boxes);
+      // a new array: undo snapshots share the old one
+      const k = it.words.indexOf(w);
+      it.words = it.words.slice(0, k).concat(boxes, it.words.slice(k + 1));
       if (at >= 0) neu.splice(at, 1, ...parts);
       it.text = neu.join(' ');
     }
@@ -4069,7 +4092,16 @@
               const near = (w) => ws.reduce((a, c) => (Math.abs(c - w) < Math.abs(a - w) ? c : a), ws[0]);
               if (prop === 'bold') i.font = Object.assign({}, i.font, { weight: near(v ? 700 : 400) });
               else i.font = Object.assign({}, i.font, { style: v ? 'italic' : 'normal' });
-              for (const w of i.words || []) if (w.v) { w.v = Object.assign({}, w.v, prop === 'bold' ? { weight: i.font.weight } : { style: i.font.style }); if (w.v.weight === i.font.weight && w.v.style === i.font.style) delete w.v; }
+              // new word objects in a new array: undo snapshots share the old ones
+              if (i.words && i.words.some((w) => w.v)) {
+                i.words = i.words.map((w) => {
+                  if (!w.v) return w;
+                  const v = Object.assign({}, w.v, prop === 'bold' ? { weight: i.font.weight } : { style: i.font.style });
+                  const n = Object.assign({}, w, { v });
+                  if (v.weight === i.font.weight && v.style === i.font.style) delete n.v;
+                  return n;
+                });
+              }
               const info = S.info.get(i.page);
               Promise.all(itemFonts(i).map((f) => NpFonts.load(f).catch(() => null))).then(() => { if (info && !S.editing) renderOverlay(info); });
             }
@@ -4159,8 +4191,7 @@
   function node0Before(it) {
     const info = S.info.get(it.page);
     const node = info && info.layer.querySelector('[data-id="' + it.id + '"]');
-    if (node && node.dataset.before) return node.dataset.before;
-    return null;
+    return (node && S.nodeBefore.get(node)) || null;
   }
 
   /* ============================================================ keyboard */

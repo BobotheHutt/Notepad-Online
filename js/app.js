@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-28';
+  const APP_VERSION = '2026.10.25-29';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -241,6 +241,8 @@
       renderDocList();
       setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
       if (mobile) setSidebar(false, true);
+      // the original file is stored apart from the record, and read when opened
+      if (!doc.sources) doc.sources = (await NpStore.getSources(doc)) || [];
       await NpPdf.open(doc);
       return;
     }
@@ -715,13 +717,6 @@
     r.selectNodeContents(node);
     r.setStart(s.getRangeAt(0).endContainer, s.getRangeAt(0).endOffset);
     return !r.toString().length && !r.cloneContents().querySelector('img');
-  }
-
-  function lastLineText(pre) {
-    // text after the last <br>: empty means the caret sits on a blank line
-    const html = pre.innerHTML.replace(/<br>\s*$/i, '');
-    const after = html.split(/<br>/i).pop();
-    return after.replace(/<[^>]+>/g, '').trim() ? 'x' : '';
   }
 
   /* ----- clicks inside the document ----- */
@@ -2230,7 +2225,10 @@
 
   async function backupAll() {
     await saveNow();
-    const all = (await NpStore.allDocs()).map((d) => (d.type === 'pdf' ? Object.assign({}, d, { sources: d.sources.map(bufToB64) }) : d));
+    const all = [];
+    for (const d of await NpStore.allDocs()) {
+      all.push(d.type === 'pdf' ? Object.assign({}, d, { sources: ((await NpStore.getSources(d)) || []).map(bufToB64) }) : d);
+    }
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);
     download(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'noteshack-backup-' + stamp + '.json');

@@ -2,7 +2,10 @@
    IndexedDB holds documents and their version history. It has room for
    images (localStorage tops out around 5 MB). If IndexedDB is unavailable
    (some private windows), everything lives in memory for the session and
-   NpStore.persistent is false so the app can warn. */
+   NpStore.persistent is false so the app can warn.
+   A PDF's original file (its sources) is kept in a store of its own and
+   written only when it changes, not on every save of the edits; records
+   come back without it, and getSources fetches it when the PDF is opened. */
 (function () {
   'use strict';
 
@@ -31,9 +34,10 @@
     if (!('indexedDB' in window)) return false;
     try {
       db = await new Promise((resolve, reject) => {
-        const r = indexedDB.open(DB_NAME, 1);
+        const r = indexedDB.open(DB_NAME, 2);
         r.onupgradeneeded = () => {
           const d = r.result;
+          if (!d.objectStoreNames.contains('sources')) d.createObjectStore('sources');
           if (!d.objectStoreNames.contains('docs')) d.createObjectStore('docs', { keyPath: 'id' });
           if (!d.objectStoreNames.contains('versions')) {
             const v = d.createObjectStore('versions', { keyPath: 'vid', autoIncrement: true });
@@ -52,6 +56,10 @@
     }
   }
 
+  // the sources last written for each document, and how many there were
+  // (pages inserted from another PDF add to the same list)
+  const written = new Map();
+
   async function allDocs() {
     if (!db) return Array.from(mem.docs.values()).map((d) => Object.assign({}, d));
     return req(db.transaction('docs').objectStore('docs').getAll());
@@ -62,11 +70,30 @@
     return (await req(db.transaction('docs').objectStore('docs').get(id))) || null;
   }
 
+  // A PDF's original file. A record saved before sources had a store of
+  // their own still carries them, and moves them there on its next save.
+  async function getSources(doc) {
+    if (doc.sources) return doc.sources;
+    if (!db) return null;
+    const src = (await req(db.transaction('sources').objectStore('sources').get(doc.id))) || null;
+    if (src) written.set(doc.id, { src, n: src.length });
+    return src;
+  }
+
   async function putDoc(doc) {
     if (!db) { mem.docs.set(doc.id, Object.assign({}, doc)); return; }
-    const tx = db.transaction('docs', 'readwrite');
-    tx.objectStore('docs').put(doc);
+    const src = doc.sources;
+    const w = written.get(doc.id);
+    const fresh = src && !(w && w.src === src && w.n === src.length);
+    const tx = db.transaction(fresh ? ['docs', 'sources'] : 'docs', 'readwrite');
+    if (src) {
+      const rec = Object.assign({}, doc);
+      delete rec.sources;
+      tx.objectStore('docs').put(rec);
+      if (fresh) tx.objectStore('sources').put(src, doc.id);
+    } else tx.objectStore('docs').put(doc);
     await done(tx);
+    if (fresh) written.set(doc.id, { src, n: src.length });
   }
 
   async function deleteDoc(id) {
@@ -75,8 +102,10 @@
       mem.versions = mem.versions.filter((v) => v.docId !== id);
       return;
     }
-    const tx = db.transaction(['docs', 'versions'], 'readwrite');
+    const tx = db.transaction(['docs', 'versions', 'sources'], 'readwrite');
     tx.objectStore('docs').delete(id);
+    tx.objectStore('sources').delete(id);
+    written.delete(id);
     const idx = tx.objectStore('versions').index('docId');
     idx.openKeyCursor(IDBKeyRange.only(id)).onsuccess = (e) => {
       const c = e.target.result;
@@ -122,7 +151,7 @@
   window.NpStore = {
     open,
     get persistent() { return !!db; },
-    allDocs, getDoc, putDoc, deleteDoc,
+    allDocs, getDoc, getSources, putDoc, deleteDoc,
     addVersion, listVersions, getVersion
   };
 })();

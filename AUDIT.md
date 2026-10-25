@@ -29,7 +29,8 @@ the scan reader.
   sanitizer.
 - Moving to a newer PDF.js. 3.11 is still sound with script evaluation turned
   off, which it is, but it no longer receives fixes.
-- Automated tests in the repository.
+- ~~Automated tests in the repository.~~ Done: `npm test`, run by GitHub on
+  every push.
 
 ## The original Notepad Online
 

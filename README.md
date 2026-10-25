@@ -143,6 +143,23 @@ Each web address keeps its own saved documents, so after moving the site to
 a new address, open the old one, use **File → Back up all documents**, and
 restore that file at the new address.
 
+## Tests
+
+The app needs nothing installed; the tests need Node.js.
+
+```
+npm install
+npx playwright install chromium
+npm test
+```
+
+They serve the repository as the site and use it in Chromium: writing,
+exporting, editing and downloading PDFs, filling forms, reading scans,
+storage, printing, accessibility (axe), privacy (which sites are contacted),
+small screens and offline use. The PDFs they open are made fresh each run
+from invented text, so no real document is in the repository. GitHub runs
+them on every push (`.github/workflows/test.yml`).
+
 ## Files
 
 ```
@@ -163,6 +180,7 @@ sw.js                  offline support
 manifest.webmanifest   app install details
 AUDIT.md               audits: the first version, and the app as released
 LICENSE                the MIT License, for this project's own code
+tests/                 the tests (see Tests above)
 ```
 
 After changing any file, bump `CACHE` in `sw.js` so installed copies pick up

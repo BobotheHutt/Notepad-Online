@@ -1,0 +1,12 @@
+{
+  "name": "noteshack",
+  "private": true,
+  "description": "Tests for Noteshack. The app itself has no build step and no dependencies.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "axe-core": "4.14.0"
+  }
+}

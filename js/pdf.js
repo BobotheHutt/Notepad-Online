@@ -1295,7 +1295,7 @@
         S.rec.items = S.rec.items.filter((i) => i !== it);
         S.undo.pop();
         renderOverlay(info);
-        api.toast('No handwriting was found in that box. Printed text the app read, lines and printed marks are never erased this way.', 5000);
+        api.toast('Nothing to erase was found in that box. Printed text the app read, lines and printed marks are never erased this way; to clear everything in an area, use White-out.', 6000);
         return;
       }
       select(it.id);
@@ -2585,44 +2585,6 @@
     try { await buildScanFonts(out, c, K); } catch (e) { /* the matched fonts are used as they are */ }
     groupParagraphs(out);
     S.rec.items.push(...out);
-    if (out.length) {
-      // Offered for erasing only when it is surely writing: read with little
-      // confidence. Print in a font not on the list (a logo) reads surely,
-      // so it stays and is never offered, and neither is a stray mark read
-      // as a character or two.
-      const handLike = (t) => {
-        const cs = t.words.map((w) => w.c).filter((c) => c != null);
-        const conf = cs.length ? cs.reduce((a, b) => a + b, 0) / cs.length : 100;
-        const chars = t.words.map((w) => w.t.replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
-        return chars >= 3 && conf < 82;
-      };
-      // Writing carries on along its line: what was left as scanned beside a
-      // piece of it, on the same line and close by, is part of it (a name
-      // OCR read the first half of surely is still one name).
-      const others = left.filter((t) => !handLike(t));
-      const hgt = (t) => median(t.words.map((w) => w.y1 - w.y0));
-      const beside = (a, b) => {
-        const sz = Math.max(a.size, b.size);
-        if (Math.abs(a.base - b.base) > sz * 0.6 || hgt(a) > hgt(b) * 2 || hgt(b) > hgt(a) * 2) return false;
-        const ax0 = a.words[0].x0;
-        const ax1 = a.words[a.words.length - 1].x1;
-        const bx0 = b.words[0].x0;
-        const bx1 = b.words[b.words.length - 1].x1;
-        return Math.max(bx0 - ax1, ax0 - bx1) < sz * 3;
-      };
-      for (const gp of left.filter(handLike).map((t) => [t])) {
-        let grew = true;
-        while (grew) {
-          grew = false;
-          for (const t of others.slice()) if (gp.some((h) => beside(h, t))) { gp.push(t); others.splice(others.indexOf(t), 1); grew = true; }
-        }
-        gp.sort((a, b) => a.words[0].x0 - b.words[0].x0);
-        S.rec.items.push({
-          id: uid(), type: 'hand', page: info.entry.uid, origKey: gp[0].key, keys: gp.map((t) => t.key),
-          words: gp.flatMap((t) => t.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 }))), erased: false
-        });
-      }
-    }
     return out.length;
   }
 
@@ -2671,18 +2633,6 @@
     commit(before);
     for (const uidv of new Set(list.map((i) => i.page))) renderOverlay(S.info.get(uidv));
     renderStyleBar();
-  }
-
-  // To clear a filled-in form: take all handwriting off the page in view.
-  async function clearHandwriting() {
-    const info = currentPage();
-    const list = info ? S.rec.items.filter((i) => i.page === info.entry.uid && i.type === 'hand' && !i.erased) : [];
-    if (!list.length) {
-      api.toast(isConv(info && info.entry.uid) ? 'No handwriting was found on this page.' : 'Click “Read text” first; handwriting is found while the page is read.', 5000);
-      return;
-    }
-    await setHand(list, true);
-    api.toast('Erased ' + list.length + ' piece' + (list.length === 1 ? '' : 's') + ' of handwriting. Undo puts them back; so does selecting one and choosing Put back.', 6000);
   }
 
   // Proofreading: the page as scanned, with the text drawn from it hidden.
@@ -3815,21 +3765,21 @@
       bar.hidden = false;
       return;
     }
-    if (it && it.conv && it.words.length) {
-      // OCR read some writing surely enough to retype it: put it back as written
-      const hw = el('button', { type: 'button', class: 'btn btn-sm', title: 'This line is handwriting: show it as it was written, not retyped (it can then be erased to clear the form)' }, 'Handwriting');
-      hw.addEventListener('mousedown', (e) => e.preventDefault());
-      hw.addEventListener('click', () => {
+    if (it && it.conv && it.words.length && !it.para) {
+      // a line that should not have been retyped (writing, a logo): back to the scan's own pixels
+      const sc = el('button', { type: 'button', class: 'btn btn-sm', title: 'Show this line exactly as it is on the scan, not retyped' }, 'Show as scanned');
+      sc.addEventListener('mousedown', (e) => e.preventDefault());
+      sc.addEventListener('click', () => {
         const before = snap();
         S.rec.items = S.rec.items.filter((i) => i !== it);
-        const h = { id: uid(), type: 'hand', page: it.page, origKey: it.origKey, keys: it.origKey ? [it.origKey] : [], words: it.words.map((w) => ({ x0: w.x0, x1: w.x1, y0: w.y0, y1: w.y1 })), erased: false };
-        S.rec.items.push(h);
-        S.sel = h.id;
+        S.sel = null;
         commit(before);
-        renderOverlay(S.info.get(it.page));
+        const info = S.info.get(it.page);
+        info.text = null;
+        renderOverlay(info);
         renderStyleBar();
       });
-      parts.push(hw);
+      parts.push(sc);
     }
     if (it) {
       if (it.cover) {
@@ -4885,7 +4835,6 @@
     ocr: (scope) => runOcr(scope),
     convert: convertCurrent,
     unconvert: unconvertCurrent,
-    clearHandwriting,
     toggleScanFonts,
     showOriginal: () => toggleOriginal(),
     copyText: copyPageText,

@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-20';
+  const APP_VERSION = '2026.10.25-21';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1230,7 +1230,6 @@
     'pdf-convert': () => NpPdf.convert(),
     'pdf-unconvert': () => NpPdf.unconvert(),
     'pdf-original': () => NpPdf.showOriginal(),
-    'pdf-clear-hand': () => NpPdf.clearHandwriting(),
     'pdf-scan-fonts': () => NpPdf.toggleScanFonts(),
     'pdf-copy-text': () => NpPdf.copyText()
   };

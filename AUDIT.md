@@ -25,8 +25,10 @@ the scan reader.
 
 ### Left for later
 
-- A Content Security Policy, as a second line of defense behind the
-  sanitizer.
+- ~~A Content Security Policy, as a second line of defense behind the
+  sanitizer.~~ Done: only the app's own scripts run, and the only outside
+  site allowed is the font CDN. A test checks that injected scripts are
+  blocked.
 - Moving to a newer PDF.js. 3.11 is still sound with script evaluation turned
   off, which it is, but it no longer receives fixes.
 - ~~Automated tests in the repository.~~ Done: `npm test`, run by GitHub on

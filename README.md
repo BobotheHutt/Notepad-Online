@@ -164,6 +164,7 @@ them on every push (`.github/workflows/test.yml`).
 
 ```
 index.html             page structure, menus and toolbar
+js/boot.js             sets the theme before the page first draws
 styles.css             all styling: light and dark themes, phone layout, print
 js/app.js              the editor and the rest of the app
 js/store.js            document storage (IndexedDB)

@@ -29,6 +29,9 @@ export const test = base.extend({
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
     page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    // anything the security policy blocks
+    await page.exposeFunction('__cspViolation', (v) => errors.push('blocked by the security policy: ' + v));
+    await page.addInitScript(() => document.addEventListener('securitypolicyviolation', (e) => window.__cspViolation(e.violatedDirective + ' ' + e.blockedURI)));
     await use(errors);
     expect(errors, 'errors in the page').toEqual([]);
   },

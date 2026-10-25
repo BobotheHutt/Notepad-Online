@@ -2,6 +2,10 @@
 <html lang="en" data-theme="system">
 <head>
   <meta charset="UTF-8">
+  <!-- Security policy: only the app's own scripts run, and the only outside
+       site is the font CDN. Styles stay open: documents carry inline styles.
+       (A meta tag, as GitHub Pages cannot send headers.) -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob: https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdn.jsdelivr.net; worker-src 'self' blob:; frame-src 'self' blob:; media-src 'self' data: blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Noteshack</title>
   <meta name="description" content="A free, private word processor and PDF editor that runs in your browser. Edit PDFs and scans, fill forms, open and save Word files. Works offline; nothing is uploaded.">
@@ -10,10 +14,7 @@
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
-  <script>
-    // Apply the saved theme before first paint so there is no flash.
-    try { var s = JSON.parse(localStorage.getItem('np.settings') || '{}'); if (s.theme) document.documentElement.dataset.theme = s.theme; } catch (e) {}
-  </script>
+  <script src="js/boot.js"></script>
   <style id="page-rule"></style>
 </head>
 <body class="view-page">

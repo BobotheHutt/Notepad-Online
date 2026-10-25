@@ -50,10 +50,15 @@ test('saving, reloading, exporting and a second document', async ({ app: p }) =>
   for (const kind of ['docx', 'md', 'html', 'txt']) {
     const [dl] = await Promise.all([p.waitForEvent('download'), p.evaluate((k) => document.querySelector(`[data-action="export"][data-arg="${k}"]`).click(), kind)]);
     expect(dl.suggestedFilename()).toBe('Kept.' + kind);
+    if (kind === 'docx') await dl.saveAs(test.info().outputPath('Kept copy.docx'));
   }
+  // the Word file opens again as a document of its own
+  await p.setInputFiles('#file-open', test.info().outputPath('Kept copy.docx'));
+  await expect(p.locator('#editor h1')).toHaveText('Kept');
+  await expect(p.locator('#editor')).toContainText('This survives a reload.');
   await p.click('.sb-head [data-action="new"]');
   await p.keyboard.type('Second doc');
-  await expect(p.locator('.doc-item')).toHaveCount(2, { timeout: 10000 });
+  await expect(p.locator('.doc-item')).toHaveCount(3, { timeout: 10000 });
 });
 
 test('pasted HTML is cleaned', async ({ app: p }) => {

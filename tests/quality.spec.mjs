@@ -5,7 +5,8 @@ import { test, expect, openFile, waitToast } from './helpers.mjs';
 
 const AXE = fs.readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
 async function axe(p) {
-  await p.addScriptTag({ content: AXE });
+  // evaluated, not added as a script tag: the security policy (rightly) blocks inline scripts
+  await p.evaluate(AXE);
   return p.evaluate(async () => (await window.axe.run(document, { resultTypes: ['violations'] })).violations
     .map((v) => v.id + ': ' + v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' ; ')));
 }
@@ -58,4 +59,21 @@ test('works offline once loaded', async ({ app: p, context }) => {
   await p.reload(); await p.waitForSelector('body.ready', { timeout: 15000 });
   await expect(p.locator('#editor')).toContainText('Written before going offline');
   await context.setOffline(false);
+});
+
+test('the security policy blocks injected scripts and outside sites', async ({ page: p }) => {
+  const blocked = [];
+  await p.exposeFunction('__seen', (v) => blocked.push(v));
+  await p.addInitScript(() => document.addEventListener('securitypolicyviolation', (e) => window.__seen(e.violatedDirective)));
+  await p.goto('/'); await p.waitForSelector('body.ready');
+  const ran = await p.evaluate(async () => {
+    const s = document.createElement('script'); s.textContent = 'window.__ran = 1'; document.body.append(s);
+    const d = document.createElement('div'); d.innerHTML = '<img src="x" onerror="window.__ran2 = 1">'; document.body.append(d);
+    let fetched = true;
+    try { await fetch('https://example.com/'); } catch (e) { fetched = false; }
+    await new Promise((r) => setTimeout(r, 300));
+    return [window.__ran, window.__ran2, fetched];
+  });
+  expect(ran).toEqual([undefined, undefined, false]);
+  expect(blocked).toEqual(expect.arrayContaining(['script-src-elem', 'script-src-attr', 'connect-src']));
 });

@@ -19,7 +19,7 @@ and lets you edit and sign PDFs.
 **Documents**
 - Unlimited documents, with a searchable sidebar
 - Autosave plus **version history**: browse earlier versions and restore any of them
-- **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window
+- **Open** `.docx`, `.md`, `.html` and `.txt`, by menu or by dropping files on the window (PDFs and images open in the PDF editor, below)
 - **Download** as Word (`.docx`), PDF, Markdown, web page or plain text
 - Page setup per document: font, size, line spacing, Letter or A4, margins
 - Back up every document to one file and restore it anywhere
@@ -30,6 +30,7 @@ and lets you edit and sign PDFs.
 - **The original font**: the app works out which font the words were set in (from the font's name in the PDF, or, on a scan, by comparing the letters with 31 common document fonts) and downloads it, so new words match. Paid fonts like Arial, Times New Roman and Calibri are matched with free fonts drawn to the same shapes and widths (Arimo, Tinos, Carlito).
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
+- **Images too**: open a JPG, PNG, WebP or TIFF (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Download** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) File → Download → PDF with your changes is there too.
 - **Scanned pages become editable text (OCR)**: with Edit text, click a scanned page and the app reads that page (a few seconds; the line you clicked then opens for editing), takes the scanned words off it, and draws every line again as real text in the matched font, size, weight (bold and italic words included) and color, where it was on the page. Edits are then ordinary text edits that match the lines around them, and the downloaded PDF can be searched and copied from. This works the same way on pages whose letters were saved as drawn shapes.
   - A page scanned sideways or upside down is turned the right way up first, and one that went through the scanner crooked is straightened, so lines read cleanly and the new text sits level.
   - Headings set in small caps stay in small caps.
@@ -114,6 +115,7 @@ with their license texts:
 - [Tesseract.js](https://tesseract.projectnaptha.com), Tesseract OCR and its
   English data, Apache License 2.0
 - [opentype.js](https://opentype.js.org), MIT License
+- [UTIF.js](https://github.com/photopea/UTIF.js) (Photopea), MIT License, with [pako](https://github.com/nodeca/pako), MIT License
 
 Fonts come from [Fontsource](https://fontsource.org) when needed and are
 not stored in this repository; each is under its own free license (SIL Open
@@ -177,7 +179,8 @@ js/zip.js              the zip reading and writing .docx needs
 js/pdf.js              the PDF editor
 js/fonts.js            identifies and downloads the font a PDF was set in
 js/scanfont.js         builds a font from a scan's own letters
-vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans) and opentype.js (builds fonts from scans), with their licenses; loaded only when needed
+js/images.js           opens images in the PDF editor and saves them back as images
+vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans), opentype.js (builds fonts from scans) and UTIF.js (reads TIFFs), with their licenses; loaded only when needed
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

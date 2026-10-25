@@ -67,6 +67,7 @@
               <div class="menu-label" data-doc-only>Download as</div>
               <div class="menu-label" data-pdf-only>Download</div>
               <button data-doc-only role="menuitem" data-action="export" data-arg="docx"><span>Word document (.docx)</span></button>
+              <button data-pdf-only role="menuitem" data-action="export" data-arg="own" id="export-own" hidden><span>Image with your changes</span></button>
               <button role="menuitem" data-action="export" data-arg="pdf"><span data-doc-only>PDF (.pdf)</span><span data-pdf-only>PDF with your changes</span></button>
               <button data-doc-only role="menuitem" data-action="export" data-arg="md"><span>Markdown (.md)</span></button>
               <button data-doc-only role="menuitem" data-action="export" data-arg="html"><span>Web page (.html)</span></button>
@@ -276,7 +277,7 @@
       <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>
       <span class="pdf-zoom" id="pdf-zoom">100%</span>
       <button class="tb" data-pdf="zoom-in" data-icon="zoomIn" title="Zoom in" aria-label="Zoom in"></button>
-      <button class="btn btn-primary btn-sm pdf-download" data-action="export" data-arg="pdf" title="Download the PDF with your changes"><span data-icon="download"></span>Download</button>
+      <button class="btn btn-primary btn-sm pdf-download" data-action="export" data-arg="own" title="Download the PDF with your changes"><span data-icon="download"></span>Download</button>
     </div>
     </div>
 
@@ -349,7 +350,7 @@
 <button class="focus-exit" id="focus-exit" data-action="focus" title="Leave focus mode (Esc)">Exit focus</button>
 <div class="popover" id="popover" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-<input type="file" id="file-open" accept=".pdf,.docx,.md,.markdown,.txt,.text,.html,.htm,application/pdf,text/plain,text/markdown,text/html" hidden multiple>
+<input type="file" id="file-open" accept=".pdf,.docx,.md,.markdown,.txt,.text,.html,.htm,.jpg,.jpeg,.png,.webp,.tif,.tiff,application/pdf,text/plain,text/markdown,text/html,image/jpeg,image/png,image/webp,image/tiff" hidden multiple>
 <input type="file" id="file-image" accept="image/*" hidden>
 <input type="file" id="pdf-image-input" accept="image/*" hidden>
 <input type="file" id="pdf-add-input" accept=".pdf,application/pdf" hidden multiple>
@@ -363,6 +364,7 @@
 <script src="js/store.js"></script>
 <script src="js/fonts.js"></script>
 <script src="js/pdf.js"></script>
+<script src="js/images.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

@@ -108,6 +108,16 @@ export default async function globalSetup() {
       { t: 'Signature and date of signing' }
     ];
     files['scan.pdf'] = await scanPdf([scanPage(form1, { skew: 1.2 })]);
+    // the same scan as image files, and as a phone photo stored sideways with
+    // an EXIF note to turn it (orientation 8: turn a quarter left to show)
+    const blob = async (c, type) => new Uint8Array(await (await new Promise((r) => c.toBlob(r, type, 0.9))).arrayBuffer());
+    const straight = scanPage(form1);
+    files['scan.jpg'] = b64(await blob(straight, 'image/jpeg'));
+    files['scan.png'] = b64(await blob(straight, 'image/png'));
+    files['scan.webp'] = b64(await blob(straight, 'image/webp'));
+    const side = await blob(scanPage(form1, { sideways: true }), 'image/jpeg');
+    const app1 = [0xff, 0xe1, 0, 34, 0x45, 0x78, 0x69, 0x66, 0, 0, 0x4d, 0x4d, 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, 8, 0, 0, 0, 0, 0, 0];
+    files['photo-sideways.jpg'] = b64(new Uint8Array([...side.slice(0, 2), ...app1, ...side.slice(2)]));
     files['multi-scan.pdf'] = await scanPdf([scanPage(form1, { skew: 1.2 }), scanPage(form2, { sideways: true })]);
     return files;
   });

@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.25-32';
+  const APP_VERSION = '2026.10.25-33';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -241,6 +241,11 @@
       renderDocList();
       setStatus(NpStore.persistent ? 'Saved' : 'Not saved — temporary', NpStore.persistent ? 'ok' : 'warn');
       if (mobile) setSidebar(false, true);
+      // an image downloads as the same kind of image; the PDF stays a choice
+      const kind = doc.origin ? NpImages.label(doc.origin) : 'PDF';
+      $('#export-own').hidden = !doc.origin;
+      $('#export-own span').textContent = kind + ' with your changes';
+      $('.pdf-download').title = 'Download the ' + kind + ' with your changes';
       // the original file is stored apart from the record, and read when opened
       if (!doc.sources) doc.sources = (await NpStore.getSources(doc)) || [];
       await NpPdf.open(doc);
@@ -290,13 +295,18 @@
     return doc;
   }
 
-  async function createPdfDoc(file, name) {
-    const buf = await file.arrayBuffer();
-    setStatus('Opening PDF…', 'pending');
+  // A PDF, or an image opened as one (see images.js): origin then says what
+  // kind of image it was, to download it as again.
+  async function createPdfDoc(file, name, image) {
+    setStatus(image ? 'Opening image…' : 'Opening PDF…', 'pending');
+    let buf = null;
+    let origin;
+    if (image) ({ bytes: buf, origin } = await NpImages.toPdf(file));
+    else buf = await file.arrayBuffer();
     const info = await NpPdf.newRecord(buf);
     if (current && dirty) await saveNow();
     await dropBlankCurrent();
-    const doc = Object.assign(newDocRecord('', name), { type: 'pdf', titleAuto: false, sources: [buf], pages: info.pages, pageCount: info.pages.length, items: [], fields: {}, text: info.text });
+    const doc = Object.assign(newDocRecord('', name), { type: 'pdf', titleAuto: false, sources: [buf], pages: info.pages, pageCount: info.pages.length, items: [], fields: {}, text: info.text, origin });
     return addRecord(doc);
   }
 
@@ -806,8 +816,10 @@
     dragDepth = 0;
     $('#drop-hint').hidden = true;
     const files = Array.from(e.dataTransfer.files);
-    const images = files.filter((f) => f.type.startsWith('image/'));
-    const others = files.filter((f) => !f.type.startsWith('image/'));
+    // into a text document an image goes in as a picture; otherwise it
+    // opens as a document of its own, to read and edit
+    const images = pdfMode() ? [] : files.filter((f) => f.type.startsWith('image/'));
+    const others = files.filter((f) => !images.includes(f));
     if (images.length) {
       if (document.caretRangeFromPoint) {
         const r = document.caretRangeFromPoint(e.clientX, e.clientY);
@@ -1133,15 +1145,21 @@
 
   const pdfMode = () => !!current && current.type === 'pdf';
 
-  async function downloadPdf() {
+  // as a PDF, or ('own') as what was opened: an image comes back as one
+  async function downloadPdf(kind) {
     NpPdf.finishEditing();
     await saveNow();
-    setStatus('Preparing PDF…', 'pending');
+    const origin = kind === 'own' && current.origin;
+    setStatus(origin ? 'Preparing the ' + NpImages.label(origin) + '…' : 'Preparing PDF…', 'pending');
     try {
       const blob = await NpPdf.export(current);
-      download(blob, safeFileName(displayTitle(current), 'pdf'));
+      if (origin) {
+        const out = await NpImages.fromPdf(blob, origin, displayTitle(current), safeFileName);
+        download(out.blob, out.filename);
+        if (out.fellBack) toast('This browser cannot save WebP images, so it was saved as PNG.', 6000);
+      } else download(blob, safeFileName(displayTitle(current), 'pdf'));
     } catch (e) {
-      toast('Could not make the PDF: ' + (e.message || e), 7000);
+      toast((origin ? 'Could not make the image: ' : 'Could not make the PDF: ') + (e.message || e), 7000);
     }
     setStatus('Saved', 'ok');
   }
@@ -1244,7 +1262,7 @@
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
-    'export': (arg) => (pdfMode() ? downloadPdf() : exportAs(arg)),
+    'export': (arg) => (pdfMode() ? downloadPdf(arg) : exportAs(arg)),
     print: () => (pdfMode() ? printPdf() : printDoc()),
     'page-setup': pageSetupDialog,
     backup: backupAll,
@@ -2182,6 +2200,7 @@
         const ext = (file.name.split('.').pop() || '').toLowerCase();
         let html;
         if (ext === 'pdf' || file.type === 'application/pdf') { last = (await createPdfDoc(file, name)) || last; continue; }
+        if (NpImages.formatOf(file)) { last = (await createPdfDoc(file, name, true)) || last; continue; }
         if (ext === 'docx') html = NpSanitize.html(await NpDocx.import(await file.arrayBuffer()));
         else if (ext === 'doc') { toast('Old .doc files cannot be opened. In Word, use Save As → .docx first.', 6000); continue; }
         else if (ext === 'md' || ext === 'markdown' || file.type === 'text/markdown') html = NpSanitize.html(NpMarkdown.toHtml(await file.text()));
@@ -2260,7 +2279,10 @@
       sources: raw.sources.map(b64ToBuf),
       pages: raw.pages.filter((p) => p && typeof p.uid === 'string').map((p) => ({ uid: p.uid, src: num(p.src), index: num(p.index), rotate: num(p.rotate) % 360, w: num(p.w), h: num(p.h),
         ...(num(p.skew) && Math.abs(num(p.skew)) <= 10 ? { skew: num(p.skew), paper: /^#[0-9a-f]{6}$/i.test(p.paper) ? p.paper : '#ffffff' } : {}) })),
-      pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {}
+      pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {},
+      // an image opened as a PDF: what to download it as
+      origin: raw.origin && ['jpeg', 'png', 'webp', 'tiff'].includes(raw.origin.format) && Array.isArray(raw.origin.dpi)
+        ? { format: raw.origin.format, dpi: raw.origin.dpi.map(num).filter((d) => d > 0) } : undefined
     });
   }
 

@@ -14,8 +14,11 @@ Third-party libraries, unmodified:
               (tessdata_fast), Apache-2.0, read first; the accurate model
               re-reads the lines it is unsure of.
 - opentype/   opentype.js 1.3.4, MIT. Builds fonts from a scan's own letters.
+- utif/       UTIF.js (utif2 4.1.0, Photopea), MIT, with pako 2.1.0's inflate
+              (MIT) that it uses for compressed TIFFs. Reads TIFF images.
 
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
-"Read text" is used, opentype.js when a scan's letters are made into a font.
+"Read text" is used, opentype.js when a scan's letters are made into a font,
+UTIF.js when a TIFF is opened.
 
 Each folder holds its library's license text, which must stay with it.

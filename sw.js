@@ -5,11 +5,11 @@
    a cache of their own, first: an app update leaves them alone, so they are
    not downloaded again each time. Their file names carry no version, so
    VENDOR is bumped whenever a file under vendor/ changes. */
-const CACHE = 'noteshack-v32';
-const VENDOR = 'noteshack-vendor-2';
+const CACHE = 'noteshack-v33';
+const VENDOR = 'noteshack-vendor-3';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
-  './js/boot.js', './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/scanfont.js', './js/app.js'
+  './js/boot.js', './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/pdf.js', './js/images.js', './js/scanfont.js', './js/app.js'
 ];
 
 self.addEventListener('install', (e) => {

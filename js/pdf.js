@@ -5220,13 +5220,14 @@
     // a PDF whose first page has no text of its own is almost always a scan
     const first = S.info.get(rec.pages[0] && rec.pages[0].uid);
     if (!first || !first.page || (rec.ocr && Object.keys(rec.ocr).length)) return;
-    if ((await isScanPage(first)) && S.rec === rec) api.toast('This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
+    if ((await isScanPage(first)) && S.rec === rec) api.toast(rec.origin ? 'With Edit text, click the image to read it and make its words editable, or turn on Read whole document.' : 'This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
   }
 
   window.NpPdf = {
     // the closest fonts from the last look-based match, for diagnosing a poor match
     get lastMatch() { return S.lastMatch; },
     init, open, close, newRecord,
+    libs: loadLibs,
     export: exportPdf,
     // a finished PDF (as a Blob) opened for viewing: { count, page(i), destroy() }
     view: async (blob) => {

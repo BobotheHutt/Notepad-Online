@@ -1900,6 +1900,19 @@
     });
   }
 
+  // A reader that stops answering (Safari has been seen to lose one) must not
+  // leave a page "reading" for ever: an answer is waited for this long, then
+  // the readers are replaced and the page is tried once more.
+  // (the tests shorten it, rather than wait two minutes)
+  const readLimit = () => window.NP_READ_LIMIT || 120000;
+  function inTime(promise, onLate) {
+    let timer;
+    return Promise.race([
+      promise.finally(() => clearTimeout(timer)),
+      new Promise((resolve, reject) => { timer = setTimeout(() => { onLate(); reject(new Error('The text reader stopped answering')); }, readLimit()); })
+    ]);
+  }
+
   // { recognize(image) } that hands each page to whichever reader is free
   async function getOcr(lang = readLang()) {
     await tesseract();
@@ -1907,9 +1920,11 @@
       const pool = (async () => {
         api.status('Getting text recognition ready…', 'pending');
         const sch = Tesseract.createScheduler();
-        const ws = await Promise.all(Array.from({ length: poolSize() }, () => newReader('fast', lang)));
+        // starting up counts too: a reader can hang while it loads
+        const ws = await inTime(Promise.all(Array.from({ length: poolSize() }, () => newReader('fast', lang))), () => {});
         ws.forEach((w) => sch.addWorker(w));
-        return { recognize: (img) => sch.addJob('recognize', img), size: ws.length, lang };
+        const drop = () => { if (OCR.pools.get(lang) === pool) OCR.pools.delete(lang); sch.terminate().catch(() => {}); };
+        return { recognize: (img) => inTime(sch.addJob('recognize', img), drop), size: ws.length, lang };
       })();
       OCR.pools.set(lang, pool);
       pool.catch(() => OCR.pools.delete(lang));
@@ -1921,10 +1936,11 @@
     await tesseract();
     if (!OCR.bests.has(lang)) {
       const best = (async () => {
-        const w = await newReader('best', lang);
+        const w = await inTime(newReader('best', lang), () => {});
         // it is only ever given one line
         await w.setParameters({ tessedit_pageseg_mode: '7' });
-        return w;
+        const drop = () => { if (OCR.bests.get(lang) === best) OCR.bests.delete(lang); w.terminate().catch(() => {}); };
+        return { recognize: (img) => inTime(w.recognize(img), drop) };
       })();
       OCR.bests.set(lang, best);
       best.catch(() => OCR.bests.delete(lang));
@@ -2365,7 +2381,7 @@
   // someone clicks goes to the front. Each page, once read, is made editable
   // there and then. Pages read in the background add no undo steps, and an
   // undo of anything else keeps them (see restore).
-  const RQ = { want: [], running: new Map(), waiting: new Map(), gen: 0, total: 0, whole: false, stats: { turned: 0, straightened: 0, made: 0, found: 0 } };
+  const RQ = { want: [], running: new Map(), waiting: new Map(), retried: new Set(), gen: 0, total: 0, whole: false, stats: { turned: 0, straightened: 0, made: 0, found: 0, failed: 0 } };
 
   // whether a page is a scan still to read
   async function needsReading(info) {
@@ -2391,7 +2407,10 @@
     const gen = RQ.gen;
     const start = (uidv) => {
       const p = (async () => {
-        try { await readOne(rec, gen, uidv); } catch (e) { /* the page stays as it was */ } finally {
+        try { await readOne(rec, gen, uidv); } catch (e) {
+          // tried once more with fresh readers; then the page stays as scanned
+          if (!RQ.retried.has(uidv)) { RQ.retried.add(uidv); RQ.want.unshift(uidv); } else RQ.stats.failed = (RQ.stats.failed || 0) + 1;
+        } finally {
           (RQ.waiting.get(uidv) || []).forEach((res) => res());
           RQ.waiting.delete(uidv);
           if (gen === RQ.gen) RQ.running.delete(uidv);
@@ -2508,16 +2527,21 @@
     const whole = RQ.whole;
     RQ.total = 0;
     RQ.whole = false;
-    RQ.stats = { turned: 0, straightened: 0, made: 0, found: 0 };
+    RQ.stats = { turned: 0, straightened: 0, made: 0, found: 0, failed: 0 };
+    RQ.retried.clear();
     bgChanged(true);
     api.saveNow();
-    if (!whole) return;
+    if (!whole) {
+      if (st.failed) api.toast('This page could not be read. Click it again with Edit text to try once more.', 7000);
+      return;
+    }
     const parts = [];
     if (st.turned) parts.push('Turned ' + st.turned + ' page' + (st.turned === 1 ? '' : 's') + ' the right way up.');
     if (st.straightened) parts.push('Straightened ' + st.straightened + ' crooked page' + (st.straightened === 1 ? '' : 's') + '.');
     if (st.made) parts.push('The whole document is read: ' + st.made + ' page' + (st.made === 1 ? ' is' : 's are') + ' now editable and searchable.');
     else if (st.found) parts.push('The whole document is read and searchable.');
-    else parts.push('No readable text was found on the scanned pages.');
+    else if (!st.failed) parts.push('No readable text was found on the scanned pages.');
+    if (st.failed) parts.push(st.failed + ' page' + (st.failed === 1 ? '' : 's') + ' could not be read and ' + (st.failed === 1 ? 'is' : 'are') + ' left as scanned; click ' + (st.failed === 1 ? 'it' : 'one') + ' with Edit text to try again.');
     api.toast(parts.join(' '), 8000);
   }
 

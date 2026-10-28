@@ -74,3 +74,21 @@ test('a fax-compressed scan (CCITT, as many office scanners save) is drawn and r
   const text = (await p.locator('.pdf-conv').allTextContents()).join(' ');
   for (const w of ['APPLICATION', 'Example', 'Springfield']) expect(text).toContain(w);
 });
+
+// A reader that never answers (Safari has been seen to lose one) must not
+// leave the page "reading" for ever: the app gives up on it, starts fresh
+// readers and reads the page again.
+test.describe('when a reader hangs', () => {
+  test.use({ serviceWorkers: 'block' }); // so the test sees, and can hold back, the reader's downloads
+  test('the page is read again with fresh readers', async ({ app: p, context, browserName }) => {
+    test.skip(browserName !== 'chromium', 'holding back a worker\'s downloads is reliable in Chrome\'s test tools');
+    await p.evaluate(() => { window.NP_READ_LIMIT = 4000; });
+    const until = Date.now() + 5000;
+    // the reading models asked for in the first seconds never arrive
+    await context.route(/vendor\/tesseract\/fast\//, (route) => { if (Date.now() > until) route.continue(); });
+    await openFile(p, 'scan.pdf');
+    await p.click('label[for="pdf-readall"]');
+    await waitToast(p, /whole document is read/, 120000);
+    expect((await p.locator('.pdf-conv').allTextContents()).join(' ')).toContain('Springfield');
+  });
+});

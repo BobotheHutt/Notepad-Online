@@ -81,8 +81,19 @@ export async function openFile(page, name) {
   await page.waitForTimeout(800);
 }
 
-export const waitToast = (page, re, timeout = 240000) =>
-  page.waitForFunction((src) => new RegExp(src).test(document.getElementById('toast').textContent), re.source, { timeout });
+export async function waitToast(page, re, timeout = 240000) {
+  try {
+    await page.waitForFunction((src) => new RegExp(src).test(document.getElementById('toast').textContent), re.source, { timeout });
+  } catch (e) {
+    // say where it stood, so a stall can be told from a slow machine
+    const st = await page.evaluate(() => ({
+      toast: document.getElementById('toast').textContent, status: document.getElementById('save-status').textContent,
+      reading: document.querySelectorAll('.pdf-reading').length,
+      editable: [...document.querySelectorAll('.pdf-page')].map((pg) => pg.querySelectorAll('.pdf-conv').length)
+    })).catch(() => null);
+    throw new Error('No message matching ' + re + ' in ' + timeout / 1000 + ' s. The page then: ' + JSON.stringify(st));
+  }
+}
 
 // a document straight from IndexedDB: the one with this title, or the most
 // recently saved (which can be another one saved a moment later)

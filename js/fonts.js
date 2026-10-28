@@ -5,11 +5,14 @@
    NpFonts.identify(samples)    a scan only has pictures of letters: draw the
                                 same words in common document fonts and keep
                                 the closest match
-   NpFonts.load(ref)            fetch the font file (Fontsource, through
-                                jsDelivr) and make it usable on screen; the same
-                                bytes are embedded in the downloaded PDF
+   NpFonts.load(ref)            fetch the font file and make it usable on
+                                screen; the same bytes are embedded in the
+                                saved PDF
 
-   Only font files are requested; nothing about the document leaves the page. */
+   The common fonts below are served from Noteshack itself (vendor/fonts:
+   Fontsource's Latin files, with their licenses). Only a font a PDF names
+   that is not among them is fetched from Fontsource, through jsDelivr; just
+   the font file is requested, and nothing about the document leaves the page. */
 (function () {
   'use strict';
 
@@ -74,19 +77,21 @@
   }
 
   function fileUrl(ref, subset, ext) {
+    if (CATALOG[ref.id] && (subset || 'latin') === 'latin') return 'vendor/fonts/' + ref.id + '/' + ref.id + '-latin-' + ref.weight + '-' + (ref.style || 'normal') + '.' + (ext || 'woff2');
     return CDN + ref.id + '/files/' + ref.id + '-' + (subset || 'latin') + '-' + ref.weight + '-' + (ref.style || 'normal') + '.' + (ext || 'woff2');
   }
 
   async function cachedFetch(url) {
     if (!files.has(url)) {
       files.set(url, (async () => {
+        // our own files are kept offline by the service worker already
         let cache = null;
-        try { cache = typeof caches !== 'undefined' ? await caches.open('np-fonts-v1') : null; } catch (e) { cache = null; }
+        try { cache = typeof caches !== 'undefined' && /^https?:/.test(url) ? await caches.open('np-fonts-v1') : null; } catch (e) { cache = null; }
         if (cache) {
           const hit = await cache.match(url);
           if (hit) return hit.arrayBuffer();
         }
-        const res = await fetch(url, { mode: 'cors' });
+        const res = await fetch(url, /^https?:/.test(url) ? { mode: 'cors' } : {});
         if (!res.ok) throw new Error('font not found');
         if (cache) { try { await cache.put(url, res.clone()); } catch (e) { /* storage full: fine */ } }
         return res.arrayBuffer();

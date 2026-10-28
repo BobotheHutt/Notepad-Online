@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-37';
+  const APP_VERSION = '2026.10.28-38';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -570,7 +570,15 @@
 
   /* ----- input ----- */
 
+  // Typing through an input method (Chinese, Japanese, Korean…) composes a
+  // character before it is entered; nothing may change the text meanwhile,
+  // or the half-made character is lost. The edit is taken up when it ends.
+  // (Safari also sends one more key, numbered 229, as composing finishes.)
+  const composing = (e) => e.isComposing || e.keyCode === 229;
+  editor.addEventListener('compositionend', () => { afterEdit(); positionImageFrame(); });
+
   editor.addEventListener('input', (e) => {
+    if (e.isComposing) return;
     editor.classList.toggle('is-empty', isEmptyDoc());
     if (settings.smartMd && e.inputType === 'insertText' && e.data === ' ') markdownShortcut();
     if (pendingFontSize) applyPendingFontSize();
@@ -1334,6 +1342,7 @@
   /* ----- keyboard shortcuts ----- */
 
   document.addEventListener('keydown', (e) => {
+    if (composing(e)) return;
     if (pdfMode() && !openMenu && NpPdf.onKey(e)) return;
     if (e.key === 'Escape') {
       if (document.querySelector('dialog[open]')) return;
@@ -1696,7 +1705,7 @@
       el('p', { class: 'muted' }, 'Tip: File → Back up all documents saves everything to one file you can restore on another computer.'),
       el('details', { class: 'about-more' }, el('summary', {}, 'Privacy'),
         el('p', {}, 'There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.'),
-        el('p', {}, 'Two things are fetched from the internet: when a PDF needs a font, the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document; and pictures in your documents that link to a web address are loaded from that address.')),
+        el('p', {}, 'Two things are fetched from other websites: when a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document; and pictures in your documents that link to a web address are loaded from that address.')),
       el('details', { class: 'about-more' }, el('summary', {}, 'Disclaimer'),
         el('p', {}, 'Noteshack is provided as is, without warranty of any kind. Text recognition and font matching can be wrong: check a PDF before you send, submit or sign it. Keep backups of anything important.'),
         el('p', {}, 'You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.')),

@@ -1465,7 +1465,9 @@
     if (!isNew) S.nodeBefore.set(node, snap());
     node.dataset.isNew = isNew ? '1' : '';
     node.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') { e.preventDefault(); node.blur(); }
+      // Escape while composing a character (Chinese, Japanese…) cancels the
+      // character, not the editing
+      if (e.key === 'Escape' && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); node.blur(); }
       e.stopPropagation();
     });
     node.addEventListener('paste', (e) => {

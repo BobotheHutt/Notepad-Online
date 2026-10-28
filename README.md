@@ -58,7 +58,7 @@ What PDF editing cannot do, so nothing surprises you:
 - A color scan you have erased part of is saved again as JPEG, so that page's file size can roughly double. Black-and-white scans stay small.
 - OCR can misread faint, tiny or handwritten text. Check what it read (the Original button) before relying on it.
 - Redrawing a scanned page needs its fonts. Offline, the page stays as scanned and Edit text changes single words instead; choose Pages → Make this page's text editable when you are back online.
-- Font matching needs an internet connection the first time a font is used (font files come from the free Fontsource library through jsDelivr; nothing from your document is sent). Offline, or for a font it cannot find, the closest standard font is used.
+- Font matching needs an internet connection the first time a font is used. The 31 common fonts come from Noteshack itself; a less common font a PDF names comes from the free Fontsource library through jsDelivr (nothing from your document is sent). Offline, or for a font it cannot find, the closest standard font is used.
 - A scan's font is matched to the closest of the common fonts the app knows. An unusual or custom typeface will be matched to something similar, not identical.
 - Password-protected PDFs cannot be changed.
 
@@ -85,10 +85,11 @@ documents list automatically the first time you open the new version.
 There is no account, no analytics, no ads and no cookies, and documents are
 never uploaded. Two things are fetched from the internet:
 
-- **Font files.** When a PDF needs a font, it is downloaded from the free
-  [Fontsource](https://fontsource.org) library through jsDelivr
-  (`cdn.jsdelivr.net`). Like any website, jsDelivr sees the visitor's IP
-  address; nothing from the document is sent.
+- **Uncommon font files.** The 31 common fonts the app matches are served
+  by Noteshack itself. When a PDF names a font outside them, that font file
+  is downloaded from the free [Fontsource](https://fontsource.org) library
+  through jsDelivr (`cdn.jsdelivr.net`). Like any website, jsDelivr sees the
+  visitor's IP address; nothing from the document is sent.
 - **Linked pictures.** A picture in a document that links to a web address
   (for example, pasted from a web page) is loaded from that address.
 

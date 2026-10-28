@@ -17,6 +17,10 @@ Third-party libraries, unmodified:
 - utif/       UTIF.js (utif2 4.1.0, Photopea), MIT, with pako 2.1.0's inflate
               (MIT) that it uses for compressed TIFFs. Reads TIFF images.
 
+- fonts/      31 common document fonts from Fontsource (5.3.x), Latin set,
+              WOFF and WOFF2; each folder holds its license (SIL Open Font
+              License 1.1, or Apache 2.0 for Roboto Slab).
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used, opentype.js when a scan's letters are made into a font,
 UTIF.js when a TIFF is opened.

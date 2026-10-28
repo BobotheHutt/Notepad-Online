@@ -88,3 +88,20 @@ test('pasted HTML is cleaned', async ({ app: p, browserName }) => {
   await p.waitForTimeout(300);
   expect(await p.evaluate(() => window.pwned)).toBeUndefined();
 });
+
+// Chinese, Japanese and Korean are typed through an input method, which
+// composes each character before entering it. (Chrome's test tools can
+// simulate one; Firefox's and WebKit's cannot.)
+test('typing through an input method (Japanese)', async ({ app: p, browserName }) => {
+  test.skip(browserName !== 'chromium', 'only Chrome can simulate an input method');
+  const cdp = await p.context().newCDPSession(p);
+  await p.click('#editor');
+  await p.keyboard.type('Hello ');
+  for (const t of ['か', 'かん', 'かんじ']) await cdp.send('Input.imeSetComposition', { text: t, selectionStart: t.length, selectionEnd: t.length });
+  await cdp.send('Input.insertText', { text: '漢字' });
+  await p.keyboard.type(' done');
+  await expect(p.locator('#editor')).toHaveText('Hello 漢字 done');
+  await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack', { timeout: 10000 });
+  await p.reload(); await p.waitForSelector('body.ready');
+  await expect(p.locator('#editor')).toHaveText('Hello 漢字 done');
+});

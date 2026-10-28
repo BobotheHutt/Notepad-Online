@@ -23,7 +23,7 @@ test('no accessibility problems: editor, menus, a read scan', async ({ app: p })
   expect(await axe(p)).toEqual([]);
 });
 
-test('the only outside site contacted is the font CDN', async ({ app: p, context }) => {
+test('writing, and reading and saving a scan, contact no other site (fonts included)', async ({ app: p, context }) => {
   const hosts = new Set();
   context.on('request', (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol)) hosts.add(u.host); });
   await p.reload(); await p.waitForSelector('body.ready');
@@ -33,7 +33,7 @@ test('the only outside site contacted is the font CDN', async ({ app: p, context
   await waitToast(p, /whole document is read/);
   await Promise.all([p.waitForEvent('download'), p.click('.pdf-download')]);
   const base = new URL(test.info().project.use.baseURL).host;
-  expect([...hosts].filter((h) => h !== base && h !== 'cdn.jsdelivr.net')).toEqual([]);
+  expect([...hosts].filter((h) => h !== base)).toEqual([]);
 });
 
 test('no sideways scrolling on small screens', async ({ app: p }) => {

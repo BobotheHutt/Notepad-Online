@@ -13,7 +13,9 @@ const LETTER = '<h1>The meeting</h1>' +
 
 async function openHtml(p, name, html) {
   await p.setInputFiles('#file-open', { name, mimeType: 'text/html', buffer: Buffer.from('<!doctype html><title>x</title>' + html) });
-  await expect(p.locator('#editor h1, #editor p').first()).toBeVisible();
+  // the file's own words, not the blank document there before it
+  await expect(p.locator('#doc-title')).toHaveValue(name.replace(/\.html$/, ''));
+  await expect(p.locator('#editor')).toContainText(html.replace(/<[^>]+>/g, '').slice(0, 12));
 }
 
 async function translate(p, into, { engine, keep } = {}) {

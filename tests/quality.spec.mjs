@@ -59,6 +59,8 @@ test('works offline once loaded', async ({ app: p, context, browserName }) => {
   await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack', { timeout: 10000 });
   await p.evaluate(() => navigator.serviceWorker.ready);
   await p.reload(); await p.waitForSelector('body.ready');
+  // the offline cache answers for the page only once it is in control of it
+  await p.waitForFunction(() => !!navigator.serviceWorker.controller);
   await context.setOffline(true);
   await p.reload(); await p.waitForSelector('body.ready', { timeout: 15000 });
   await expect(p.locator('#editor')).toContainText('Written before going offline');

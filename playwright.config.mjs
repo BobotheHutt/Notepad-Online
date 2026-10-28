@@ -1,7 +1,7 @@
 // Tests for Noteshack: `npm test`. They serve the repository as the site
 // (tests/server.mjs) and drive it in Chromium. The PDFs they open are made
 // fresh by tests/global-setup.mjs, so nothing personal is ever committed.
-import { defineConfig } from '@playwright/test';
+import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 8790;
 
@@ -21,6 +21,13 @@ export default defineConfig({
     acceptDownloads: true,
     trace: 'retain-on-failure'
   },
+  // Chrome (and Edge), Firefox, and Safari's engine. One alone:
+  // npx playwright test --project firefox
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1400, height: 1000 } } },
+    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1400, height: 1000 } } },
+    { name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1400, height: 1000 } } }
+  ],
   webServer: {
     command: `node tests/server.mjs ${PORT}`,
     url: `http://localhost:${PORT}/`,

@@ -844,6 +844,7 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
 .welcome-hide { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; }
 .welcome-hide input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .muted { color: var(--ink-3); }
+.open-detail { margin: 0; font-size: 12px; word-break: break-word; }
 
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .row2 { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }

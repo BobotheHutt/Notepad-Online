@@ -313,8 +313,14 @@
       for (let i = 0; i < S.docs[0].numPages; i++) rec.pages.push({ uid: uid(), src: 0, index: i, rotate: 0 });
       rec.pageCount = rec.pages.length;
     }
-    await loadForms();
-    await build();
+    try {
+      await loadForms();
+      await build();
+    } catch (e) {
+      // loaded, but its pages could not be laid out: say so, not a blank page
+      if (S.rec === rec) stage.replaceChildren(el('div', { class: 'pdf-msg' }, 'This PDF opened, but its pages could not be shown: ' + ((e && e.message) || e) + '. Saving a fresh copy of it from another program often helps.'));
+      return;
+    }
     setTool(S.tool === 'image' || S.tool === 'sign' ? 'select' : S.tool);
     updateUndoButtons();
     toggleOriginal(false);

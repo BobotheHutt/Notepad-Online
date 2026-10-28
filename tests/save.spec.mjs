@@ -9,6 +9,8 @@ const isZip = (b) => b && b[0] === 0x50 && b[1] === 0x4b;
 
 test.describe('where the browser can write to files', () => {
   test.use({ filePickers: true });
+  // the File System Access API: Chrome and Edge only
+  test.skip(({ browserName }) => browserName !== 'chromium', 'Chrome and Edge only');
 
   test('an opened JPG: Save writes back to it, still after a reload', async ({ app: p }) => {
     const original = fs.readFileSync(fixture('scan.jpg'));
@@ -115,6 +117,8 @@ test('elsewhere, Save puts a copy in Downloads, as the same kind of file', async
 
 test.describe('exporting, where the browser can write to files', () => {
   test.use({ filePickers: true });
+  // the File System Access API: Chrome and Edge only
+  test.skip(({ browserName }) => browserName !== 'chromium', 'Chrome and Edge only');
   test('Export makes a separate file; Save keeps going to the original', async ({ app: p }) => {
     await putFile(p, 'letter.pdf', fs.readFileSync(fixture('letter.pdf')));
     await p.evaluate(() => { window.__openName = 'letter.pdf'; });

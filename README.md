@@ -157,11 +157,11 @@ The app needs nothing installed; the tests need Node.js.
 
 ```
 npm install
-npx playwright install chromium
+npx playwright install chromium firefox webkit
 npm test
 ```
 
-They serve the repository as the site and use it in Chromium: writing,
+They serve the repository as the site and use it in Chrome, Firefox and Safari's engine (WebKit): writing,
 exporting, editing and downloading PDFs, filling forms, reading scans,
 storage, printing, accessibility (axe), privacy (which sites are contacted),
 small screens and offline use. The PDFs they open are made fresh each run

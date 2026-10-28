@@ -2465,10 +2465,26 @@
         doc = await createDoc(html || '<p><br></p>', name, { keepFocus: true });
         if (doc) { await linkFile(doc, handles[i], kind); last = doc; updateSaveUi(); }
       } catch (e) {
-        toast('Could not open “' + file.name + '”: ' + (e.message || e), 6000);
+        await openFailed(file.name, e);
       }
     }
     if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); updateSaveUi(); }
+  }
+
+  // A file that would not open: said plainly, with the technical detail
+  // underneath for anyone who reports it.
+  async function openFailed(name, e) {
+    setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
+    const locked = e && e.name === 'PasswordException';
+    const why = locked
+      ? 'It is password-protected. Remove the password in another app (open it there, and save or print it without one), then open it here again.'
+      : 'The file may be damaged or incomplete, or saved in a way Noteshack cannot read. If it opens in another program, saving a fresh copy from there often helps.';
+    await dialog({
+      title: 'Couldn’t open “' + name + '”',
+      body: el('div', { class: 'stack' }, el('p', { class: 'dlg-text' }, why),
+        locked ? null : el('p', { class: 'muted open-detail' }, 'Details: ' + ((e && e.message) || e))),
+      actions: [{ label: 'OK', value: 'ok', primary: true }]
+    });
   }
 
   // Open with the system's own dialog where the browser has one, which also

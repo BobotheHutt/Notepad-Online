@@ -123,8 +123,38 @@
     return pdfWorker;
   }
 
+  // A document's pages are drawn one at a time. Safari's engine mixes up
+  // pictures when two pages of a document are drawn at once (page 1 came
+  // out with page 2's scan), and one at a time costs the others nothing
+  // noticeable: drawing shares one thread anyway. Every page comes through
+  // getPage, so every drawing waits its turn; cancel still works on one
+  // that has not started.
+  function oneAtATime(doc) {
+    let turn = Promise.resolve();
+    const getPage = doc.getPage.bind(doc);
+    doc.getPage = async (n) => {
+      const page = await getPage(n);
+      if (page.oneAtATime) return page;
+      const render = page.render.bind(page);
+      page.render = (opts) => {
+        let task = null;
+        let cancelled = false;
+        const promise = turn.then(() => {
+          if (cancelled) throw Object.assign(new Error('Rendering cancelled'), { name: 'RenderingCancelledException' });
+          task = render(opts);
+          return task.promise;
+        });
+        turn = promise.catch(() => {});
+        return { promise, cancel: () => { cancelled = true; if (task) task.cancel(); } };
+      };
+      page.oneAtATime = true;
+      return page;
+    };
+    return doc;
+  }
+
   async function loadPdfJs(buffer) {
-    return pdfjsLib.getDocument({
+    return oneAtATime(await pdfjsLib.getDocument({
       worker: sharedWorker(),
       data: new Uint8Array(buffer.slice(0)), // PDF.js takes ownership of what it is given
       isEvalSupported: false,                 // no code generated from a PDF's contents
@@ -135,7 +165,7 @@
       standardFontDataUrl: vendorUrl('pdfjs/standard_fonts/'),
       wasmUrl: vendorUrl('pdfjs/wasm/'),      // image decoders (fax-compressed scans, JPEG 2000, JBIG2) and color profiles
       iccUrl: vendorUrl('pdfjs/iccs/')
-    }).promise;
+    }).promise);
   }
   // a document from loadPdfJs, finished with (its worker and memory freed)
   const closePdf = (doc) => { try { doc.loadingTask.destroy(); } catch (e) { /* ignore */ } };

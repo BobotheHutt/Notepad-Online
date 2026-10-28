@@ -50,7 +50,11 @@ test('no sideways scrolling on small screens', async ({ app: p }) => {
   }
 });
 
-test('works offline once loaded', async ({ app: p, context }) => {
+test('works offline once loaded', async ({ app: p, context, browserName }) => {
+  // In the test tool's WebKit, "offline" blocks requests before the app's
+  // offline cache can answer them: checked on GitHub, the cache was installed
+  // and in control, yet every request failed. Chrome and Firefox serve them.
+  test.skip(browserName === 'webkit', 'the test tool cannot emulate offline with a service worker in WebKit');
   await p.click('#editor'); await p.keyboard.type('Written before going offline');
   await expect(p.locator('#save-status')).toHaveText('Saved in Noteshack', { timeout: 10000 });
   await p.evaluate(() => navigator.serviceWorker.ready);

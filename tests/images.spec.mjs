@@ -91,3 +91,34 @@ test('a two-page TIFF (fax-compressed, from a scanner program) reads, and saves 
   await expect(p.locator('.pdf-page')).toHaveCount(2);
   expect(fs.statSync(out.file).size).toBeLessThan(1500000);
 });
+
+// Safari's engine mixed up the pictures of two pages drawn at the same time
+// (page 1 came out with page 2's scan, and was read as page 2's words), so
+// the app draws a document's pages one at a time. This draws several at once.
+test('pages drawn at the same time keep their own pictures', async ({ app: p }) => {
+  await openFile(p, 'letter.pdf'); // loads PDF.js
+  const runs = await p.evaluate(async () => {
+    const r = await fetch('tests/files/scan-2pages.tif');
+    const { bytes } = await NpImages.toPdf(new File([await r.blob()], 'x.tif', { type: 'image/tiff' }));
+    const view = await NpPdf.view(new Blob([bytes], { type: 'application/pdf' }));
+    const [p1, p2] = [await view.page(0), await view.page(1)];
+    const ink = async (page, scale) => {
+      const vp = page.getViewport({ scale });
+      const c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+      await page.render({ canvasContext: g, viewport: vp }).promise;
+      const d = g.getImageData(0, 0, c.width, c.height).data; let n = 0;
+      for (let i = 0; i < d.length; i += 4) if (d[i] < 100) n++;
+      return n / (scale * scale);
+    };
+    const out = [];
+    for (let k = 0; k < 3; k++) out.push(await Promise.all([ink(p1, 1.5), ink(p2, 4), ink(p1, 4), ink(p2, 1.5)]));
+    view.destroy();
+    return out;
+  });
+  // page 1 holds about twice the ink of page 2, at any size, every time
+  for (const [a, b, c, d] of runs) {
+    expect(a / b).toBeGreaterThan(1.6);
+    expect(c / d).toBeGreaterThan(1.6);
+  }
+});

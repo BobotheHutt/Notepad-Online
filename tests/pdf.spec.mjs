@@ -7,7 +7,7 @@ async function reopen(p, dl, name) {
   await p.setInputFiles('#file-open', file);
   await p.waitForSelector('.pdf-page canvas');
   await p.waitForTimeout(800);
-  return newestDoc(p);
+  return newestDoc(p, name.replace(/\.pdf$/, ''));
 }
 
 test('a typed PDF: edit its text, and the download carries the change', async ({ app: p }) => {

@@ -115,8 +115,17 @@
     return libs;
   }
 
+  // one PDF.js worker for every document, kept for the visit: a document
+  // closed does not stop it, and the next one does not wait to start another
+  let pdfWorker = null;
+  function sharedWorker() {
+    if (!pdfWorker || pdfWorker.destroyed) pdfWorker = new pdfjsLib.PDFWorker({ name: 'noteshack' });
+    return pdfWorker;
+  }
+
   async function loadPdfJs(buffer) {
     return pdfjsLib.getDocument({
+      worker: sharedWorker(),
       data: new Uint8Array(buffer.slice(0)), // PDF.js takes ownership of what it is given
       isEvalSupported: false,                 // no code generated from a PDF's contents
       enableXfa: false,

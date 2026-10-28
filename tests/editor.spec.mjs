@@ -64,17 +64,27 @@ test('saving, reloading, exporting and a second document', async ({ app: p }) =>
   await expect(p.locator('.doc-item')).toHaveCount(3, { timeout: 10000 });
 });
 
-test('pasted HTML is cleaned', async ({ app: p }) => {
-  await p.click('#editor');
-  await p.evaluate(() => {
-    const dt = new DataTransfer();
-    dt.setData('text/html', '<p>Pasted <b>bold</b> <img src=x onerror="window.pwned=1"> <a href="javascript:window.pwned=3">bad</a> <span style="color:#ff0000">red</span></p><script>window.pwned=2</script>');
-    dt.setData('text/plain', 'Pasted bold bad red');
-    document.getElementById('editor').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-  });
-  await p.waitForTimeout(500);
-  const html = await p.locator('#editor').innerHTML();
-  expect(html).toContain('<b>bold</b>');
-  expect(html).not.toMatch(/onerror|javascript:|<script/i);
+const DIRTY = '<p>Pasted <b>bold</b> <img src=x onerror="window.pwned=1"> <a href="javascript:window.pwned=3">bad</a> <span style="color:#ff0000">red</span></p><script>window.pwned=2</script>';
+
+test('pasted HTML is cleaned', async ({ app: p, browserName }) => {
+  // the cleaner itself, in every browser (each parses HTML its own way)
+  const clean = await p.evaluate((h) => NpSanitize.html(h), DIRTY);
+  expect(clean).toContain('<b>bold</b>');
+  expect(clean).not.toMatch(/onerror|javascript:|<script/i);
+  // a paste, where a test can make one (Firefox and Safari ignore a made-up clipboard)
+  if (browserName === 'chromium') {
+    await p.click('#editor');
+    await p.evaluate((h) => {
+      const dt = new DataTransfer();
+      dt.setData('text/html', h);
+      dt.setData('text/plain', 'Pasted bold bad red');
+      document.getElementById('editor').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, DIRTY);
+    await p.waitForTimeout(500);
+    const html = await p.locator('#editor').innerHTML();
+    expect(html).toContain('<b>bold</b>');
+    expect(html).not.toMatch(/onerror|javascript:|<script/i);
+  }
+  await p.waitForTimeout(300);
   expect(await p.evaluate(() => window.pwned)).toBeUndefined();
 });

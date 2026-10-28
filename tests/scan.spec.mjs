@@ -56,7 +56,7 @@ test('a read scan: edit a line, check a word, download', async ({ app: p }) => {
   await dl.saveAs(file);
   await p.setInputFiles('#file-open', file);
   await p.waitForSelector('.pdf-page canvas'); await p.waitForTimeout(800);
-  expect((await newestDoc(p)).text).toContain('Shelbyville');
+  expect((await newestDoc(p, 'scan-out')).text).toContain('Shelbyville');
 });
 
 test('a fax-compressed scan (CCITT, as many office scanners save) is drawn and read', async ({ app: p }) => {

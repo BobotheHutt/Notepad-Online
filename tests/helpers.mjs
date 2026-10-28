@@ -84,14 +84,15 @@ export async function openFile(page, name) {
 export const waitToast = (page, re, timeout = 240000) =>
   page.waitForFunction((src) => new RegExp(src).test(document.getElementById('toast').textContent), re.source, { timeout });
 
-// the most recently saved document, straight from IndexedDB
-export const newestDoc = (page) => page.evaluate(async () => {
+// a document straight from IndexedDB: the one with this title, or the most
+// recently saved (which can be another one saved a moment later)
+export const newestDoc = (page, title) => page.evaluate(async (title) => {
   const db = await new Promise((r) => { const q = indexedDB.open('notepad-online'); q.onsuccess = () => r(q.result); });
   const all = await new Promise((r) => { const q = db.transaction('docs').objectStore('docs').getAll(); q.onsuccess = () => r(q.result); });
   db.close();
-  const d = all.sort((a, b) => b.updated - a.updated)[0];
+  const d = title ? all.find((x) => x.title === title) : all.sort((a, b) => b.updated - a.updated)[0];
   return d && { id: d.id, type: d.type, title: d.title, text: d.text, pages: d.pages && d.pages.length, items: d.items, hasSources: !!d.sources };
-});
+}, title);
 
 export const saveNow = async (page) => { await page.keyboard.press('Control+s'); await page.waitForTimeout(1200); };
 

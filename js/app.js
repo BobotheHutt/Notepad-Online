@@ -1371,6 +1371,8 @@
     if (k === 'e' && !e.shiftKey) return run(toggleInlineCode);
     if (k === '.' && !e.shiftKey) return run(() => exec('superscript'));
     if (k === ',' && !e.shiftKey) return run(() => exec('subscript'));
+    // done here, not left to the browser: Firefox may open its bookmarks on Ctrl+B
+    if (!e.shiftKey && !e.altKey && (k === 'b' || k === 'i' || k === 'u')) return run(() => exec({ b: 'bold', i: 'italic', u: 'underline' }[k]));
     if (e.shiftKey && code === 'KeyX') return run(() => exec('strikeThrough'));
     if (e.shiftKey && code === 'Digit7') return run(() => ACTIONS.cmd('insertOrderedList'));
     if (e.shiftKey && code === 'Digit8') return run(() => ACTIONS.cmd('insertUnorderedList'));

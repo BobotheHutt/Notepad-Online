@@ -24,6 +24,14 @@ Third-party libraries, unmodified:
 - franc/      franc-min 6.2.0 (Titus Wormer), MIT, bundled with the three small
               MIT libraries it uses. Tells which language a text is in.
 
+- hunspell/   hunspell-wasm 0.3.0: the Hunspell spell checker compiled to
+              WebAssembly, used under its MPL 1.1 option (LICENSE-MPL).
+- dictionaries/  Hunspell dictionaries, from the wooorm/dictionaries
+              packages, each folder with its license: en (SCOWL, MIT/BSD),
+              es (MPL 1.1 option), fr (MPL 2.0), de (igerman98, GPL 2 or 3),
+              pt (VERO, Brazilian, MPL 2.0 option), it (GPL 3). Dictionaries
+              are data files, kept apart from Noteshack's own code.
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used, opentype.js when a scan's letters are made into a font,
 UTIF.js when a TIFF is opened.

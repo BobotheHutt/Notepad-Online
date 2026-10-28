@@ -25,6 +25,8 @@ and lets you edit and sign PDFs.
   - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog (pick the kind of file in its type list), and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. This lasts while the tab is open: after a reload or a new visit, the first Save shows the dialog again, in the same folder with the same name. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
   - **Firefox, Safari and phones** do not let websites write to a file on disk, so there each save is a new copy in Downloads; Save as asks which kind of file.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
+- **Each document has a language**, shown in the status bar: worked out from its text on your computer, or chosen from 55. It sets spell checking and which way text runs (Arabic, Hebrew, Persian and Urdu run right to left), and saved Word files, web pages and PDFs record it.
+- **Spell checking in the document's language**: English, Spanish, French, German, Portuguese and Italian are checked by Noteshack itself, with the Hunspell dictionaries LibreOffice uses. Misspelled words are underlined; right-click one for corrections, to add it to your dictionary, or to ignore it in that document (Shift + right-click gives the browser's own menu). Other languages use the browser's spell check.
 - Back up every document to one file and restore it anywhere
 
 **PDFs**

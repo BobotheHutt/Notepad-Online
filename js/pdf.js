@@ -1652,14 +1652,14 @@
           }
           ref = await NpFonts.identify(samples, { bold: it.bold });
           if (ref) S.lastMatch = ref.ranking;
-          api.status('Saved', 'ok');
+          api.saved();
         }
         S.fontCache.set(key, ref || null);
       }
       if (!ref) return;
       await NpFonts.load(ref);
     } catch (e) {
-      api.status('Saved', 'ok');
+      api.saved();
       if (!S.fontWarned) { S.fontWarned = true; api.toast('The matching font could not be downloaded, so the closest standard font is used.', 5000); }
       return;
     }
@@ -2484,7 +2484,7 @@
     RQ.whole = false;
     RQ.stats = { turned: 0, straightened: 0, made: 0, found: 0 };
     bgChanged(true);
-    api.status('Saved', 'ok');
+    api.saveNow();
     if (!whole) return;
     const parts = [];
     if (st.turned) parts.push('Turned ' + st.turned + ' page' + (st.turned === 1 ? '' : 's') + ' the right way up.');
@@ -2507,7 +2507,7 @@
       // pages being read finish; the rest wait until it is turned on again
       RQ.want = [];
       RQ.whole = false;
-      if (!RQ.running.size) api.status('Saved', 'ok');
+      if (!RQ.running.size) api.saved();
       return;
     }
     try { await tesseract(); } catch (e) { api.toast(e.message, 7000); rec.readAll = false; updateReadAllUi(); return; }
@@ -3010,7 +3010,7 @@
     const before = snap();
     let n = 0;
     S.convNoFont = false;
-    try { n = await convertPage(info); } finally { api.status('Saved', 'ok'); }
+    try { n = await convertPage(info); } finally { api.saved(); }
     if (!n) { api.toast(S.convNoFont ? 'The fonts needed to redraw this page could not be downloaded. Check your connection and try again.' : 'No text on this page was read clearly enough to make editable.'); return; }
     commit(before);
     setTool('edit');
@@ -3040,7 +3040,7 @@
         const info = S.info.get(it.page);
         if (!it.parts && info && info.page) { try { it.parts = await handParts(info, it); } catch (e) { it.parts = null; } }
       }
-      api.status('Saved', 'ok');
+      api.saved();
     }
     for (const it of list) it.erased = erased;
     commit(before);

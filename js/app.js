@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-39';
+  const APP_VERSION = '2026.10.28-40';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -186,6 +186,7 @@
     const b = $('#sb-lang');
     b.textContent = NpLang.name(code);
     b.title = 'Language of this document: ' + NpLang.name(code) + (current.langAuto === false ? '' : ' (found from its text)') + '. Click to change.';
+    scheduleSpell();
   }
 
   async function detectLang(doc) {
@@ -505,7 +506,113 @@
     scheduleMetrics();
     updateToolbarState();
     if (findState.open) scheduleFind();
+    scheduleSpell();
   }
+
+  /* ----- spelling, in the document's language ----- */
+
+  // Where Noteshack has a dictionary for the document's language it checks
+  // spelling itself (see spell.js) and underlines with a highlight; else the
+  // browser's own spell check is on, as before.
+  const SPELL_SKIP = 'pre, code, a[href], [contenteditable="false"]';
+  let spellTimer = 0;
+  let spellBad = []; // [{ range, word }] as underlined now
+  let spellRun = 0;
+  const ignored = new Map(); // doc id → Set of words ignored in it, this visit
+  const spellLang = () => { const c = docLang(current); return c === 'pt-BR' ? 'pt' : c.split('-')[0]; };
+  const spellOurs = () => !!(current && current.type !== 'pdf' && settings.spellcheck && NpSpell.has(spellLang()) && window.CSS && CSS.highlights && window.Highlight);
+
+  function scheduleSpell() {
+    clearTimeout(spellTimer);
+    spellTimer = setTimeout(spellPass, 500);
+  }
+
+  function clearSpell() {
+    spellBad = [];
+    if (window.CSS && CSS.highlights) CSS.highlights.delete('np-spell');
+  }
+
+  async function spellPass() {
+    const run = ++spellRun;
+    const ours = spellOurs();
+    editor.spellcheck = settings.spellcheck && !ours;
+    if (!ours) { clearSpell(); return; }
+    const lang = spellLang();
+    const seg = new Intl.Segmenter(lang, { granularity: 'word' });
+    const caret = selectionInEditor() && getSelection().isCollapsed ? getSelection().getRangeAt(0) : null;
+    const found = []; // { node, start, end, word }
+    const walk = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => (n.parentElement && n.parentElement.closest(SPELL_SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT)
+    });
+    for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+      for (const s of seg.segment(n.data)) {
+        const w = s.segment.replace(/^['’]+|['’]+$/g, '');
+        // words, not numbers, single letters or ALL-CAPS abbreviations
+        if (!s.isWordLike || w.length < 2 || /\d/.test(w) || (w.length <= 5 && w === w.toUpperCase() && w !== w.toLowerCase())) continue;
+        // the word being typed is not judged until it is finished
+        if (caret && caret.startContainer === n && caret.startOffset >= s.index && caret.startOffset <= s.index + s.segment.length) continue;
+        found.push({ node: n, start: s.index, end: s.index + s.segment.length, word: w });
+      }
+    }
+    let bad;
+    try { bad = new Set(await NpSpell.check(lang, found.map((f) => f.word))); } catch (e) { editor.spellcheck = settings.spellcheck; clearSpell(); return; }
+    if (run !== spellRun || !spellOurs()) return;
+    const skip = ignored.get(current.id) || new Set();
+    spellBad = [];
+    for (const f of found) {
+      if (!bad.has(f.word) || skip.has(f.word) || !f.node.isConnected || f.end > f.node.data.length) continue;
+      const r = document.createRange();
+      r.setStart(f.node, f.start);
+      r.setEnd(f.node, f.end);
+      spellBad.push({ range: r, word: f.word });
+    }
+    CSS.highlights.set('np-spell', new Highlight(...spellBad.map((b) => b.range)));
+  }
+
+  // Right-click a word underlined as misspelled: corrections, and to add or
+  // ignore it. (Shift + right-click keeps the browser's own menu.)
+  editor.addEventListener('contextmenu', async (e) => {
+    if (e.shiftKey || !spellBad.length) return;
+    const at = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY)
+      : (() => { const p = document.caretPositionFromPoint && document.caretPositionFromPoint(e.clientX, e.clientY); if (!p) return null; const r = document.createRange(); r.setStart(p.offsetNode, p.offset); return r; })();
+    if (!at) return;
+    const hit = spellBad.find((b) => b.range.startContainer === at.startContainer && at.startOffset >= b.range.startOffset && at.startOffset <= b.range.endOffset);
+    if (!hit) return;
+    e.preventDefault();
+    const lang = spellLang();
+    const menu = el('div', { class: 'pdf-word-menu spell-menu', role: 'menu' }, el('div', { class: 'pdf-menu-read' }, 'Looking for corrections…'));
+    const close = () => { menu.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); };
+    const away = (ev) => { if (!menu.contains(ev.target)) close(); };
+    const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); editor.focus(); } };
+    document.body.append(menu);
+    menu.style.left = Math.min(e.clientX, innerWidth - menu.offsetWidth - 8) + 'px';
+    menu.style.top = Math.min(e.clientY, innerHeight - 260) + 'px';
+    document.addEventListener('pointerdown', away, true);
+    document.addEventListener('keydown', esc, true);
+    const item = (label, fn) => el('button', { type: 'button', role: 'menuitem', class: 'pdf-menu-item', onclick: () => { close(); fn(); } }, el('span', {}, label));
+    let list = [];
+    try { list = await NpSpell.suggest(lang, hit.word); } catch (err) { /* none */ }
+    const replace = (w) => {
+      // through the editor's own typing, so Undo takes it back
+      const s = getSelection();
+      s.removeAllRanges();
+      s.addRange(hit.range);
+      document.execCommand('insertText', false, w);
+      afterEdit();
+    };
+    menu.replaceChildren(
+      ...(list.length ? list.map((w) => item(w, () => replace(w))) : [el('div', { class: 'pdf-menu-read' }, 'No suggestions')]),
+      el('div', { class: 'pdf-menu-sep' }),
+      item('Add “' + hit.word + '” to the dictionary', async () => { await NpSpell.learn(lang, hit.word); spellPass(); }),
+      item('Ignore it in this document', () => {
+        if (!ignored.has(current.id)) ignored.set(current.id, new Set());
+        ignored.get(current.id).add(hit.word);
+        spellPass();
+      }));
+    menu.style.top = Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8)) + 'px';
+    const first = menu.querySelector('button');
+    if (first) first.focus();
+  });
 
   function selectNode(node, contents) {
     const r = document.createRange();
@@ -2884,7 +2991,8 @@
   }
 
   function applySpellcheck() {
-    editor.spellcheck = settings.spellcheck;
+    editor.spellcheck = settings.spellcheck && !spellOurs();
+    spellPass();
     // Browsers repaint the squiggles on the next focus.
     if (document.activeElement === editor) { editor.blur(); restoreSelection(); }
   }
@@ -2925,7 +3033,12 @@
     if (isMac) for (const k of $$('kbd')) k.textContent = k.textContent.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     for (const b of $$('[title]')) if (isMac) b.title = b.title.replace(/Ctrl\+/g, '⌘').replace(/Alt\+/g, '⌥').replace(/Shift\+/g, '⇧');
     buildToolbar();
-    NpPdf.init({ el, toast, dialog, changed: () => markDirty(), status: setStatus });
+    NpPdf.init({
+      el, toast, dialog, changed: () => markDirty(), status: setStatus,
+      saved: () => setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn'),
+      // saved at once: a page closed right after must not lose it
+      saveNow: () => { markDirty(); return saveNow(); }
+    });
     applyTheme();
     setView(settings.view);
     setZoom(settings.zoom);

@@ -851,6 +851,8 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
 .lang-row[hidden] { display: none; }
 .lang-row input { margin: 0; accent-color: var(--accent); }
 .lang-native { margin-left: auto; color: var(--ink-3); }
+/* words Noteshack's own spell check finds misspelled (see spell.js) */
+::highlight(np-spell) { text-decoration: underline wavy #d93025; text-decoration-skip-ink: none; text-underline-offset: 3px; }
 
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .row2 { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }

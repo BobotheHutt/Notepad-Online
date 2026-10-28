@@ -33,8 +33,14 @@ Third-party libraries, unmodified:
               pt (VERO, Brazilian, MPL 2.0 option), it (GPL 3). Dictionaries
               are data files, kept apart from Noteshack's own code.
 
+- bergamot/   @browsermt/bergamot-translator 0.4.9: Firefox's translation
+              engine, compiled to WebAssembly, MPL-2.0 (LICENSE). The models
+              it uses (Mozilla's, also MPL-2.0) are not here: they are on
+              files.noteshack.org (tools/translation-models.py), downloaded
+              the first time a language pair is used.
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used, opentype.js when a scan's letters are made into a font,
-UTIF.js when a TIFF is opened.
+UTIF.js when a TIFF is opened, the translator when a document is translated.
 
 Each folder holds its library's license text, which must stay with it.

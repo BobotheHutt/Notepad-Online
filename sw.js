@@ -5,11 +5,11 @@
    a cache of their own, first: an app update leaves them alone, so they are
    not downloaded again each time. Their file names carry no version, so
    VENDOR is bumped whenever a file under vendor/ changes. */
-const CACHE = 'noteshack-v42';
-const VENDOR = 'noteshack-vendor-7';
+const CACHE = 'noteshack-v43';
+const VENDOR = 'noteshack-vendor-8';
 const ASSETS = [
   './', './index.html', './styles.css', './icon.svg', './manifest.webmanifest',
-  './js/boot.js', './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/lang.js', './js/spell.js', './js/spellworker.js', './js/pdf.js', './js/images.js', './js/scanfont.js', './js/app.js'
+  './js/boot.js', './js/icons.js', './js/sanitize.js', './js/markdown.js', './js/zip.js', './js/docx.js', './js/store.js', './js/fonts.js', './js/lang.js', './js/spell.js', './js/spellworker.js', './js/translate.js', './js/pdf.js', './js/images.js', './js/scanfont.js', './js/app.js'
 ];
 
 self.addEventListener('install', (e) => {

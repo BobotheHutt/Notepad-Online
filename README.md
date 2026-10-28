@@ -27,6 +27,7 @@ and lets you edit and sign PDFs.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
 - **Each document has a language**, shown in the status bar: worked out from its text on your computer, or chosen from 55. It sets spell checking and which way text runs (Arabic, Hebrew, Persian and Urdu run right to left), and saved Word files, web pages and PDFs record it.
 - **Spell checking in the document's language**: English, Spanish, French, German, Portuguese and Italian are checked by Noteshack itself, with the Hunspell dictionaries LibreOffice uses. Misspelled words are underlined; right-click one for corrections, to add it to your dictionary, or to ignore it in that document (Shift + right-click gives the browser's own menu). Other languages use the browser's spell check.
+- **Translation, on your computer** (Tools → Translate…): makes a translated copy of a document; the text is not sent anywhere. Noteshack's own translator is Firefox's translation engine with Mozilla's models, between English, Spanish, French, German, Portuguese and Italian (two of the others go through English); it keeps bold, links and other formatting, and downloads each language's model (about 25 MB) the first time, then keeps it. Where the browser has a translator of its own (Chrome), its languages are offered too, as plain text. Names and terms you list are left as they are, and so are pictures and code. Each paragraph of the copy is highlighted until checked: the panel shows its original, which you can change and translate again.
 - Back up every document to one file and restore it anywhere
 
 **PDFs**
@@ -85,7 +86,7 @@ documents list automatically the first time you open the new version.
 ## Privacy
 
 There is no account, no analytics, no ads and no cookies, and documents are
-never uploaded. Two things are fetched from the internet:
+never uploaded. Three things are fetched from the internet:
 
 - **Uncommon font files.** The 31 common fonts the app matches are served
   by Noteshack itself. When a PDF names a font outside them, that font file
@@ -94,6 +95,10 @@ never uploaded. Two things are fetched from the internet:
   visitor's IP address; nothing from the document is sent.
 - **Linked pictures.** A picture in a document that links to a web address
   (for example, pasted from a web page) is loaded from that address.
+- **Translation models.** The first time you translate between two
+  languages, the model for them is downloaded from Noteshack's own file
+  storage (`files.noteshack.org`) and kept in the browser. Only the model is
+  downloaded; the text is translated on the device.
 
 Everything else, text recognition included, runs on the device.
 
@@ -125,6 +130,7 @@ with their license texts:
 - [UTIF.js](https://github.com/photopea/UTIF.js) (Photopea), MIT License, with [pako](https://github.com/nodeca/pako), MIT License
 - [Hunspell](https://hunspell.github.io) (as hunspell-wasm), MPL 1.1, with Hunspell dictionaries from [wooorm/dictionaries](https://github.com/wooorm/dictionaries), each under its own license (see `vendor/dictionaries`)
 - [franc](https://github.com/wooorm/franc), MIT License
+- [Bergamot translator](https://github.com/browsermt/bergamot-translator) (Firefox's translation engine), Mozilla Public License 2.0, with [Mozilla's translation models](https://github.com/mozilla/translations), Mozilla Public License 2.0 (served from `files.noteshack.org`, not stored in this repository; `tools/translation-models.py` puts them there)
 - 31 fonts from [Fontsource](https://fontsource.org), SIL Open Font License (Roboto Slab: Apache 2.0)
 
 Fonts come from [Fontsource](https://fontsource.org) when needed and are
@@ -190,7 +196,11 @@ js/pdf.js              the PDF editor
 js/fonts.js            identifies and downloads the font a PDF was set in
 js/scanfont.js         builds a font from a scan's own letters
 js/images.js           opens images in the PDF editor and saves them back as images
-vendor/                PDF.js (shows pages), pdf-lib (writes PDFs), Tesseract (reads scans), opentype.js (builds fonts from scans) and UTIF.js (reads TIFFs), with their licenses; loaded only when needed
+js/lang.js             the languages, and working out which one a text is in
+js/spell.js            spell checking (js/spellworker.js runs Hunspell)
+js/translate.js        translation on the device: Noteshack's engine (Bergamot) or the browser's
+vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
+tools/                 the script that puts the translation models on files.noteshack.org
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

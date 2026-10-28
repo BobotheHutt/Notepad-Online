@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-42';
+  const APP_VERSION = '2026.10.28-43';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -144,6 +144,9 @@
     return editor.innerHTML.replace(/ data-np-t="[^"]*"/g, '');
   }
 
+  // without the marks of a translation still being checked
+  const unmarked = (html) => html.replace(/ data-np-tr="\d*"/g, '');
+
   function autoTitle(text) {
     const line = (text || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
     return line.length > 60 ? line.slice(0, 57).trimEnd() + '…' : line;
@@ -238,6 +241,260 @@
     if (auto.checked) detectLang(doc);
   }
 
+  /* ----- translation ----- */
+
+  // A translated copy: a new document, each paragraph marked until it is
+  // checked (data-np-tr="n", its original in doc.translation.originals[n]).
+  // Translated on this computer, by Noteshack's engine or the browser's
+  // (js/translate.js).
+  const KEEP_WORDS = 'np.translate.keep';
+  const keepWords = () => { try { return JSON.parse(localStorage.getItem(KEEP_WORDS) || '[]'); } catch (e) { return []; } };
+  const mb = (n) => (n < 1e6 ? '<1' : Math.round(n / 1e6)) + ' MB';
+
+  async function translateDialog() {
+    if (!current || current.type === 'pdf') return;
+    if (dirty) await saveNow();
+    const src = current;
+    let from = docLang(src);
+    let to = null;
+    let want = null;
+    try { want = localStorage.getItem('np.translate.to'); } catch (e) { /* none */ }
+    const fromSel = el('select', { class: 'input', 'aria-label': 'Translate from' },
+      NpLang.list.map((l) => el('option', { value: l.code, selected: l.code === from }, NpLang.name(l.code))));
+    const search = el('input', { type: 'search', class: 'input', placeholder: 'Find a language', 'aria-label': 'Find a language' });
+    const browserCan = new Map(); // code → 'available' | 'downloadable' | null, for the current "from"
+    const rows = NpLang.list.map((l) => {
+      const radio = el('input', { type: 'radio', name: 'tr-to', value: l.code });
+      radio.addEventListener('change', () => { want = to = l.code; paintEngines(); });
+      const tags = el('span', { class: 'lang-tags' });
+      const nat = NpLang.native(l.code);
+      return { code: l.code, radio, tags, row: el('label', { class: 'lang-row', 'data-find': (NpLang.name(l.code) + ' ' + nat + ' ' + l.code).toLowerCase() }, radio,
+        el('span', { class: 'lang-name' }, NpLang.name(l.code)), tags, nat !== NpLang.name(l.code) ? el('span', { class: 'lang-native', lang: l.code }, nat) : null) };
+    });
+    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': 'Translate into' }, rows.map((r) => r.row));
+    const none = el('p', { class: 'dlg-text', hidden: true }, 'Noteshack translates between ' + NpTranslate.languages().map((c) => NpLang.name(c)).join(', ').replace(/, ([^,]*)$/, ' and $1') + '. This browser has no translator of its own for this language.');
+    const ours = el('input', { type: 'radio', name: 'tr-engine', value: 'ours' });
+    const theirs = el('input', { type: 'radio', name: 'tr-engine', value: 'browser' });
+    const oursNote = el('span', { class: 'engine-note' });
+    const engines = el('div', { class: 'engines', role: 'radiogroup', 'aria-label': 'Translator' },
+      el('label', { class: 'engine' }, ours, el('span', {}, el('strong', {}, 'Noteshack’s translator'), el('span', { class: 'engine-note' }, 'Firefox’s translation engine. Keeps bold, links and other formatting.'), oursNote)),
+      el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, 'This browser’s translator'), el('span', { class: 'engine-note' }, 'Formatting inside a paragraph (bold, links) is not kept.'))));
+    const keep = el('textarea', { class: 'input', rows: 3, placeholder: 'Names, brands, terms…', 'aria-label': 'Leave these as they are' });
+    keep.value = keepWords().join('\n');
+
+    // the language last translated into stays chosen, once it turns out possible
+    const can = (code) => code !== from && (NpTranslate.ours(from, code) || !!browserCan.get(code));
+    function paintList() {
+      const q = search.value.trim().toLowerCase();
+      let any = false;
+      for (const r of rows) {
+        const o = NpTranslate.ours(from, r.code), b = browserCan.get(r.code);
+        r.row.hidden = !can(r.code) || (!!q && !r.row.dataset.find.includes(q));
+        r.tags.textContent = [o ? 'Noteshack' : null, b ? 'Browser' : null].filter(Boolean).join(' · ');
+        if (can(r.code)) any = true;
+      }
+      to = want && can(want) ? want : null;
+      for (const r of rows) r.radio.checked = r.code === to;
+      none.hidden = any;
+      list.hidden = !any;
+      paintEngines();
+    }
+    async function paintEngines() {
+      const o = !!to && NpTranslate.ours(from, to), b = !!to && !!browserCan.get(to);
+      ours.disabled = !o;
+      theirs.disabled = !b;
+      ours.closest('.engine').hidden = !o && b;
+      theirs.closest('.engine').hidden = !b;
+      if (!ours.checked && !theirs.checked || ours.checked && !o || theirs.checked && !b) { ours.checked = o; theirs.checked = !o && b; }
+      engines.hidden = !to;
+      oursNote.textContent = '';
+      if (o) {
+        const n = await NpTranslate.toDownload(from, to);
+        if (n) oursNote.textContent = 'Downloads ' + mb(n) + ' the first time, kept for next time.';
+      }
+    }
+    async function checkBrowser() {
+      browserCan.clear();
+      const f = from;
+      if ('Translator' in window) {
+        await Promise.all(NpLang.list.map(async (l) => { const a = await NpTranslate.browser(f, l.code); if (f === from) browserCan.set(l.code, a); }));
+      }
+      if (f === from) paintList();
+    }
+    fromSel.addEventListener('change', () => { from = fromSel.value; checkBrowser(); paintList(); });
+    search.addEventListener('input', paintList);
+    paintList();
+    checkBrowser();
+
+    const v = await dialog({
+      title: 'Translate',
+      wide: true,
+      body: el('div', { class: 'stack' },
+        el('p', { class: 'dlg-text' }, 'Makes a translated copy, on this computer: the text is not sent anywhere. You can then check it paragraph by paragraph against the original.'),
+        el('label', { class: 'field' }, el('span', {}, 'From'), fromSel),
+        el('div', { class: 'field' }, el('span', {}, 'Into'), search, list, none),
+        engines,
+        el('label', { class: 'field' }, el('span', {}, 'Leave these as they are, one per line'), keep)),
+      actions: [{ label: 'Cancel', value: '' }, { label: 'Translate', value: 'go', primary: true }],
+      onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
+    });
+    if (v !== 'go') return;
+    if (!to || (!ours.checked && !theirs.checked)) { toast('Choose a language to translate into.'); return; }
+    const words = keep.value.split('\n').map((s) => s.trim()).filter(Boolean);
+    try { localStorage.setItem(KEEP_WORDS, JSON.stringify(words)); localStorage.setItem('np.translate.to', to); } catch (e) { /* this time only */ }
+    await translateDoc(src, from, to, theirs.checked ? 'browser' : 'ours', words);
+  }
+
+  async function translateDoc(src, from, to, engine, keep) {
+    const status = el('p', { class: 'dlg-text', role: 'status' }, 'Starting…');
+    const bar = el('progress', { class: 'progress', max: 1, value: 0 });
+    let box = null;
+    let cancelled = false;
+    const closed = dialog({
+      title: 'Translating into ' + NpLang.name(to),
+      body: el('div', { class: 'stack' }, status, bar),
+      actions: [{ label: 'Cancel', value: 'cancel' }],
+      onOpen: (d) => { box = d; }
+    }).then((v) => { if (v !== 'done') cancelled = true; });
+    let t = null;
+    try {
+      t = await NpTranslate.open(from, to, engine, (p) => {
+        status.textContent = (engine === 'browser' ? 'Getting the browser’s translator ready… ' : 'Downloading the translation model… ') + Math.round(p * 100) + '%';
+        bar.value = p;
+      });
+      if (cancelled) return;
+      status.textContent = 'Translating…';
+      const out = await NpTranslate.document(src.html, t, {
+        keep,
+        onUnit: (done, total) => {
+          if (cancelled) throw new Error('cancelled');
+          status.textContent = 'Translating… ' + done + ' of ' + total + ' paragraphs';
+          bar.value = total ? done / total : 1;
+        }
+      });
+      if (cancelled) return;
+      if (box) box.close('done');
+      await closed;
+      const doc = await createDoc(out.html, displayTitle(src) + ' (' + NpLang.name(to) + ')', { settings: src.settings, keepFocus: true });
+      if (!doc) return;
+      Object.assign(doc, { lang: to, langAuto: false, translation: { from, to, of: src.id, engine, keep, originals: out.originals } });
+      await NpStore.putDoc(doc);
+      applyDocLang();
+      reviewHandle = { key: from + to + engine, t };
+      t = null;
+      showReview();
+      toast(out.originals.length ? 'Translated. Check each paragraph against its original, or choose Done.' : 'Translated.', 5000);
+    } catch (e) {
+      if (cancelled) return;
+      if (box) box.close('done');
+      await closed;
+      toast('Could not translate: ' + ((e && e.message) || e), 6000);
+    } finally {
+      if (t) t.close();
+    }
+  }
+
+  /* ----- checking a translation ----- */
+
+  let reviewHandle = null; // { key, t }: the translator, kept open for "Translate again"
+  const reviewBox = $('#review');
+  const reviewOrig = $('#review-orig');
+  const reviewing = () => !!(current && current.type !== 'pdf' && current.translation && editor.querySelector('[data-np-tr]'));
+  let reviewNode = null;
+
+  function showReview() {
+    const on = reviewing();
+    reviewBox.hidden = !on;
+    editor.classList.toggle('reviewing', on);
+    if (!on) { reviewNode = null; return; }
+    const tr = current.translation;
+    reviewOrig.lang = tr.from;
+    reviewOrig.dir = NpLang.isRtl(tr.from) ? 'rtl' : 'ltr';
+    updateReview();
+  }
+
+  function updateReview() {
+    if (reviewBox.hidden || !current || !current.translation) return;
+    const left = editor.querySelectorAll('[data-np-tr]').length;
+    $('#review-count').textContent = left === 1 ? '1 paragraph to check' : left + ' paragraphs to check';
+    const node = closestInEditor('[data-np-tr]');
+    if (node === reviewNode && node) return;
+    reviewNode = node;
+    const has = !!node;
+    reviewBox.classList.toggle('empty', !has);
+    for (const b of reviewBox.querySelectorAll('[data-needs-node]')) b.disabled = !has;
+    if (!has) { reviewOrig.contentEditable = 'false'; reviewOrig.textContent = 'Click a highlighted paragraph to see its original.'; return; }
+    reviewOrig.contentEditable = 'true';
+    reviewOrig.innerHTML = NpSanitize.html(current.translation.originals[+node.getAttribute('data-np-tr')] || '');
+  }
+
+  function reviewStep(dir) {
+    const all = [...editor.querySelectorAll('[data-np-tr]')];
+    if (!all.length) return;
+    const cur = closestInEditor('[data-np-tr]');
+    let i = cur ? all.indexOf(cur) + dir : (dir > 0 ? 0 : all.length - 1);
+    i = (i + all.length) % all.length;
+    caretTo(all[i], false);
+    all[i].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    editor.focus({ preventScroll: true });
+    updateReview();
+  }
+
+  function reviewOk() {
+    const node = reviewNode && editor.contains(reviewNode) ? reviewNode : closestInEditor('[data-np-tr]');
+    if (!node) return;
+    const n = node.getAttribute('data-np-tr');
+    // a paragraph split in two with Enter: both halves were checked together
+    for (const m of editor.querySelectorAll('[data-np-tr="' + n + '"]')) m.removeAttribute('data-np-tr');
+    reviewNode = null;
+    markDirty();
+    if (editor.querySelector('[data-np-tr]')) reviewStep(1); else finishReview(true);
+  }
+
+  async function reviewRedo() {
+    const node = reviewNode && editor.contains(reviewNode) ? reviewNode : null;
+    if (!node) return;
+    const tr = current.translation;
+    const n = +node.getAttribute('data-np-tr');
+    tr.originals[n] = NpSanitize.html(reviewOrig.innerHTML);
+    const key = tr.from + tr.to + tr.engine;
+    try {
+      if (!reviewHandle || reviewHandle.key !== key) {
+        if (reviewHandle) reviewHandle.t.close();
+        reviewHandle = null;
+        toast('Getting the translator ready…');
+        reviewHandle = { key, t: await NpTranslate.open(tr.from, tr.to, tr.engine) };
+      }
+      const html = NpSanitize.html(await NpTranslate.unit(tr.originals[n], reviewHandle.t, tr.keep));
+      if (!editor.contains(node)) return;
+      editor.focus({ preventScroll: true });
+      selectNode(node, true);
+      document.execCommand('insertHTML', false, html || '<br>');
+      afterEdit();
+      reviewNode = null;
+      updateReview();
+    } catch (e) {
+      toast('Could not translate: ' + ((e && e.message) || e), 6000);
+    }
+  }
+
+  async function finishReview(allChecked) {
+    if (!allChecked && editor.querySelector('[data-np-tr]') &&
+      !(await confirmDialog('Done checking?', 'The highlighting goes, and the originals are no longer kept with this document.', { ok: 'Done' }))) return;
+    for (const m of editor.querySelectorAll('[data-np-tr]')) m.removeAttribute('data-np-tr');
+    delete current.translation;
+    if (reviewHandle) { reviewHandle.t.close(); reviewHandle = null; }
+    markDirty();
+    showReview();
+    if (allChecked) toast('Every paragraph checked.');
+  }
+
+  reviewOrig.addEventListener('input', debounce(() => {
+    if (!reviewNode || !current || !current.translation) return;
+    current.translation.originals[+reviewNode.getAttribute('data-np-tr')] = NpSanitize.html(reviewOrig.innerHTML);
+    markDirty();
+  }, 400));
+
   async function saveNow(reason) {
     if (!current) return;
     scheduleSave.cancel();
@@ -316,6 +573,7 @@
       applyDocLang();
       // the original file is stored apart from the record, and read when opened
       if (!doc.sources) doc.sources = (await NpStore.getSources(doc)) || [];
+      showReview();
       await NpPdf.open(doc);
       return;
     }
@@ -334,6 +592,7 @@
     workspace.scrollTop = 0;
     updateSaveUi();
     applyDocLang();
+    showReview();
     if (!opts.noFocus && !matchMedia('(max-width: 899px)').matches) placeCaretAtStart();
     if (matchMedia('(max-width: 899px)').matches) setSidebar(false, true);
   }
@@ -956,7 +1215,7 @@
       wrap.appendChild(shell);
       n = n.parentNode;
     }
-    return wrap.innerHTML.replace(/ data-np-t="[^"]*"/g, '');
+    return unmarked(wrap.innerHTML.replace(/ data-np-t="[^"]*"/g, ''));
   }
 
   function onCopy(e, cut) {
@@ -1025,6 +1284,7 @@
     savedRange = getSelection().getRangeAt(0).cloneRange();
     updateToolbarStateSoon();
     updateSelectionCount();
+    updateReview();
   });
 
   /* =========================================================== commands */
@@ -1443,6 +1703,12 @@
     'save-as': () => saveAs(),
     'export': exportAs,
     'doc-lang': languageDialog,
+    translate: translateDialog,
+    'review-prev': () => reviewStep(-1),
+    'review-next': () => reviewStep(1),
+    'review-ok': reviewOk,
+    'review-redo': reviewRedo,
+    'review-done': () => finishReview(false),
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
@@ -2454,7 +2720,7 @@
     if (kind === 'md') return out(new Blob([NpMarkdown.fromDom(editor)], { type: 'text/markdown;charset=utf-8' }));
     if (kind === 'html') {
       return out(new Blob(['<!DOCTYPE html>\n<html lang="' + docLang(doc) + '"' + (NpLang.isRtl(docLang(doc)) ? ' dir="rtl"' : '') + '>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + escapeHtml(name) +
-        '</title>\n<style>\n' + exportCss() + '\n</style>\n</head>\n<body>\n<article>' + serialize() + '</article>\n</body>\n</html>\n'], { type: 'text/html;charset=utf-8' }));
+        '</title>\n<style>\n' + exportCss() + '\n</style>\n</head>\n<body>\n<article>' + unmarked(serialize()) + '</article>\n</body>\n</html>\n'], { type: 'text/html;charset=utf-8' }));
     }
     const s = docSettings();
     return out(await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins, lang: docLang(doc) }));
@@ -2733,7 +2999,7 @@
       toast('Copy created');
       return;
     }
-    await createDoc(src.html, 'Copy of ' + displayTitle(src), { settings: src.settings, keepFocus: true });
+    await createDoc(unmarked(src.html), 'Copy of ' + displayTitle(src), { settings: src.settings, keepFocus: true });
     toast('Copy created');
   }
 

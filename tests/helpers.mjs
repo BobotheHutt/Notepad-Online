@@ -26,9 +26,32 @@ async function localFonts(context) {
   });
 }
 
+// The translation models, from files.noteshack.org. It answers only pages on
+// noteshack.org, so the tests fetch them here and hand them to the page; each
+// is kept in tests/.fixtures/models after the first time, or comes from
+// NOTESHACK_MODELS (a folder laid out as on the site: en-es/model…gz) where
+// the site is out of reach.
+const MODELS = process.env.NOTESHACK_MODELS || path.join(ROOT, 'tests', '.fixtures', 'models');
+async function translationModels(context) {
+  await context.route(/^https:\/\/files\.noteshack\.org\/translate\/v1\//, async (route) => {
+    const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/gzip' };
+    const file = path.join(MODELS, route.request().url().replace(/^.*\/translate\/v1\//, ''));
+    if (!fs.existsSync(file)) {
+      const res = await route.fetch({ headers: { origin: 'https://noteshack.org' } });
+      if (!res.ok()) return route.fulfill({ status: res.status(), body: '', headers });
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const part = file + '.' + process.pid + '-' + Math.random().toString(36).slice(2) + '.part';
+      fs.writeFileSync(part, await res.body());
+      fs.renameSync(part, file);
+    }
+    return route.fulfill({ status: 200, body: fs.readFileSync(file), headers });
+  });
+}
+
 export const test = base.extend({
   context: async ({ context, welcome }, use) => {
     await localFonts(context);
+    await translationModels(context);
     // the welcome popup stays away unless a test is about it
     if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); localStorage.setItem('np.safari-note', 'shown'); } catch (e) { /* ignore */ } });
     await use(context);

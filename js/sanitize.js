@@ -142,6 +142,7 @@
     for (const a of Array.from(el.attributes)) {
       const name = a.name.toLowerCase();
       if (name === 'style') continue;
+      if (name === 'data-np-tr' && /^\d+$/.test(a.value)) continue; // a translated paragraph not yet checked
       if (!allowed.includes(name)) { el.removeAttribute(a.name); continue; }
       if (name === 'href') {
         const v = safeHref(a.value);

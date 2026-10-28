@@ -852,6 +852,45 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
 .lang-row input { margin: 0; accent-color: var(--accent); }
 .lang-native { margin-left: auto; color: var(--ink-3); }
 .lang-tags { font-size: 11px; color: var(--accent-text); background: var(--accent-soft); padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
+.lang-tags:empty { display: none; }
+.engines { display: flex; flex-direction: column; gap: 6px; }
+.engines[hidden], .engine[hidden] { display: none; }
+.engine { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.engine:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.engine input { margin: 3px 0 0; accent-color: var(--accent); }
+.engine > span { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; }
+.engine-note { color: var(--ink-2); font-size: 12.5px; }
+.engine-note:empty { display: none; }
+.progress { width: 100%; accent-color: var(--accent); }
+
+/* checking a translation: paragraphs not yet checked, and the original of the one at the cursor */
+.editor.reviewing [data-np-tr] { background: var(--accent-soft); border-radius: 3px; }
+@media print { .editor.reviewing [data-np-tr] { background: none; } }
+.review {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  z-index: 19;
+  width: 380px;
+  max-width: calc(100% - 24px);
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.review[hidden] { display: none; }
+.review-head { display: flex; align-items: center; gap: 4px; font-size: 13.5px; }
+.review-count { margin-left: auto; padding-right: 4px; font-size: 12px; color: var(--ink-3); }
+.review-label { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.review-label .muted { font-weight: 400; }
+.review-orig { max-height: 30vh; overflow-y: auto; padding: 6px 9px; border: 1px solid var(--line-2); border-radius: 7px; font-size: 14px; line-height: 1.45; outline: none; }
+.review-orig:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.review.empty .review-orig { color: var(--ink-3); border-style: dashed; }
+.review-actions { display: flex; align-items: center; gap: 6px; }
 /* words Noteshack's own spell check finds misspelled (see spell.js) */
 ::highlight(np-spell) { text-decoration: underline wavy #d93025; text-decoration-skip-ink: none; text-underline-offset: 3px; }
 

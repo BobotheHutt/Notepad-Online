@@ -5,7 +5,7 @@
   <!-- Security policy: only the app's own scripts run, and the only outside
        site is the font CDN. Styles stay open: documents carry inline styles.
        (A meta tag, as GitHub Pages cannot send headers.) -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob: https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdn.jsdelivr.net; worker-src 'self' blob:; frame-src 'self' blob:; media-src 'self' data: blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob: https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdn.jsdelivr.net https://files.noteshack.org; worker-src 'self' blob:; frame-src 'self' blob:; media-src 'self' data: blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Noteshack</title>
   <meta name="description" content="A free, private word processor and PDF editor that runs in your browser. Edit PDFs and scans, fill forms, open and save Word files. Works offline; nothing is uploaded.">
@@ -186,6 +186,7 @@
             <div class="menu-pop" role="menu">
               <button data-doc-only role="menuitem" data-action="word-count"><span>Word count</span><kbd>Ctrl+Shift+C</kbd></button>
               <button data-doc-only role="menuitem" data-action="goal"><span>Word goal…</span></button>
+              <button data-doc-only role="menuitem" data-action="translate"><span>Translate…</span></button>
               <div class="menu-sep" data-doc-only></div>
               <button data-doc-only role="menuitem" data-action="speak"><span id="speak-label">Read aloud</span></button>
               <button data-doc-only role="menuitem" data-action="voice"><span>Voice settings…</span></button>
@@ -319,6 +320,24 @@
         </div>
       </div>
 
+      <!-- Checking a translation: the original of the paragraph at the cursor -->
+      <div class="review" id="review" hidden role="region" aria-label="Check the translation">
+        <div class="review-head">
+          <strong>Check the translation</strong>
+          <span class="review-count" id="review-count"></span>
+          <button class="icon-btn sm" data-action="review-prev" data-icon="up" title="Previous paragraph to check" aria-label="Previous paragraph to check"></button>
+          <button class="icon-btn sm" data-action="review-next" data-icon="down" title="Next paragraph to check" aria-label="Next paragraph to check"></button>
+        </div>
+        <div class="review-label">Original <span class="muted">(you can change it, then translate again)</span></div>
+        <div class="review-orig" id="review-orig" spellcheck="true" aria-label="Original of this paragraph"></div>
+        <div class="review-actions">
+          <button class="btn btn-sm" data-action="review-redo" data-needs-node>Translate again</button>
+          <button class="btn btn-sm btn-primary" data-action="review-ok" data-needs-node>Looks right</button>
+          <span class="grow"></span>
+          <button class="btn btn-sm" data-action="review-done">Done</button>
+        </div>
+      </div>
+
       <!-- Tools for the image, link or table the cursor is in -->
       <div class="ctxbar" id="ctxbar" hidden></div>
       <div class="drop-hint" id="drop-hint" hidden>Drop to insert</div>
@@ -360,6 +379,7 @@
 <script src="js/fonts.js"></script>
 <script src="js/lang.js"></script>
 <script src="js/spell.js"></script>
+<script src="js/translate.js"></script>
 <script src="js/pdf.js"></script>
 <script src="js/images.js"></script>
 <script src="js/app.js"></script>

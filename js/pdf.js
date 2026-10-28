@@ -5300,6 +5300,252 @@
     });
   }
 
+  /* ============================================================ translation */
+
+  // Every scanned page not read yet, read now (in the document's language)
+  // and made editable; onPage(done, total) as each finishes.
+  async function readEverything(onPage) {
+    const rec = S.rec;
+    const todo = [];
+    for (const p of rec.pages) {
+      const info = S.info.get(p.uid);
+      if (info && (await needsReading(info))) todo.push(info);
+    }
+    if (!todo.length) return;
+    await tesseract();
+    let done = 0;
+    if (onPage) onPage(0, todo.length);
+    for (const info of todo) {
+      if (S.rec !== rec) return;
+      await readPage(info);
+      if (onPage) onPage(++done, todo.length);
+    }
+  }
+
+  // The translated text spread over a paragraph's lines, as a translator
+  // keeps a page's layout: the lines it had, no more, at the size it had or
+  // smaller (down to 60%) where the translation runs longer. Past that, the
+  // last line takes the rest and is narrowed as an edited line is.
+  // lines: [{ room, width(text, k) }] → { k, texts }
+  function fitLines(lines, words) {
+    for (const k of [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6]) {
+      const texts = [];
+      let pos = 0;
+      for (const l of lines) {
+        let n = 0;
+        while (pos + n < words.length && (n === 0 || l.width(words.slice(pos, pos + n + 1).join(' '), k) <= l.room)) n++;
+        if (n && l.width(words.slice(pos, pos + n).join(' '), k) > l.room && k > 0.6) break; // one word too long for its line
+        texts.push(words.slice(pos, pos + n).join(' '));
+        pos += n;
+      }
+      if (pos >= words.length && texts.length === lines.length) return { k, texts };
+    }
+    const texts = [];
+    let pos = 0;
+    lines.forEach((l, i) => {
+      let n = 0;
+      if (i === lines.length - 1) n = words.length - pos;
+      else while (pos + n < words.length && (n === 0 || l.width(words.slice(pos, pos + n + 1).join(' '), 0.6) <= l.room)) n++;
+      texts.push(words.slice(pos, pos + n).join(' '));
+      pos += n;
+    });
+    return { k: 0.6, texts };
+  }
+  const splitWords = (s) => String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+
+  // A page made editable from a scan: its paragraphs (or single lines).
+  function convUnits(uidv) {
+    const lines = S.rec.items.filter((i) => i.page === uidv && i.conv && i.text && i.text.trim());
+    const out = [];
+    const seen = new Set();
+    for (const l of lines.sort((a, b) => a.base - b.base || lineStart(a) - lineStart(b))) {
+      if (l.para) {
+        if (seen.has(l.para)) continue;
+        seen.add(l.para);
+        out.push({ conv: paraLines(l.para) });
+      } else out.push({ conv: [l] });
+    }
+    return out;
+  }
+
+  function fitConv(lines, text) {
+    const g = lines.length > 1 ? paraGeom(lines) : null;
+    const sizes = lines.map((l) => l.size);
+    const fit = fitLines(lines.map((l, i) => {
+      const x = lineStart(l);
+      const lastX1 = l.words.length ? l.words[l.words.length - 1].x1 : x;
+      const right = g ? Math.min(g.right, l.limit != null ? l.limit : Infinity) : (l.limit != null ? Math.max(l.limit, lastX1) : lastX1 + l.size * 0.2);
+      return {
+        room: right - x + 0.5,
+        width: (t, k) => {
+          const lay = convLayout(Object.assign({}, l, { text: t, tv: undefined, size: sizes[i] * k, limit: Infinity }));
+          const r = lay[lay.length - 1];
+          return r ? r.x + measureRun(r.text, r.st, l.smallCaps).w * r.scaleX - x : 0;
+        }
+      };
+    }), splitWords(text));
+    lines.forEach((l, i) => {
+      l.text = fit.texts[i] || '';
+      l.tv = undefined;
+      l.size = Math.round(sizes[i] * fit.k * 10) / 10;
+      l.y = l.base - BASELINE[l.family || 'sans'] * l.size;
+    });
+  }
+
+  // A page with text of its own: its runs joined into lines (a column gap
+  // keeps them apart), and the lines into paragraphs, as groupParagraphs
+  // does for a scan's lines.
+  async function typedUnits(info) {
+    const runs = (await textItems(info)).filter((t) => !t.scan).sort((a, b) => a.base - b.base || a.x - b.x);
+    const lines = [];
+    for (const t of runs) {
+      const l = lines.find((q) => Math.abs(q.base - t.base) < Math.max(q.size, t.size) * 0.4 && t.x > q.x1 - t.size * 0.5 && t.x - q.x1 < t.size * 2.5);
+      if (l) { l.ts.push(t); l.x1 = Math.max(l.x1, t.x + t.w); l.size = Math.max(l.size, t.size); } else lines.push({ ts: [t], base: t.base, size: t.size, x0: t.x, x1: t.x + t.w });
+    }
+    lines.sort((a, b) => a.base - b.base || a.x0 - b.x0);
+    const taken = new Set();
+    const out = [];
+    for (const a of lines) {
+      if (taken.has(a)) continue;
+      const group = [a];
+      taken.add(a);
+      let cur = a;
+      for (;;) {
+        const b = lines.find((q) => !taken.has(q) && q.base - cur.base >= cur.size * 0.9 && q.base - cur.base <= cur.size * 1.9 &&
+          Math.min(q.x1, cur.x1) - Math.max(q.x0, cur.x0) > Math.min(q.x1 - q.x0, cur.x1 - cur.x0) * 0.3);
+        if (!b || Math.abs(b.size - cur.size) > cur.size * 0.18) break;
+        if (group.length >= 2 && Math.abs((b.base - cur.base) - (cur.base - group[group.length - 2].base)) > cur.size * 0.25) break;
+        if (group.length >= 2 ? Math.abs(b.x0 - group[1].x0) > cur.size * 0.8 : b.x0 > cur.x0 + cur.size * 0.8 || b.x0 < cur.x0 - cur.size * 4) break;
+        // the line before was full: the next one's first word would not have fitted on it
+        const right = Math.max(b.x1, ...group.map((q) => q.x1));
+        const first = splitWords(b.ts[0].str)[0] || '';
+        if (cur.x1 + textWidth(' ' + first, { family: b.ts[0].family, size: b.size }) < right - cur.size * 0.1) break;
+        group.push(b);
+        taken.add(b);
+        cur = b;
+      }
+      out.push({ typed: group });
+    }
+    return out.filter((u) => u.typed.some((l) => l.ts.some((t) => /\p{L}/u.test(t.str))));
+  }
+
+  // Each run of a line gets an edit: the first carries the line's new text,
+  // the rest are emptied (their words covered).
+  async function typedEdits(info, lines) {
+    const existing = new Map(S.rec.items.filter((i) => i.page === info.entry.uid && i.anchored).map((i) => [i.origKey, i]));
+    const out = [];
+    // colors from a render of its own: the page on screen may not be drawn yet
+    let view = null;
+    const drawn = async () => {
+      if (view) return view;
+      const K = Math.min(2, 2400 / Math.max(info.w, info.h));
+      const c = document.createElement('canvas');
+      c.width = Math.round(info.w * K);
+      c.height = Math.round(info.h * K);
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.fillStyle = paperOf(info);
+      g.fillRect(0, 0, c.width, c.height);
+      await info.page.render(renderOpts(info, g, K)).promise;
+      return (view = { canvas: c, w: info.w });
+    };
+    for (const l of lines) {
+      const its = [];
+      for (const t of l.ts) {
+        let it = existing.get(t.key);
+        if (!it) {
+          const words = nativeWords(info, t);
+          if (!words.length) continue;
+          const y0 = Math.min(...words.map((w) => w.y0));
+          const ink = sampleInk(await drawn(), { x: words[0].x0, y: y0, w: words[words.length - 1].x1 - words[0].x0, h: Math.max(...words.map((w) => w.y1)) - y0 });
+          let bold = false;
+          let italic = false;
+          try {
+            const f = info.page.commonObjs.get(t.fontName);
+            const name = (f && (f.name || f.loadedName)) || '';
+            bold = !!(f && f.bold) || /bold|black|heavy|semibold|demi/i.test(name);
+            italic = !!(f && f.italic) || /italic|oblique/i.test(name);
+          } catch (e) { /* font not resolved yet */ }
+          const size = Math.round(t.size * 10) / 10;
+          const origText = words.map((w) => w.t).join(' ');
+          it = {
+            id: uid(), type: 'text', page: info.entry.uid, origKey: t.key, anchored: true, scan: false, limit: await lineLimit(info, t, words),
+            words, origText, text: origText, x: words[0].x0, base: t.base, y: t.base - BASELINE[t.family] * size, heightSize: t.size,
+            size, family: t.family, color: ink.fg, bg: ink.bg, bold, italic
+          };
+          S.rec.items.push(it);
+          await matchFont(info, t, it, words);
+        }
+        its.push(it);
+      }
+      if (its.length) out.push(its);
+    }
+    return out;
+  }
+
+  function fitTyped(edits, text) {
+    const lastX1 = (its) => Math.max(...its.map((i) => i.words[i.words.length - 1].x1));
+    // a paragraph wraps at its right edge; a line alone may run to the next
+    // text on its line, a cell border or the margin
+    const right = edits.length > 1 ? Math.max(...edits.map(lastX1)) : null;
+    const ends = edits.map((its) => {
+      const l = its[0];
+      return right != null ? right + l.size * 0.2 : Math.max(l.limit != null ? l.limit : 0, lastX1(its) + l.size * 0.2);
+    });
+    const sizes = edits.map((its) => its[0].size);
+    const fit = fitLines(edits.map((its, i) => {
+      const l = its[0];
+      return { room: ends[i] - l.words[0].x0, width: (t, k) => textWidth(t, Object.assign({}, l, { size: sizes[i] * k })) };
+    }), splitWords(text));
+    edits.forEach((its, i) => {
+      const l = its[0];
+      l.text = fit.texts[i] || '';
+      l.size = Math.round(sizes[i] * fit.k * 10) / 10;
+      l.y = l.base - BASELINE[l.family || 'sans'] * l.size;
+      l.limit = ends[i];
+      for (const q of its.slice(1)) q.text = '';
+    });
+  }
+
+  // The open document translated where it stands, page by page: each
+  // paragraph's text replaced in its place. tr(text) → Promise<text>.
+  // onProgress(what, done, total).
+  async function translateOpen(tr, onProgress) {
+    const rec = S.rec;
+    if (!rec) return 0;
+    const say = onProgress || (() => {});
+    await readEverything((d, n) => say('read', d, n));
+    if (S.rec !== rec) return 0;
+    const before = snap();
+    let count = 0;
+    for (const [pi, p] of rec.pages.entries()) {
+      const info = S.info.get(p.uid);
+      if (!info || !info.page) continue;
+      say('page', pi, rec.pages.length);
+      const units = isConv(p.uid) ? convUnits(p.uid) : (await isScanPage(info)) ? [] : await typedUnits(info);
+      const typed = [];
+      for (const u of units) if (u.typed) typed.push({ u, edits: await typedEdits(info, u.typed) });
+      await Promise.all(units.map(async (u) => {
+        if (u.conv) {
+          const text = u.conv.map((l) => l.text).join(' ');
+          fitConv(u.conv, await tr(text));
+          count++;
+          return;
+        }
+        const e = typed.find((q) => q.u === u).edits;
+        if (!e.length) return;
+        const text = e.map((its) => its.map((i) => i.text).join(' ')).join(' ');
+        fitTyped(e, await tr(text));
+        count++;
+      }));
+      if (S.rec !== rec) return count;
+      renderOverlay(info);
+    }
+    say('page', rec.pages.length, rec.pages.length);
+    commit(before);
+    api.saved();
+    return count;
+  }
+
   async function newRecord(buffer) {
     await loadLibs();
     const doc = await loadPdfJs(buffer);
@@ -5350,6 +5596,8 @@
     copyText: copyPageText,
     addPages: () => $('#pdf-add-input').click(),
     get active() { return !!S.rec; },
-    finishEditing
+    finishEditing,
+    // every scanned page read now; the open document translated in place
+    readEverything, translate: translateOpen
   };
 })();

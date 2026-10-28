@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-43';
+  const APP_VERSION = '2026.10.28-44';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -252,7 +252,7 @@
   const mb = (n) => (n < 1e6 ? '<1' : Math.round(n / 1e6)) + ' MB';
 
   async function translateDialog() {
-    if (!current || current.type === 'pdf') return;
+    if (!current) return;
     if (dirty) await saveNow();
     const src = current;
     let from = docLang(src);
@@ -279,6 +279,13 @@
     const engines = el('div', { class: 'engines', role: 'radiogroup', 'aria-label': 'Translator' },
       el('label', { class: 'engine' }, ours, el('span', {}, el('strong', {}, 'Noteshack’s translator'), el('span', { class: 'engine-note' }, 'Firefox’s translation engine. Keeps bold, links and other formatting.'), oursNote)),
       el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, 'This browser’s translator'), el('span', { class: 'engine-note' }, 'Formatting inside a paragraph (bold, links) is not kept.'))));
+    // a PDF: translated where its text stands, or its words as a document
+    const isPdf = src.type === 'pdf';
+    const asLayout = el('input', { type: 'radio', name: 'tr-kind', value: 'layout', checked: true });
+    const asDoc = el('input', { type: 'radio', name: 'tr-kind', value: 'doc' });
+    const kinds = isPdf ? el('div', { class: 'engines', role: 'radiogroup', 'aria-label': 'Make' },
+      el('label', { class: 'engine' }, asLayout, el('span', {}, el('strong', {}, 'The same layout'), el('span', { class: 'engine-note' }, 'A translated copy of the PDF: each paragraph in its place, in its font, a little smaller where the translation runs longer.'))),
+      el('label', { class: 'engine' }, asDoc, el('span', {}, el('strong', {}, 'A document'), el('span', { class: 'engine-note' }, 'The words as paragraphs and headings, to check one by one against the original and save as Word or text.')))) : null;
     const keep = el('textarea', { class: 'input', rows: 3, placeholder: 'Names, brands, terms…', 'aria-label': 'Leave these as they are' });
     keep.value = keepWords().join('\n');
 
@@ -334,6 +341,8 @@
         el('label', { class: 'field' }, el('span', {}, 'From'), fromSel),
         el('div', { class: 'field' }, el('span', {}, 'Into'), search, list, none),
         engines,
+        isPdf ? el('div', { class: 'field' }, el('span', {}, 'Make'), kinds) : null,
+        isPdf ? el('p', { class: 'dlg-text' }, 'Scanned pages are read first, in the language translated from.') : null,
         el('label', { class: 'field' }, el('span', {}, 'Leave these as they are, one per line'), keep)),
       actions: [{ label: 'Cancel', value: '' }, { label: 'Translate', value: 'go', primary: true }],
       onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
@@ -342,40 +351,92 @@
     if (!to || (!ours.checked && !theirs.checked)) { toast('Choose a language to translate into.'); return; }
     const words = keep.value.split('\n').map((s) => s.trim()).filter(Boolean);
     try { localStorage.setItem(KEEP_WORDS, JSON.stringify(words)); localStorage.setItem('np.translate.to', to); } catch (e) { /* this time only */ }
-    await translateDoc(src, from, to, theirs.checked ? 'browser' : 'ours', words);
+    if (isPdf && current === src) {
+      // scans are read in the language translated from
+      if (src.lang !== from) { src.lang = from; src.langAuto = false; await NpStore.putDoc(src); applyDocLang(); }
+    }
+    await translateDoc(src, from, to, theirs.checked ? 'browser' : 'ours', words, isPdf && asLayout.checked ? 'layout' : 'doc');
   }
 
-  async function translateDoc(src, from, to, engine, keep) {
+  // A dialog showing how far a long job has got, with Cancel.
+  function progressDialog(title) {
     const status = el('p', { class: 'dlg-text', role: 'status' }, 'Starting…');
     const bar = el('progress', { class: 'progress', max: 1, value: 0 });
     let box = null;
-    let cancelled = false;
+    const p = { cancelled: false };
     const closed = dialog({
-      title: 'Translating into ' + NpLang.name(to),
+      title,
       body: el('div', { class: 'stack' }, status, bar),
       actions: [{ label: 'Cancel', value: 'cancel' }],
       onOpen: (d) => { box = d; }
-    }).then((v) => { if (v !== 'done') cancelled = true; });
+    }).then((v) => { if (v !== 'done') p.cancelled = true; });
+    p.set = (text, frac) => {
+      if (p.cancelled) throw new Error('cancelled');
+      status.textContent = text;
+      if (frac != null) bar.value = frac; else bar.removeAttribute('value');
+    };
+    p.close = async () => { if (box && box.open) box.close('done'); await closed; };
+    return p;
+  }
+
+  // The words of a PDF (edits, and what was read from scans, included) as a
+  // document's HTML: paragraphs and headings, a page break between pages.
+  async function pdfAsHtml(doc) {
+    const pages = await pdfParagraphs(await NpPdf.export(doc));
+    return pages.map((pg) => pg.map((q) => '<' + q.tag + '>' + q.runs.map((r) => (r.bold ? '<b>' + escapeHtml(r.text) + '</b>' : escapeHtml(r.text))).join('') + '</' + q.tag + '>').join('')).join('<hr class="page-break">');
+  }
+
+  // kind: 'doc' (a document, or a PDF's words as one) or 'layout' (a PDF
+  // copy, translated where its text stands)
+  async function translateDoc(src, from, to, engine, keep, kind) {
+    const pr = progressDialog('Translating into ' + NpLang.name(to));
+    const title = displayTitle(src) + ' (' + NpLang.name(to) + ')';
     let t = null;
+    let copy = null;
     try {
-      t = await NpTranslate.open(from, to, engine, (p) => {
-        status.textContent = (engine === 'browser' ? 'Getting the browser’s translator ready… ' : 'Downloading the translation model… ') + Math.round(p * 100) + '%';
-        bar.value = p;
-      });
-      if (cancelled) return;
-      status.textContent = 'Translating…';
-      const out = await NpTranslate.document(src.html, t, {
+      t = await NpTranslate.open(from, to, engine, (p) => pr.set((engine === 'browser' ? 'Getting the browser’s translator ready… ' : 'Downloading the translation model… ') + Math.round(p * 100) + '%', p));
+      pr.set('Translating…', 0);
+      const readNote = (d, n) => pr.set('Reading the scanned pages first… ' + d + ' of ' + n, n ? d / n : 0);
+      if (kind === 'layout') {
+        // a copy of the PDF, its text replaced paragraph by paragraph
+        const now = Date.now();
+        copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
+          id: uid(), title, titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
+          scanFonts: src.scanFonts ? Object.fromEntries(Object.entries(src.scanFonts).map(([k, b]) => [k, b instanceof ArrayBuffer ? b.slice(0) : b])) : undefined,
+          lang: from, langAuto: false
+        });
+        if (!(await addRecord(copy))) return;
+        // a piece of a page's text → the same, translated (it is plain text)
+        const box = document.createElement('div');
+        const tr = async (text) => {
+          if (pr.cancelled) throw new Error('cancelled');
+          box.textContent = text;
+          const h = await NpTranslate.unit(box.innerHTML, t, keep);
+          box.innerHTML = NpSanitize.html(h);
+          return box.textContent;
+        };
+        const n = await NpPdf.translate(tr, (what, d, total) => (what === 'read' ? readNote(d, total) : pr.set('Translating… page ' + Math.min(d + 1, total) + ' of ' + total, total ? d / total : 1)));
+        copy.lang = to;
+        await NpStore.putDoc(copy);
+        if (current === copy) applyDocLang();
+        await pr.close();
+        toast(n ? 'Translated, keeping the layout. Pages → Show original compares a page with the original.' : 'No text was found to translate.', 6000);
+        return;
+      }
+      let html = src.html;
+      if (src.type === 'pdf') {
+        await NpPdf.readEverything(readNote);
+        await saveNow('Read before translating');
+        pr.set('Translating…', 0);
+        html = await pdfAsHtml(src);
+      }
+      const out = await NpTranslate.document(html, t, {
         keep,
-        onUnit: (done, total) => {
-          if (cancelled) throw new Error('cancelled');
-          status.textContent = 'Translating… ' + done + ' of ' + total + ' paragraphs';
-          bar.value = total ? done / total : 1;
-        }
+        onUnit: (done, total) => pr.set('Translating… ' + done + ' of ' + total + ' paragraphs', total ? done / total : 1)
       });
-      if (cancelled) return;
-      if (box) box.close('done');
-      await closed;
-      const doc = await createDoc(out.html, displayTitle(src) + ' (' + NpLang.name(to) + ')', { settings: src.settings, keepFocus: true });
+      await pr.close();
+      const s = src.type === 'pdf' ? undefined : src.settings;
+      const doc = await createDoc(out.html, title, { settings: s, keepFocus: true });
       if (!doc) return;
       Object.assign(doc, { lang: to, langAuto: false, translation: { from, to, of: src.id, engine, keep, originals: out.originals } });
       await NpStore.putDoc(doc);
@@ -385,9 +446,10 @@
       showReview();
       toast(out.originals.length ? 'Translated. Check each paragraph against its original, or choose Done.' : 'Translated.', 5000);
     } catch (e) {
-      if (cancelled) return;
-      if (box) box.close('done');
-      await closed;
+      const stopped = pr.cancelled;
+      await pr.close();
+      if (copy && current === copy) await saveNow();
+      if (stopped) { if (copy) toast('Stopped. The copy is translated as far as it got.', 6000); return; }
       toast('Could not translate: ' + ((e && e.message) || e), 6000);
     } finally {
       if (t) t.close();

@@ -34,6 +34,18 @@ export default async function globalSetup() {
       files['letter.pdf'] = b64(await d.save());
     }
 
+    // a memo whose paragraph wraps over four lines, with a line close below
+    // it: a translation that runs longer must stay in the paragraph's space
+    {
+      const d = await PDFDocument.create();
+      const f = await d.embedFont(StandardFonts.Helvetica);
+      const pg = d.addPage([612, 792]);
+      const lines = ['The quarterly review of the building maintenance budget will take place in', 'the main conference room on the third floor next Thursday morning. Every', 'department head is expected to bring a short summary of the repairs carried', 'out since January and a list of the work still waiting to be approved.'];
+      lines.forEach((t, i) => pg.drawText(t, { x: 72, y: 700 - i * 15, size: 11, font: f }));
+      pg.drawText('Signed: Office of Facilities', { x: 72, y: 625, size: 11, font: f });
+      files['memo.pdf'] = b64(await d.save());
+    }
+
     // a typed letter in Spanish, to tell its language from
     {
       const d = await PDFDocument.create();

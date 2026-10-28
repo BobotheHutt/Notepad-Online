@@ -1,5 +1,5 @@
 // Translating a document into a copy, on this computer, and checking it.
-import { test, expect } from './helpers.mjs';
+import { test, expect, openFile, newestDoc } from './helpers.mjs';
 
 // The models come from the tests' stand-in for files.noteshack.org (which
 // answers only noteshack.org). In the test tool's WebKit, requests from a
@@ -114,4 +114,84 @@ test('the browser’s own translator, where there is one, for more languages', a
   await expect(ed.locator('p').first()).toHaveText('【Good morning to everyone here.】');
   await expect(ed.locator('p').nth(1)).toHaveText('【See you at】 Noteshack 【tomorrow.】');
   await expect(p.locator('#sb-lang')).toHaveText('Japanese');
+});
+
+// a downloaded PDF, opened again: what it reads as
+async function reopen(p, dl, name) {
+  const file = test.info().outputPath(name);
+  await dl.saveAs(file);
+  await p.setInputFiles('#file-open', file);
+  await p.waitForSelector('.pdf-page canvas');
+  await p.waitForTimeout(800);
+  return newestDoc(p, name.replace(/\.pdf$/, ''));
+}
+
+async function translatePdf(p, kind, from) {
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  const dlg = p.locator('dialog[open]');
+  // a scan not read yet: its language is not known, so it is chosen
+  if (from) await dlg.getByLabel('Translate from').selectOption(from);
+  await dlg.getByRole('radio', { name: /^English/ }).check();
+  await dlg.locator('input[name="tr-kind"][value="' + kind + '"]').check();
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+}
+
+test('a typed PDF, translated keeping its layout', async ({ app: p }) => {
+  test.setTimeout(240000);
+  await openFile(p, 'carta.pdf');
+  await translatePdf(p, 'layout');
+  await expect(p.locator('#doc-title')).toHaveValue(/\(English\)$/, { timeout: 180000 });
+  await expect(p.locator('#toast')).toContainText('Translated, keeping the layout', { timeout: 180000 });
+  await expect(p.locator('#sb-lang')).toHaveText('English');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('.pdf-download')]);
+  const doc = await reopen(p, dl, 'letter-en.pdf');
+  expect(doc.pages).toBe(1);
+  expect(doc.text).toMatch(/order/i);
+  expect(doc.text).toMatch(/Tuesday/);
+  expect(doc.text).not.toMatch(/pedido|martes/);
+});
+
+test('a PDF\u2019s words, translated into a document to check', async ({ app: p }) => {
+  test.setTimeout(240000);
+  await openFile(p, 'carta.pdf');
+  await translatePdf(p, 'doc');
+  await expect(p.locator('#doc-title')).toHaveValue(/\(English\)$/, { timeout: 180000 });
+  await expect(p.locator('#editor')).toContainText(/Tuesday/);
+  await expect(p.locator('#review')).toBeVisible();
+  await p.locator('#editor p, #editor h1, #editor h2').filter({ hasText: 'Tuesday' }).first().click();
+  await expect(p.locator('#review-orig')).toContainText('martes');
+});
+
+test('a scanned PDF is read, then translated keeping its layout', async ({ app: p }) => {
+  test.setTimeout(300000);
+  await openFile(p, 'scan-es.pdf');
+  await translatePdf(p, 'layout', 'es');
+  await expect(p.locator('#toast')).toContainText('Translated, keeping the layout', { timeout: 280000 });
+  await expect(p.locator('.pdf-conv').first()).toBeVisible();
+  const words = await p.locator('.pdf-conv').allTextContents();
+  expect(words.join(' ')).toMatch(/meeting|Wednesday/i);
+  expect(words.join(' ')).not.toMatch(/reunión|miércoles/);
+});
+
+test('a paragraph that runs longer in translation stays in its own space', async ({ app: p }) => {
+  test.setTimeout(240000);
+  await openFile(p, 'memo.pdf');
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  const dlg = p.locator('dialog[open]');
+  await dlg.getByRole('radio', { name: /^Spanish/ }).check();
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+  await expect(p.locator('#toast')).toContainText('Translated, keeping the layout', { timeout: 180000 });
+  await p.waitForTimeout(1200);
+  const doc = await newestDoc(p);
+  const lines = doc.items.filter((i) => i.text).sort((a, b) => a.base - b.base);
+  // the same lines it had: four for the paragraph, then the signature
+  expect(lines.map((l) => Math.round(l.base))).toEqual(doc.items.map((i) => Math.round(i.base)).filter((b, k, a) => a.indexOf(b) === k).sort((a, b) => a - b));
+  expect(lines).toHaveLength(5);
+  // the paragraph is set a little smaller; the signature keeps its size
+  for (const l of lines.slice(0, 4)) { expect(l.size).toBeLessThan(11); expect(l.size).toBeGreaterThanOrEqual(6.6); }
+  expect(lines[4].size).toBe(11);
+  expect(lines[4].text).toMatch(/Firmado|Firma/);
+  expect(lines.map((l) => l.text).join(' ')).toMatch(/jueves/);
 });

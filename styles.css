@@ -845,6 +845,12 @@ body.view-full .editor { min-height: calc(100vh - 160px); padding: 40px 48px 120
 .welcome-hide input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .muted { color: var(--ink-3); }
 .open-detail { margin: 0; font-size: 12px; word-break: break-word; }
+.lang-list { max-height: min(46vh, 380px); overflow-y: auto; border: 1px solid var(--line); border-radius: var(--radius); padding: 4px; }
+.lang-row { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+.lang-row:hover { background: var(--hover); }
+.lang-row[hidden] { display: none; }
+.lang-row input { margin: 0; accent-color: var(--accent); }
+.lang-native { margin-left: auto; color: var(--ink-3); }
 
 .stack { display: flex; flex-direction: column; gap: 14px; }
 .row2 { display: grid; grid-template-columns: 1fr 120px; gap: 12px; }

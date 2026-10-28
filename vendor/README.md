@@ -21,6 +21,9 @@ Third-party libraries, unmodified:
               WOFF and WOFF2; each folder holds its license (SIL Open Font
               License 1.1, or Apache 2.0 for Roboto Slab).
 
+- franc/      franc-min 6.2.0 (Titus Wormer), MIT, bundled with the three small
+              MIT libraries it uses. Tells which language a text is in.
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used, opentype.js when a scan's letters are made into a font,
 UTIF.js when a TIFF is opened.

@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-38';
+  const APP_VERSION = '2026.10.28-39';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -171,6 +171,69 @@
 
   const scheduleSave = debounce(() => saveNow(), 700);
 
+  /* ----- the document's language ----- */
+
+  // Its own language: found from the text (on this computer) until set by
+  // hand. It decides spell checking, the way text runs, and how scans are read.
+  const docLang = (doc) => (doc && doc.lang) || NpLang.preferred();
+
+  function applyDocLang() {
+    if (!current) return;
+    const code = docLang(current);
+    editor.lang = code;
+    editor.dir = NpLang.isRtl(code) ? 'rtl' : 'ltr';
+    $('#pdf-pages').lang = code;
+    const b = $('#sb-lang');
+    b.textContent = NpLang.name(code);
+    b.title = 'Language of this document: ' + NpLang.name(code) + (current.langAuto === false ? '' : ' (found from its text)') + '. Click to change.';
+  }
+
+  async function detectLang(doc) {
+    if (doc.langAuto === false) return;
+    let code = null;
+    try { code = await NpLang.detect(doc.text); } catch (e) { return; }
+    if (!code || code === doc.lang || doc.langAuto === false) return;
+    doc.lang = code;
+    try { await NpStore.putDoc(doc); } catch (e) { /* the next save keeps it */ }
+    if (doc === current) applyDocLang();
+  }
+
+  async function languageDialog() {
+    if (!current) return;
+    const doc = current;
+    const auto = el('input', { type: 'checkbox', class: 'switch', checked: doc.langAuto !== false });
+    const search = el('input', { type: 'search', class: 'input', placeholder: 'Find a language', 'aria-label': 'Find a language' });
+    let chosen = docLang(doc);
+    const rows = NpLang.list.map((l) => {
+      const radio = el('input', { type: 'radio', name: 'doc-lang', value: l.code, checked: l.code === chosen });
+      radio.addEventListener('change', () => { chosen = l.code; auto.checked = false; });
+      const nat = NpLang.native(l.code);
+      const label = NpLang.name(l.code);
+      return el('label', { class: 'lang-row', 'data-find': (label + ' ' + nat + ' ' + l.code).toLowerCase() }, radio,
+        el('span', { class: 'lang-name' }, label), nat !== label ? el('span', { class: 'lang-native', lang: l.code }, nat) : null);
+    });
+    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': 'Languages' }, rows);
+    search.addEventListener('input', () => {
+      const q = search.value.trim().toLowerCase();
+      for (const r of rows) r.hidden = !!q && !r.dataset.find.includes(q);
+    });
+    const v = await dialog({
+      title: 'Language of this document',
+      body: el('div', { class: 'stack' },
+        el('p', { class: 'dlg-text' }, 'Used for spell checking, the direction the text runs, and reading scans. It is worked out from the text, on this computer, until you choose one.'),
+        el('label', { class: 'toggle-row' }, el('span', {}, 'Work it out from the text'), auto),
+        search, list),
+      actions: [{ label: 'Cancel', value: '' }, { label: 'OK', value: 'ok', primary: true }],
+      onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
+    });
+    if (v !== 'ok') return;
+    doc.langAuto = auto.checked;
+    if (!auto.checked) doc.lang = chosen;
+    await NpStore.putDoc(doc);
+    applyDocLang();
+    if (auto.checked) detectLang(doc);
+  }
+
   async function saveNow(reason) {
     if (!current) return;
     scheduleSave.cancel();
@@ -188,6 +251,7 @@
     }
     doc.updated = Date.now();
     dirty = false;
+    detectLang(doc);
     saving = (async () => {
       try {
         await NpStore.putDoc(doc);
@@ -245,6 +309,7 @@
       setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
       if (mobile) setSidebar(false, true);
       updateSaveUi();
+      applyDocLang();
       // the original file is stored apart from the record, and read when opened
       if (!doc.sources) doc.sources = (await NpStore.getSources(doc)) || [];
       await NpPdf.open(doc);
@@ -264,6 +329,7 @@
     setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
     workspace.scrollTop = 0;
     updateSaveUi();
+    applyDocLang();
     if (!opts.noFocus && !matchMedia('(max-width: 899px)').matches) placeCaretAtStart();
     if (matchMedia('(max-width: 899px)').matches) setSidebar(false, true);
   }
@@ -307,6 +373,7 @@
     if (current && dirty) await saveNow();
     await dropBlankCurrent();
     const doc = Object.assign(newDocRecord('', name), { type: 'pdf', titleAuto: false, sources: [buf], pages: info.pages, pageCount: info.pages.length, items: [], fields: {}, text: info.text, origin });
+    try { doc.lang = (await NpLang.detect(info.text)) || undefined; } catch (e) { /* found later, from what is read */ }
     return addRecord(doc);
   }
 
@@ -1265,6 +1332,7 @@
     save: saveFile,
     'save-as': () => saveAs(),
     'export': exportAs,
+    'doc-lang': languageDialog,
     duplicate: duplicateDoc,
     rename: () => { titleInput.focus(); titleInput.select(); },
     history: historyDialog,
@@ -2246,7 +2314,7 @@
         if (kind === 'txt') return out(new Blob([pages.map((pg) => pg.map((q) => q.runs.map((r) => r.text).join('')).join('\n\n')).join('\n\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }));
         const root = document.createElement('div');
         root.innerHTML = pages.map((pg) => pg.map((q) => '<' + q.tag + '>' + q.runs.map((r) => (r.bold ? '<b>' + escapeHtml(r.text) + '</b>' : escapeHtml(r.text))).join('') + '</' + q.tag + '>').join('')).join('<hr class="page-break">');
-        return out(await NpDocx.export(root, { title: name, fontCss: fontByKey('arial').css, size: 11, lineHeight: 1.15, page: 'letter', margins: 'normal' }));
+        return out(await NpDocx.export(root, { title: name, fontCss: fontByKey('arial').css, size: 11, lineHeight: 1.15, page: 'letter', margins: 'normal', lang: docLang(doc) }));
       }
       // images: a picture of each page, at the image's own resolution or 200 dpi
       const img = await NpImages.fromPdf(pdf, { format: kind, dpi: (doc.origin && doc.origin.dpi) || [200] }, name, safeFileName);
@@ -2255,11 +2323,11 @@
     if (kind === 'txt') return out(new Blob([textIndex(true).text.replace(/\n{3,}/g, '\n\n').trim() + '\n'], { type: 'text/plain;charset=utf-8' }));
     if (kind === 'md') return out(new Blob([NpMarkdown.fromDom(editor)], { type: 'text/markdown;charset=utf-8' }));
     if (kind === 'html') {
-      return out(new Blob(['<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + escapeHtml(name) +
+      return out(new Blob(['<!DOCTYPE html>\n<html lang="' + docLang(doc) + '"' + (NpLang.isRtl(docLang(doc)) ? ' dir="rtl"' : '') + '>\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>' + escapeHtml(name) +
         '</title>\n<style>\n' + exportCss() + '\n</style>\n</head>\n<body>\n<article>' + serialize() + '</article>\n</body>\n</html>\n'], { type: 'text/html;charset=utf-8' }));
     }
     const s = docSettings();
-    return out(await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins }));
+    return out(await NpDocx.export(editor, { title: name, fontCss: fontByKey(s.font).css, size: s.size, lineHeight: s.lineHeight, page: s.paper, margins: s.margins, lang: docLang(doc) }));
   }
 
   // A PDF's words as paragraphs, page by page: [[{ tag, runs: [{ text, bold }] }]].
@@ -2577,6 +2645,7 @@
       pages: raw.pages.filter((p) => p && typeof p.uid === 'string').map((p) => ({ uid: p.uid, src: num(p.src), index: num(p.index), rotate: num(p.rotate) % 360, w: num(p.w), h: num(p.h),
         ...(num(p.skew) && Math.abs(num(p.skew)) <= 10 ? { skew: num(p.skew), paper: /^#[0-9a-f]{6}$/i.test(p.paper) ? p.paper : '#ffffff' } : {}) })),
       pageCount: raw.pages.length, items, fields: raw.fields && typeof raw.fields === 'object' ? raw.fields : {},
+      lang: NpLang.has(raw.lang) ? raw.lang : undefined, langAuto: raw.langAuto === false ? false : undefined,
       // an image opened as a PDF: what to download it as
       origin: raw.origin && ['jpeg', 'png', 'webp', 'tiff', 'bmp'].includes(raw.origin.format) && Array.isArray(raw.origin.dpi)
         ? { format: raw.origin.format, dpi: raw.origin.dpi.map(num).filter((d) => d > 0) } : undefined
@@ -2610,7 +2679,8 @@
         title: String(raw.title || ''), titleAuto: !!raw.titleAuto || !raw.title,
         html: NpSanitize.html(raw.html), text: String(raw.text || ''), words: +raw.words || 0,
         created: +raw.created || Date.now(), updated: +raw.updated || Date.now(),
-        goal: +raw.goal || 0, settings: Object.assign({}, DOC_DEFAULTS, raw.settings)
+        goal: +raw.goal || 0, settings: Object.assign({}, DOC_DEFAULTS, raw.settings),
+        lang: NpLang.has(raw.lang) ? raw.lang : undefined, langAuto: raw.langAuto === false ? false : undefined
       });
       await NpStore.putDoc(doc);
       docs.push(doc);

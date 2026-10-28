@@ -394,7 +394,7 @@
       return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
         '<w:styles xmlns:w="' + NS.w + '">' +
         '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="' + font + '" w:hAnsi="' + font + '" w:cs="' + font + '" w:eastAsia="' + font + '"/>' +
-        '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:lang w:val="en-US"/></w:rPr></w:rPrDefault>' +
+        '<w:sz w:val="' + sz + '"/><w:szCs w:val="' + sz + '"/><w:lang w:val="' + x(o.lang || 'en-US') + '"/></w:rPr></w:rPrDefault>' +
         '<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="' + line + '" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>' +
         '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
         heading(1, Math.round(sz * 2), 360, 120) + heading(2, Math.round(sz * 1.5), 300, 100) + heading(3, Math.round(sz * 1.25), 240, 80) +

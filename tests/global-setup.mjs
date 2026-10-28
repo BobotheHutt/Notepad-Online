@@ -34,6 +34,17 @@ export default async function globalSetup() {
       files['letter.pdf'] = b64(await d.save());
     }
 
+    // a typed letter in Spanish, to tell its language from
+    {
+      const d = await PDFDocument.create();
+      const f = await d.embedFont(StandardFonts.Helvetica);
+      const pg = d.addPage([612, 792]);
+      const lines = ['Estimada señora Rivera:', 'Le escribimos para confirmar que su pedido llegará el próximo martes.',
+        'Si tiene alguna pregunta, no dude en ponerse en contacto con nosotros.', 'Atentamente, el equipo de atención al cliente'];
+      lines.forEach((t, i) => pg.drawText(t, { x: 72, y: 700 - i * 24, size: 12, font: f }));
+      files['carta.pdf'] = b64(await d.save());
+    }
+
     // a form with one of each kind of field
     {
       const d = await PDFDocument.create();

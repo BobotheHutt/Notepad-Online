@@ -4893,6 +4893,8 @@
       if (/encrypt/i.test(String(e && e.message))) throw new Error('This PDF is password-protected, so it cannot be saved with changes.');
       throw e;
     }
+    // the document's language, for screen readers and other programs
+    if (rec.lang) { try { base.setLanguage(rec.lang); } catch (e) { /* ignore */ } }
     const warnings = [];
     // fonts painted into scans must be ready before the canvas draws them
     if (typeof NpFonts !== 'undefined') await Promise.all((rec.items || []).flatMap(itemFonts).map((f) => NpFonts.load(f).catch(() => null)));

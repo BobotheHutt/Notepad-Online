@@ -3,6 +3,7 @@
    NpDocx.import(arrayBuffer)    → Promise<string> (HTML; sanitize before use) */
 (function () {
   'use strict';
+  const _ = NpI18n.t; // the app's own language (js/i18n.js)
 
   const NS = {
     w: 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
@@ -510,7 +511,7 @@
     const zip = await NpZip.read(buffer);
     const parse = (s) => (s ? new DOMParser().parseFromString(s, 'application/xml') : null);
     const doc = parse(await zip.text('word/document.xml'));
-    if (!doc) throw new Error('That file has no Word document inside it.');
+    if (!doc) throw new Error(_('That file has no Word document inside it.'));
     const rels = parse(await zip.text('word/_rels/document.xml.rels'));
     const styles = parse(await zip.text('word/styles.xml'));
     const numbering = parse(await zip.text('word/numbering.xml'));

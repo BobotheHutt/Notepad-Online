@@ -18,6 +18,10 @@
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const DPR = () => Math.min(2, window.devicePixelRatio || 1);
+  // the app's own language (js/i18n.js)
+  const _ = NpI18n.t;
+  const _n = NpI18n.n;
+
   const PT_PX = 96 / 72;
 
   // How far below the top of a text box its first baseline sits, per font
@@ -98,7 +102,7 @@
       const s = document.createElement('script');
       s.src = src;
       s.onload = resolve;
-      s.onerror = () => reject(new Error('Could not load the PDF tools. Check your connection and try again.'));
+      s.onerror = () => reject(new Error(_('Could not load the PDF tools. Check your connection and try again.')));
       document.head.append(s);
     });
   }
@@ -107,7 +111,7 @@
     if (libs) return libs;
     libs = (async () => {
       // PDF.js comes as modules; it puts itself on window.pdfjsLib as well
-      try { await import(vendorUrl('pdfjs/pdf.min.mjs')); } catch (e) { throw new Error('Could not load the PDF tools. Check your connection and try again.'); }
+      try { await import(vendorUrl('pdfjs/pdf.min.mjs')); } catch (e) { throw new Error(_('Could not load the PDF tools. Check your connection and try again.')); }
       pdfjsLib.GlobalWorkerOptions.workerSrc = vendorUrl('pdfjs/pdf.worker.min.mjs');
       await loadScript(VENDOR + 'pdf-lib/pdf-lib.min.js');
     })();
@@ -335,7 +339,7 @@
     S.sel = null;
     S.fit = true;
     const stage = $('#pdf-pages');
-    stage.replaceChildren(el('div', { class: 'pdf-msg' }, 'Opening PDF…'));
+    stage.replaceChildren(el('div', { class: 'pdf-msg' }, _('Opening PDF…')));
     try {
       await loadLibs();
       S.docs = [];
@@ -343,8 +347,8 @@
     } catch (e) {
       const pw = e && e.name === 'PasswordException';
       stage.replaceChildren(el('div', { class: 'pdf-msg' }, pw
-        ? 'This PDF is password-protected. Remove the password in another app, then open it again.'
-        : 'This PDF could not be opened: ' + (e.message || e)));
+        ? _('This PDF is password-protected. Remove the password in another app, then open it again.')
+        : _('This PDF could not be opened: {reason}', { reason: e.message || e })));
       return;
     }
     if (S.rec !== rec) return;
@@ -357,7 +361,7 @@
       await build();
     } catch (e) {
       // loaded, but its pages could not be laid out: say so, not a blank page
-      if (S.rec === rec) stage.replaceChildren(el('div', { class: 'pdf-msg' }, 'This PDF opened, but its pages could not be shown: ' + ((e && e.message) || e) + '. Saving a fresh copy of it from another program often helps.'));
+      if (S.rec === rec) stage.replaceChildren(el('div', { class: 'pdf-msg' }, _('This PDF opened, but its pages could not be shown: {reason}. Saving a fresh copy of it from another program often helps.', { reason: (e && e.message) || e })));
       return;
     }
     setTool(S.tool === 'image' || S.tool === 'sign' ? 'select' : S.tool);
@@ -370,7 +374,7 @@
     if (rec.readAll) setReadAll(true);
     else suggestOcr(rec);
     if (rec.ocr && Object.values(rec.ocr).some((o) => !o.rules)) {
-      api.toast('This PDF’s text was read by an older version of the app. Read the page again (Pages → Keep this page as scanned, then click it with Edit text) for better edits.', 9000);
+      api.toast(_('This PDF’s text was read by an older version of the app. Read the page again (Pages → Keep this page as scanned, then click it with Edit text) for better edits.'), 9000);
     }
     // matched fonts from earlier sessions (and those made from the scan's
     // letters): load them, then redraw with them
@@ -596,7 +600,7 @@
     const n = S.rec ? S.rec.pages.length : 0;
     const cur = currentPage();
     const i = cur ? S.rec.pages.findIndex((p) => p.uid === cur.entry.uid) + 1 : 1;
-    const t = 'Page ' + i + ' of ' + n;
+    const t = _('Page {page} of {total}', { page: i, total: n });
     const sb = $('#sb-pdf');
     if (sb) sb.textContent = t;
     for (const li of document.querySelectorAll('.pdf-thumb')) li.classList.toggle('on', cur && li.dataset.uid === cur.entry.uid);
@@ -661,13 +665,13 @@
         const b = handBox(it);
         layer.append(el('div', {
           class: 'pdf-hand' + (it.erased ? ' erased' : '') + (it.id === S.sel ? ' sel' : ''), 'data-id': it.id,
-          title: it.erased ? 'Erased handwriting. Select it and choose Put back to restore it.' : 'Handwriting, left as it was scanned. Select it to erase it.',
+          title: it.erased ? _('Erased handwriting. Select it and choose Put back to restore it.') : _('Handwriting, left as it was scanned. Select it to erase it.'),
           style: 'left:' + px(b.x) + ';top:' + px(b.y) + ';width:' + px(b.w) + ';height:' + px(b.h)
         }));
         if (it.erased && it.id === S.sel && it.parts) {
           it.parts.forEach((q, k) => layer.append(el('div', {
             class: 'pdf-hand-part' + (q.keep ? ' keep' : ''), 'data-hand': it.id, 'data-part': k,
-            title: q.keep ? 'Kept as part of the form. Click to erase it too.' : 'Erased. Click to keep it.',
+            title: q.keep ? _('Kept as part of the form. Click to erase it too.') : _('Erased. Click to keep it.'),
             style: 'left:' + px(q.x0 - 0.5) + ';top:' + px(q.y0 - 0.5) + ';width:' + px(q.x1 - q.x0 + 1) + ';height:' + px(q.y1 - q.y0 + 1)
           })));
         }
@@ -700,7 +704,7 @@
           if (!r.o) continue;
           const w = r.o;
           layer.append(el('div', {
-            class: 'pdf-proof' + (doubtful(w) ? ' doubt' : ''), 'data-fix': it.id + ':' + it.words.indexOf(w), title: 'Read as “' + w.t + '”. Click to correct it.',
+            class: 'pdf-proof' + (doubtful(w) ? ' doubt' : ''), 'data-fix': it.id + ':' + it.words.indexOf(w), title: _('Read as “{word}”. Click to correct it.', { word: w.t }),
             style: 'left:' + px(w.x0 - 1) + ';top:' + px(w.y0 - 1) + ';width:' + px(w.x1 - w.x0 + 2) + ';height:' + px(w.y1 - w.y0 + 2)
           }));
         }
@@ -712,7 +716,7 @@
         const li = +t.key.split(':ocr')[1].split('.')[0];
         for (const w of t.words) {
           layer.append(el('div', {
-            class: 'pdf-proof doubt', 'data-fix': 'ocr:' + li + ':' + w.ri, title: 'Read as “' + w.t + '”. Click to correct it.',
+            class: 'pdf-proof doubt', 'data-fix': 'ocr:' + li + ':' + w.ri, title: _('Read as “{word}”. Click to correct it.', { word: w.t }),
             style: 'left:' + px(w.x0 - 1) + ';top:' + px(w.y0 - 1) + ';width:' + px(w.x1 - w.x0 + 2) + ';height:' + px(w.y1 - w.y0 + 2)
           }));
         }
@@ -748,7 +752,7 @@
       for (const r of lay) {
         const d = el('div', {
           class: 'pdf-item pdf-textbox pdf-run pdf-conv' + (r.o && doubtful(r.o) ? ' pdf-doubt' : ''), 'data-id': it.id,
-          'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? 'This word may have been misread: right-click to check it against the scan' : null,
+          'data-fix': r.o ? it.id + ':' + it.words.indexOf(r.o) : null, title: r.o && doubtful(r.o) ? _('This word may have been misread: right-click to check it against the scan') : null,
           style: 'left:' + px(r.x) + ';top:' + px(r.base - BASELINE[it.family] * it.size) + ';font-size:' + px(it.size) + ';font-family:' + familyCss(r.st).replace(/"/g, "'") +
             ';color:' + it.color + ';font-weight:' + (r.st.font ? r.st.font.weight : r.st.bold ? 700 : 400) + ';font-style:' + (r.st.italic ? 'italic' : 'normal') +
             (Math.abs(r.scaleX - 1) > 0.002 ? ';transform:scaleX(' + r.scaleX.toFixed(3) + ');transform-origin:0 0' : '')
@@ -1000,7 +1004,7 @@
     const frag = document.createDocumentFragment();
     for (const t of items) {
       if (used.has(t.key)) continue;
-      frag.append(el('div', { class: 'pdf-target', 'data-key': t.key, title: 'Click to edit', 'aria-label': 'Edit: ' + t.str, style: 'left:' + px(t.x) + ';top:' + px(t.top) + ';width:' + px(Math.max(t.w, 2)) + ';height:' + px(t.base - t.top + t.size * 0.25) }));
+      frag.append(el('div', { class: 'pdf-target', 'data-key': t.key, title: _('Click to edit'), 'aria-label': _('Edit: {text}', { text: t.str }), style: 'left:' + px(t.x) + ';top:' + px(t.top) + ';width:' + px(Math.max(t.w, 2)) + ';height:' + px(t.base - t.top + t.size * 0.25) }));
     }
     info.layer.prepend(frag);
   }
@@ -1059,17 +1063,17 @@
     list.replaceChildren(...S.rec.pages.map((entry, i) => {
       const info = S.info.get(entry.uid);
       const ratio = info.h / info.w;
-      const btn = (icon, label, fn, disabled) => el('button', { type: 'button', class: 'icon-btn sm', 'data-icon': icon, title: label, 'aria-label': label + ', page ' + (i + 1), disabled: !!disabled, onclick: (ev) => { ev.stopPropagation(); fn(); } });
+      const btn = (icon, label, fn, disabled) => el('button', { type: 'button', class: 'icon-btn sm', 'data-icon': icon, title: label, 'aria-label': _('{action}, page {page}', { action: label, page: i + 1 }), disabled: !!disabled, onclick: (ev) => { ev.stopPropagation(); fn(); } });
       const li = el('li', { class: 'pdf-thumb', 'data-uid': entry.uid },
-        el('button', { type: 'button', class: 'pdf-thumb-open', 'aria-label': 'Go to page ' + (i + 1), onclick: () => scrollToPage(entry.uid) },
+        el('button', { type: 'button', class: 'pdf-thumb-open', 'aria-label': _('Go to page {page}', { page: i + 1 }), onclick: () => scrollToPage(entry.uid) },
           el('canvas', { class: 'pdf-thumb-canvas', width: 112, height: Math.round(112 * ratio) }),
           el('span', { class: 'pdf-thumb-num' }, String(i + 1))),
         el('div', { class: 'pdf-thumb-actions' },
-          btn('rotateL', 'Rotate left', () => rotatePage(entry.uid, -1)),
-          btn('rotateR', 'Rotate right', () => rotatePage(entry.uid, 1)),
-          btn('up', 'Move up', () => movePage(entry.uid, -1), i === 0),
-          btn('down', 'Move down', () => movePage(entry.uid, 1), i === n - 1),
-          btn('trash', 'Delete page', () => deletePage(entry.uid), n === 1)));
+          btn('rotateL', _('Rotate left'), () => rotatePage(entry.uid, -1)),
+          btn('rotateR', _('Rotate right'), () => rotatePage(entry.uid, 1)),
+          btn('up', _('Move up'), () => movePage(entry.uid, -1), i === 0),
+          btn('down', _('Move down'), () => movePage(entry.uid, 1), i === n - 1),
+          btn('trash', _('Delete page'), () => deletePage(entry.uid), n === 1)));
       S.thumbObserver.observe(li);
       return li;
     }));
@@ -1131,7 +1135,7 @@
 
   async function rotatePage(uidv, dir) {
     if (S.rec.items.some((i) => i.page === uidv && (i.anchored || i.conv || i.type === 'hand'))) {
-      api.toast('This page has text edits tied to its original lines. Rotate it before editing text, or undo the edits first.', 6000);
+      api.toast(_('This page has text edits tied to its original lines. Rotate it before editing text, or undo the edits first.'), 6000);
       return;
     }
     const before = snap();
@@ -1158,13 +1162,13 @@
   }
 
   async function deletePage(uidv) {
-    if (S.rec.pages.length <= 1) { api.toast('A PDF needs at least one page.'); return; }
+    if (S.rec.pages.length <= 1) { api.toast(_('A PDF needs at least one page.')); return; }
     const before = snap();
     S.rec.pages = S.rec.pages.filter((p) => p.uid !== uidv);
     S.rec.items = S.rec.items.filter((i) => i.page !== uidv);
     commit(before);
     await build();
-    api.toast('Page deleted. Undo (Ctrl+Z) brings it back.');
+    api.toast(_('Page deleted. Undo (Ctrl+Z) brings it back.'));
   }
 
   async function insertBlank() {
@@ -1184,7 +1188,7 @@
   async function addPagesFrom(file) {
     const buf = await file.arrayBuffer();
     let doc;
-    try { doc = await loadPdfJs(buf); } catch (e) { api.toast('“' + file.name + '” could not be opened as a PDF.'); return; }
+    try { doc = await loadPdfJs(buf); } catch (e) { api.toast(_('“{name}” could not be opened as a PDF.', { name: file.name })); return; }
     const before = snap();
     S.rec.sources.push(buf);
     S.docs.push(doc);
@@ -1196,7 +1200,7 @@
     commit(before);
     await build();
     scrollToPage(first);
-    api.toast('Added ' + doc.numPages + ' page' + (doc.numPages === 1 ? '' : 's') + ' from “' + file.name + '”');
+    api.toast(_n(doc.numPages, 'Added {n} page from “{name}”', 'Added {n} pages from “{name}”', { name: file.name }));
   }
 
   /* ============================================================ tools */
@@ -1214,7 +1218,7 @@
     if (t !== 'select') S.sel = null;
     renderAllOverlays();
     renderStyleBar();
-    if (t === 'edit' && S.rec) api.toast('Click any text on the page to change it.', 2400);
+    if (t === 'edit' && S.rec) api.toast(_('Click any text on the page to change it.'), 2400);
   }
 
   function select(id) {
@@ -1633,7 +1637,7 @@
       if (ref === undefined) {
         if (name) ref = await NpFonts.fromName(name, { bold: it.bold, italic: it.italic });
         if (!ref) {
-          api.status('Matching the font…', 'pending');
+          api.status(_('Matching the font…'), 'pending');
           // more words make a surer match: this phrase plus others on the page
           // set at the same size and weight
           const sw = (ws) => { const v = ws.map((w) => w.sw).filter((x) => x > 0).sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
@@ -1660,7 +1664,7 @@
       await NpFonts.load(ref);
     } catch (e) {
       api.saved();
-      if (!S.fontWarned) { S.fontWarned = true; api.toast('The matching font could not be downloaded, so the closest standard font is used.', 5000); }
+      if (!S.fontWarned) { S.fontWarned = true; api.toast(_('The matching font could not be downloaded, so the closest standard font is used.'), 5000); }
       return;
     }
     if (!itemById(it.id)) return;
@@ -1762,7 +1766,7 @@
     return new Promise((resolve, reject) => {
       const i = new Image();
       i.onload = () => resolve(i);
-      i.onerror = () => reject(new Error('That image could not be read.'));
+      i.onerror = () => reject(new Error(_('That image could not be read.')));
       i.src = src;
     });
   }
@@ -1798,7 +1802,7 @@
       try {
         const src = await new Promise((resolve, reject) => { const fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.onerror = () => reject(fr.error); fr.readAsDataURL(f); });
         await placeImage(src);
-      } catch (e) { api.toast(e.message || 'That image could not be added.'); }
+      } catch (e) { api.toast(e.message || _('That image could not be added.')); }
     };
     input.click();
   }
@@ -1820,19 +1824,19 @@
     const end = () => { last = null; };
     canvas.addEventListener('pointerup', end);
     canvas.addEventListener('pointercancel', end);
-    const clear = el('button', { type: 'button', class: 'btn btn-sm', onclick: () => { ctx.clearRect(0, 0, canvas.width, canvas.height); drawn = false; } }, 'Clear');
+    const clear = el('button', { type: 'button', class: 'btn btn-sm', onclick: () => { ctx.clearRect(0, 0, canvas.width, canvas.height); drawn = false; } }, _('Clear'));
     const body = el('div', { class: 'stack' },
-      el('p', { class: 'dlg-text' }, 'Sign in the box with your mouse, finger or pen.'),
+      el('p', { class: 'dlg-text' }, _('Sign in the box with your mouse, finger or pen.')),
       canvas,
       el('div', { class: 'sig-row' }, clear,
-        el('label', { class: 'toggle-row sig-remember' }, el('span', {}, 'Remember for next time'), el('input', { type: 'checkbox', class: 'switch', id: 'sig-remember', checked: true }))));
-    const actions = [{ label: 'Cancel', value: '' }];
-    if (saved) actions.push({ label: 'Use saved signature', value: 'saved' });
-    actions.push({ label: 'Add signature', value: 'ok', primary: true });
-    const v = await api.dialog({ title: 'Signature', body, actions, wide: true });
+        el('label', { class: 'toggle-row sig-remember' }, el('span', {}, _('Remember for next time')), el('input', { type: 'checkbox', class: 'switch', id: 'sig-remember', checked: true }))));
+    const actions = [{ label: _('Cancel'), value: '' }];
+    if (saved) actions.push({ label: _('Use saved signature'), value: 'saved' });
+    actions.push({ label: _('Add signature'), value: 'ok', primary: true });
+    const v = await api.dialog({ title: _('Signature'), body, actions, wide: true });
     if (v === 'saved' && saved) { await placeImage(saved, { signature: true }); return; }
     if (v !== 'ok') return;
-    if (!drawn) { api.toast('Draw your signature first.'); return; }
+    if (!drawn) { api.toast(_('Draw your signature first.')); return; }
     const png = trimCanvas(canvas);
     if (body.querySelector('#sig-remember').checked) { try { localStorage.setItem('np.signature', png); } catch (e) { /* ignore */ } }
     await placeImage(png, { signature: true });
@@ -1885,7 +1889,7 @@
 
   async function tesseract() {
     if (!/^https?:$/.test(location.protocol)) {
-      throw new Error('Reading text needs the app opened from its web address, not from a file on this computer.');
+      throw new Error(_('Reading text needs the app opened from its web address, not from a file on this computer.'));
     }
     if (typeof Tesseract === 'undefined') await loadScript(VENDOR + 'tesseract/tesseract.min.js');
   }
@@ -1909,7 +1913,7 @@
     let timer;
     return Promise.race([
       promise.finally(() => clearTimeout(timer)),
-      new Promise((resolve, reject) => { timer = setTimeout(() => { onLate(); reject(new Error('The text reader stopped answering')); }, readLimit()); })
+      new Promise((resolve, reject) => { timer = setTimeout(() => { onLate(); reject(new Error(_('The text reader stopped answering'))); }, readLimit()); })
     ]);
   }
 
@@ -1918,7 +1922,7 @@
     await tesseract();
     if (!OCR.pools.has(lang)) {
       const pool = (async () => {
-        api.status('Getting text recognition ready…', 'pending');
+        api.status(_('Getting text recognition ready…'), 'pending');
         const sch = Tesseract.createScheduler();
         // starting up counts too: a reader can hang while it loads
         const ws = await inTime(Promise.all(Array.from({ length: poolSize() }, () => newReader('fast', lang))), () => {});
@@ -2426,7 +2430,7 @@
   function progress() {
     if (!RQ.whole || !RQ.total) return;
     const left = RQ.want.length + RQ.running.size;
-    if (left) api.status('Reading the document: page ' + Math.min(RQ.total, RQ.total - left + 1) + ' of ' + RQ.total + '…', 'pending');
+    if (left) api.status(_('Reading the document: page {page} of {total}…', { page: Math.min(RQ.total, RQ.total - left + 1), total: RQ.total }), 'pending');
   }
 
   let saveSoon = 0;
@@ -2532,16 +2536,16 @@
     bgChanged(true);
     api.saveNow();
     if (!whole) {
-      if (st.failed) api.toast('This page could not be read. Click it again with Edit text to try once more.', 7000);
+      if (st.failed) api.toast(_('This page could not be read. Click it again with Edit text to try once more.'), 7000);
       return;
     }
     const parts = [];
-    if (st.turned) parts.push('Turned ' + st.turned + ' page' + (st.turned === 1 ? '' : 's') + ' the right way up.');
-    if (st.straightened) parts.push('Straightened ' + st.straightened + ' crooked page' + (st.straightened === 1 ? '' : 's') + '.');
-    if (st.made) parts.push('The whole document is read: ' + st.made + ' page' + (st.made === 1 ? ' is' : 's are') + ' now editable and searchable.');
-    else if (st.found) parts.push('The whole document is read and searchable.');
-    else if (!st.failed) parts.push('No readable text was found on the scanned pages.');
-    if (st.failed) parts.push(st.failed + ' page' + (st.failed === 1 ? '' : 's') + ' could not be read and ' + (st.failed === 1 ? 'is' : 'are') + ' left as scanned; click ' + (st.failed === 1 ? 'it' : 'one') + ' with Edit text to try again.');
+    if (st.turned) parts.push(_n(st.turned, 'Turned {n} page the right way up.', 'Turned {n} pages the right way up.'));
+    if (st.straightened) parts.push(_n(st.straightened, 'Straightened {n} crooked page.', 'Straightened {n} crooked pages.'));
+    if (st.made) parts.push(_n(st.made, 'The whole document is read: {n} page is now editable and searchable.', 'The whole document is read: {n} pages are now editable and searchable.'));
+    else if (st.found) parts.push(_('The whole document is read and searchable.'));
+    else if (!st.failed) parts.push(_('No readable text was found on the scanned pages.'));
+    if (st.failed) parts.push(_n(st.failed, '{n} page could not be read and is left as scanned; click it with Edit text to try again.', '{n} pages could not be read and are left as scanned; click one with Edit text to try again.'));
     api.toast(parts.join(' '), 8000);
   }
 
@@ -2569,7 +2573,7 @@
     }
     if (S.rec !== rec || !rec.readAll) return;
     if (!todo.length && !RQ.running.size) {
-      api.toast(order.some((i) => rec.ocr && rec.ocr[i.entry.uid]) ? 'Every scanned page is already read.' : 'This PDF has no scanned pages: its text can be edited directly.', 5000);
+      api.toast(order.some((i) => rec.ocr && rec.ocr[i.entry.uid]) ? _('Every scanned page is already read.') : _('This PDF has no scanned pages: its text can be edited directly.'), 5000);
       return;
     }
     RQ.want = RQ.want.concat(todo.filter((u) => !RQ.want.includes(u)));
@@ -2609,14 +2613,14 @@
   async function clickRead(info, x, y) {
     if (info.reading) return;
     info.reading = true;
-    const note = el('div', { class: 'pdf-reading', role: 'status' }, 'Reading this page…');
+    const note = el('div', { class: 'pdf-reading', role: 'status' }, _('Reading this page…'));
     info.el.append(note);
     const rec = S.rec;
     try {
       await tesseract();
       await readPage(info);
     } catch (e) {
-      api.toast(e.message || 'Text recognition failed.', 7000);
+      api.toast(e.message || _('Text recognition failed.'), 7000);
     } finally {
       info.reading = false;
       note.remove();
@@ -2624,7 +2628,7 @@
     if (S.rec !== rec) return;
     if (!isConv(info.entry.uid)) {
       const o = rec.ocr && rec.ocr[info.entry.uid];
-      api.toast(o && o.lines.length ? 'The text on this page was read: click a word to edit it.' : 'No readable text was found on this page. Very faint or handwritten pages may not work.', 5000);
+      api.toast(o && o.lines.length ? _('The text on this page was read: click a word to edit it.') : _('No readable text was found on this page. Very faint or handwritten pages may not work.'), 5000);
       return;
     }
     // the line under the click, or the nearest one within reach
@@ -2648,7 +2652,7 @@
     if (!info) return;
     const edited = new Map(S.rec.items.filter((i) => i.conv && i.page === info.entry.uid).map((i) => [i.origKey, i.text]));
     const items = (await textItems(info)).map((t) => (edited.has(t.key) ? Object.assign({}, t, { str: edited.get(t.key) }) : t)).filter((t) => t.str);
-    if (!items.length) { api.toast('This page has no text to copy. If it is a scan, click it with Edit text first to read it.'); return; }
+    if (!items.length) { api.toast(_('This page has no text to copy. If it is a scan, click it with Edit text first to read it.')); return; }
     const lines = [];
     let lastBase = null;
     for (const t of items.slice().sort((p, q) => (Math.abs(p.base - q.base) < p.size * 0.5 ? p.x - q.x : p.base - q.base))) {
@@ -2657,8 +2661,8 @@
       lastBase = t.base;
     }
     const text = lines.join('\n').replace(/ {2,}/g, ' ');
-    try { await navigator.clipboard.writeText(text); api.toast('Copied the text of this page'); }
-    catch (e) { api.toast('Your browser blocked copying. Select the text in the downloaded PDF instead.'); }
+    try { await navigator.clipboard.writeText(text); api.toast(_('Copied the text of this page')); }
+    catch (e) { api.toast(_('Your browser blocked copying. Select the text in the downloaded PDF instead.')); }
   }
 
   /* ----- making a scanned page's text real text ----- */
@@ -2938,7 +2942,7 @@
       const sc = smallCapsOf(q.t.words, cd, c.width, c.height, K, q.ink.bg);
       if (sc) { q.caps = sc.ratio; q.t = Object.assign({}, q.t, { words: sc.words }); }
     }
-    api.status('Matching the fonts…', 'pending');
+    api.status(_('Matching the fonts…'), 'pending');
     const out = [];
     const rgb = (hex) => [1, 3, 5].map((p) => parseInt(hex.slice(p, p + 2), 16));
     for (const bold of [false, true]) {
@@ -3054,38 +3058,38 @@
   async function convertCurrent() {
     const info = currentPage();
     if (!info || !S.rec) return;
-    if (isConv(info.entry.uid)) { api.toast('This page’s text is already editable. Click a line with Edit text to change it.'); return; }
+    if (isConv(info.entry.uid)) { api.toast(_('This page’s text is already editable. Click a line with Edit text to change it.')); return; }
     const ocr = S.rec.ocr && S.rec.ocr[info.entry.uid];
     if (!ocrFits(ocr, info.entry, info.rot)) { await clickRead(info, -1, -1); return; }
     const before = snap();
     let n = 0;
     S.convNoFont = false;
     try { n = await convertPage(info); } finally { api.saved(); }
-    if (!n) { api.toast(S.convNoFont ? 'The fonts needed to redraw this page could not be downloaded. Check your connection and try again.' : 'No text on this page was read clearly enough to make editable.'); return; }
+    if (!n) { api.toast(S.convNoFont ? _('The fonts needed to redraw this page could not be downloaded. Check your connection and try again.') : _('No text on this page was read clearly enough to make editable.')); return; }
     commit(before);
     setTool('edit');
     renderOverlay(info);
-    api.toast('The text on this page is now editable. Click any line to change it.', 5000);
+    api.toast(_('The text on this page is now editable. Click any line to change it.'), 5000);
   }
 
   // Back to the scan as it was; Edit text then patches single words instead.
   function unconvertCurrent() {
     const info = currentPage();
-    if (!info || !isConv(info.entry.uid)) { api.toast('This page is shown as it was scanned already.'); return; }
+    if (!info || !isConv(info.entry.uid)) { api.toast(_('This page is shown as it was scanned already.')); return; }
     const before = snap();
     S.rec.items = S.rec.items.filter((i) => !(i.page === info.entry.uid && (i.conv || i.type === 'hand')));
     S.sel = null;
     commit(before);
     renderOverlay(info);
     renderStyleBar();
-    api.toast('This page is back to the original scan. Edit text now changes single words and leaves the rest of the scan as it is.', 7000);
+    api.toast(_('This page is back to the original scan. Edit text now changes single words and leaves the rest of the scan as it is.'), 7000);
   }
 
   async function setHand(list, erased, before0) {
     if (!list.length) return;
     const before = before0 || snap();
     if (erased) {
-      api.status('Finding the pen strokes…', 'pending');
+      api.status(_('Finding the pen strokes…'), 'pending');
       for (const it of list) {
         const info = S.info.get(it.page);
         if (!it.parts && info && info.page) { try { it.parts = await handParts(info, it); } catch (e) { it.parts = null; } }
@@ -3166,12 +3170,12 @@
     const cv = el('canvas', { class: 'pdf-fix-scan' });
     cv.width = Math.ceil((w.x1 - w.x0 + pad * 2) * k);
     cv.height = Math.ceil((w.y1 - w.y0 + pad * 2) * k);
-    const input = el('input', { type: 'text', class: 'pdf-fix-input', value: tg.t, 'aria-label': 'What this word says', spellcheck: 'true' });
-    const box = el('div', { class: 'pdf-fix', role: 'dialog', 'aria-label': 'Correct this word' },
-      el('div', { class: 'pdf-fix-label' }, 'Scanned word'), cv,
-      el('div', { class: 'pdf-fix-label' }, ref.startsWith('ocr:') ? 'OCR read it as (used only to search and copy; the page shows it as written)' : 'It says'), input,
-      el('div', { class: 'pdf-fix-hint' }, (tg.w && doubtful(tg.w) ? 'OCR was unsure of this word. ' : '') + 'Enter saves · Tab goes to the next word to check · Esc cancels'),
-      tg.it ? el('button', { type: 'button', class: 'btn btn-sm pdf-fix-edit' }, 'Edit the whole line instead') : null);
+    const input = el('input', { type: 'text', class: 'pdf-fix-input', value: tg.t, 'aria-label': _('What this word says'), spellcheck: 'true' });
+    const box = el('div', { class: 'pdf-fix', role: 'dialog', 'aria-label': _('Correct this word') },
+      el('div', { class: 'pdf-fix-label' }, _('Scanned word')), cv,
+      el('div', { class: 'pdf-fix-label' }, ref.startsWith('ocr:') ? _('OCR read it as (used only to search and copy; the page shows it as written)') : _('It says')), input,
+      el('div', { class: 'pdf-fix-hint' }, (tg.w && doubtful(tg.w) ? _('OCR was unsure of this word.') + ' ' : '') + _('Enter saves · Tab goes to the next word to check · Esc cancels')),
+      tg.it ? el('button', { type: 'button', class: 'btn btn-sm pdf-fix-edit' }, _('Edit the whole line instead')) : null);
     info.el.append(box);
     S.fix = { info, tg, box };
     const editBtn = box.querySelector('.pdf-fix-edit');
@@ -3228,7 +3232,7 @@
       b.addEventListener('click', () => { closeWordMenu(); fn(); });
       return b;
     };
-    const copy = async (text) => { try { await navigator.clipboard.writeText(text); } catch (err) { api.toast('Your browser blocked copying.'); } };
+    const copy = async (text) => { try { await navigator.clipboard.writeText(text); } catch (err) { api.toast(_('Your browser blocked copying.')); } };
     const cv = el('canvas', { class: 'pdf-menu-scan' });
     const k = 3;
     const pad = 2;
@@ -3236,13 +3240,13 @@
     cv.height = Math.ceil((w.y1 - w.y0 + pad * 2) * k);
     const doubt = tg.w && doubtful(tg.w);
     const menu = el('div', { class: 'pdf-word-menu', role: 'menu' },
-      el('div', { class: 'pdf-menu-head' }, cv, el('div', { class: 'pdf-menu-read' }, (doubt ? 'Possibly misread as “' : 'Read as “') + tg.t + '”')),
-      item(doubt ? 'Check and correct this word…' : 'Correct this word…', () => openFix(info, ref)),
+      el('div', { class: 'pdf-menu-head' }, cv, el('div', { class: 'pdf-menu-read' }, doubt ? _('Possibly misread as “{word}”', { word: tg.t }) : _('Read as “{word}”', { word: tg.t }))),
+      item(doubt ? _('Check and correct this word…') : _('Correct this word…'), () => openFix(info, ref)),
       el('div', { class: 'pdf-menu-sep' }),
-      tg.it ? item('Edit text', () => { setTool('edit'); startEditing(tg.it.id); }) : null,
-      item('Copy word', () => copy(tg.t)),
-      tg.it ? item('Copy line', () => copy(lineText)) : null,
-      item('Copy page text', () => copyPageText()));
+      tg.it ? item(_('Edit text'), () => { setTool('edit'); startEditing(tg.it.id); }) : null,
+      item(_('Copy word'), () => copy(tg.t)),
+      tg.it ? item(_('Copy line'), () => copy(lineText)) : null,
+      item(_('Copy page text'), () => copyPageText()));
     document.body.append(menu);
     const r = menu.getBoundingClientRect();
     menu.style.left = Math.max(4, Math.min(e.clientX, innerWidth - r.width - 4)) + 'px';
@@ -3501,7 +3505,7 @@
     if (!todo.length) return;
     if (!scanFontLib) scanFontLib = Promise.all([loadScript(VENDOR + 'opentype/opentype.min.js'), loadScript('js/scanfont.js')]);
     await scanFontLib;
-    api.status('Making fonts from the scan’s letters…', 'pending');
+    api.status(_('Making fonts from the scan’s letters…'), 'pending');
     for (const [key, per] of todo) {
       const [id, weight, style] = key.split(':');
       try {
@@ -3523,13 +3527,13 @@
 
   async function toggleScanFonts() {
     if (!S.rec) return;
-    if (!S.rec.scanFonts || !Object.keys(S.rec.scanFonts).length) { api.toast('This document has no letters taken from a scan yet. Click a scanned page with Edit text first to read it.', 5000); return; }
+    if (!S.rec.scanFonts || !Object.keys(S.rec.scanFonts).length) { api.toast(_('This document has no letters taken from a scan yet. Click a scanned page with Edit text first to read it.'), 5000); return; }
     S.rec.scanFontsOff = !S.rec.scanFontsOff;
     useScanFonts();
     await Promise.all(S.rec.items.flatMap(itemFonts).map((f) => NpFonts.load(f).catch(() => null)));
     renderAllOverlays();
     changed();
-    api.toast(S.rec.scanFontsOff ? 'Using the matched fonts as they are.' : 'Using the scan’s own letter shapes.', 3000);
+    api.toast(S.rec.scanFontsOff ? _('Using the matched fonts as they are.') : _('Using the scan’s own letter shapes.'), 3000);
   }
 
   // How much narrower the scan's letters are than the matched font's, for a
@@ -4167,9 +4171,9 @@
     };
     if (kind === 'text' || kind === 'edit') {
       const cur = it || st;
-      const opts = [['sans', 'Sans (Helvetica)'], ['serif', 'Serif (Times)'], ['mono', 'Mono (Courier)']];
+      const opts = [['sans', _('Sans (Helvetica)')], ['serif', _('Serif (Times)')], ['mono', _('Mono (Courier)')]];
       if (it && it.font) opts.unshift(['matched', NpFonts.label(it.font) + ' (original)']);
-      const fam = el('select', { class: 'tb-select', 'aria-label': 'Font', title: 'Font' },
+      const fam = el('select', { class: 'tb-select', 'aria-label': _('Font'), title: _('Font') },
         opts.map(([v, l]) => el('option', { value: v, selected: v === 'matched' ? true : !(it && it.font) && cur.family === v }, l)));
       fam.addEventListener('change', () => {
         if (fam.value === 'matched') return;
@@ -4179,9 +4183,9 @@
       // the item's own size is always listed (a size read from a scan is rarely a whole number)
       const own = Math.round(cur.size * 10) / 10;
       const sizes = SIZES.includes(own) ? SIZES : SIZES.concat([own]).sort((a, b) => a - b);
-      const size = el('select', { class: 'tb-select', 'aria-label': 'Size', title: 'Size' }, sizes.map((n) => el('option', { value: n, selected: Math.abs(n - cur.size) < 0.05 }, String(n))));
+      const size = el('select', { class: 'tb-select', 'aria-label': _('Size'), title: _('Size') }, sizes.map((n) => el('option', { value: n, selected: Math.abs(n - cur.size) < 0.05 }, String(n))));
       size.addEventListener('change', () => { st.size = +size.value; update((i) => { i.size = +size.value; }); });
-      const color = el('input', { type: 'color', class: 'pdf-color', value: cur.color || '#000000', 'aria-label': 'Text color', title: 'Text color' });
+      const color = el('input', { type: 'color', class: 'pdf-color', value: cur.color || '#000000', 'aria-label': _('Text color'), title: _('Text color') });
       color.addEventListener('change', () => { st.color = color.value; update((i) => { i.color = color.value; }); });
       const tog = (icon, label, prop) => {
         const b = el('button', { type: 'button', class: 'tb' + (cur[prop] ? ' on' : ''), 'data-icon': icon, title: label, 'aria-label': label, 'aria-pressed': cur[prop] ? 'true' : 'false' });
@@ -4216,34 +4220,34 @@
         });
         return b;
       };
-      parts.push(fam, size, color, tog('bold', 'Bold', 'bold'), tog('italic', 'Italic', 'italic'));
+      parts.push(fam, size, color, tog('bold', _('Bold'), 'bold'), tog('italic', _('Italic'), 'italic'));
     } else if (kind === 'ink' || kind === 'draw' || kind === 'box') {
       const isInk = kind === 'ink' || kind === 'draw';
       const cur = it ? it.color : (isInk ? st.ink : st.box);
       const wcur = it ? it.width : (isInk ? st.inkWidth : st.boxWidth);
-      const color = el('input', { type: 'color', class: 'pdf-color', value: cur, 'aria-label': 'Color', title: 'Color' });
+      const color = el('input', { type: 'color', class: 'pdf-color', value: cur, 'aria-label': _('Color'), title: _('Color') });
       color.addEventListener('change', () => { if (isInk) st.ink = color.value; else st.box = color.value; update((i) => { i.color = color.value; }); });
-      const width = el('select', { class: 'tb-select', 'aria-label': 'Line width', title: 'Line width' }, [0.5, 1, 1.5, 2, 3, 4, 6, 8, 12].map((n) => el('option', { value: n, selected: n === wcur }, n + ' pt')));
+      const width = el('select', { class: 'tb-select', 'aria-label': _('Line width'), title: _('Line width') }, [0.5, 1, 1.5, 2, 3, 4, 6, 8, 12].map((n) => el('option', { value: n, selected: n === wcur }, n + ' pt')));
       width.addEventListener('change', () => { if (isInk) st.inkWidth = +width.value; else st.boxWidth = +width.value; update((i) => { i.width = +width.value; }); });
       parts.push(color, width);
     } else if (kind === 'highlight' || kind === 'whiteout') {
       const prop = kind === 'highlight' ? 'hl' : 'white';
-      const color = el('input', { type: 'color', class: 'pdf-color', value: it ? it.color : st[prop], 'aria-label': 'Color', title: 'Color' });
+      const color = el('input', { type: 'color', class: 'pdf-color', value: it ? it.color : st[prop], 'aria-label': _('Color'), title: _('Color') });
       color.addEventListener('change', () => { st[prop] = color.value; update((i) => { i.color = color.value; }); });
       parts.push(color);
     }
     if (it && it.type === 'hand') {
-      const b = el('button', { type: 'button', class: 'btn btn-sm', title: it.erased ? 'Show this handwriting again' : 'Take this handwriting off the page (Del)' }, it.erased ? 'Put back' : 'Erase handwriting');
+      const b = el('button', { type: 'button', class: 'btn btn-sm', title: it.erased ? _('Show this handwriting again') : _('Take this handwriting off the page (Del)') }, it.erased ? _('Put back') : _('Erase handwriting'));
       b.addEventListener('mousedown', (e) => e.preventDefault());
       b.addEventListener('click', () => setHand([it], !it.erased));
-      const hint = it.erased && it.parts ? el('span', { class: 'pdf-style-hint' }, 'Click a piece to keep or erase it') : null;
+      const hint = it.erased && it.parts ? el('span', { class: 'pdf-style-hint' }, _('Click a piece to keep or erase it')) : null;
       bar.replaceChildren(...[b, hint].filter(Boolean));
       bar.hidden = false;
       return;
     }
     if (it && it.conv && it.words.length && !it.para) {
       // a line that should not have been retyped (writing, a logo): back to the scan's own pixels
-      const sc = el('button', { type: 'button', class: 'btn btn-sm', title: 'Show this line exactly as it is on the scan, not retyped' }, 'Show as scanned');
+      const sc = el('button', { type: 'button', class: 'btn btn-sm', title: _('Show this line exactly as it is on the scan, not retyped') }, _('Show as scanned'));
       sc.addEventListener('mousedown', (e) => e.preventDefault());
       sc.addEventListener('click', () => {
         const before = snap();
@@ -4259,11 +4263,11 @@
     }
     if (it) {
       if (it.cover) {
-        const restore = el('button', { type: 'button', class: 'btn btn-sm', title: 'Remove this change and show the original text again' }, 'Restore original');
+        const restore = el('button', { type: 'button', class: 'btn btn-sm', title: _('Remove this change and show the original text again') }, _('Restore original'));
         restore.addEventListener('click', () => deleteSelected());
         parts.push(restore);
       }
-      const del = el('button', { type: 'button', class: 'tb', 'data-icon': 'trash', title: 'Delete (Del)', 'aria-label': 'Delete' });
+      const del = el('button', { type: 'button', class: 'tb', 'data-icon': 'trash', title: _('Delete (Del)'), 'aria-label': 'Delete' });
       del.addEventListener('mousedown', (e) => e.preventDefault());
       del.addEventListener('click', () => deleteSelected());
       parts.push(del);
@@ -4492,7 +4496,7 @@
       if (!STD14.includes(name)) {
         const bold = /bold|black|heavy/i.test(name);
         const ital = /italic|oblique/i.test(name);
-        if (/times|serif|roman|georgia|garamond/i.test(name)) name = 'Times-' + (bold && ital ? 'BoldItalic' : bold ? 'Bold' : ital ? 'Italic' : 'Roman');
+        if (/times|serif|roman|georgia|garamond/i.test(name)) name = 'Times-' + (bold && ital ? 'BoldItalic' : bold ? _('Bold') : ital ? _('Italic') : 'Roman');
         else if (/courier|mono/i.test(name)) name = 'Courier' + (bold && ital ? '-BoldOblique' : bold ? '-Bold' : ital ? '-Oblique' : '');
         else name = 'Helvetica' + (bold && ital ? '-BoldOblique' : bold ? '-Bold' : ital ? '-Oblique' : '');
       }
@@ -4540,7 +4544,7 @@
     const L = PDFLib;
     const N = (k) => L.PDFName.of(k);
     const ops = parseContent(bytes);
-    const fonts = resources && resources.lookup(N('Font'));
+    const fonts = resources && resources.lookup(N(_('Font')));
     const xobjs = resources && resources.lookup(N('XObject'));
     const fontCache = new Map();
     const getFont = (name) => {
@@ -4940,7 +4944,7 @@
     let base;
     try { base = await L.PDFDocument.load(rec.sources[0], { updateMetadata: false }); }
     catch (e) {
-      if (/encrypt/i.test(String(e && e.message))) throw new Error('This PDF is password-protected, so it cannot be saved with changes.');
+      if (/encrypt/i.test(String(e && e.message))) throw new Error(_('This PDF is password-protected, so it cannot be saved with changes.'));
       throw e;
     }
     // the document's language, for screen readers and other programs
@@ -4959,7 +4963,7 @@
           else if (f instanceof L.PDFCheckBox) { if (val) f.check(); else f.uncheck(); }
           else if (f instanceof L.PDFDropdown || f instanceof L.PDFOptionList) { if (val) f.select(String(val)); else f.clear(); }
           else if (f instanceof L.PDFRadioGroup) { if (val) f.select(String(val)); }
-        } catch (e) { warnings.push('field “' + name + '”'); }
+        } catch (e) { warnings.push('“' + name + '”'); }
       }
       try { form.updateFieldAppearances(await base.embedFont(L.StandardFonts.Helvetica)); }
       catch (e) { form.acroForm.dict.set(L.PDFName.of('NeedAppearances'), L.PDFBool.True); }
@@ -5239,10 +5243,11 @@
       }
     }
     const bytes = await base.save({ updateFieldAppearances: false });
-    if (replaced) api.toast(replaced + ' character' + (replaced === 1 ? '' : 's') + ' could not be written with the PDF’s standard fonts and became “?”.', 6000);
-    if (overflowed) api.toast('Some edited text is longer than the space it had, so it runs past the end of its line. Shorten it if it overlaps something.', 7000);
-    if (coveredNothing) api.toast('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.', 7000);
-    if (warnings.length) api.toast('Some form fields could not be filled: ' + warnings.slice(0, 3).join(', '), 6000);
+    if (replaced) api.toast(_n(replaced, '{n} character could not be written with the PDF’s standard fonts and became “?”.', '{n} characters could not be written with the PDF’s standard fonts and became “?”.'), 6000);
+    if (overflowed) api.toast(_('Some edited text is longer than the space it had, so it runs past the end of its line. Shorten it if it overlaps something.'), 7000);
+    if (coveredNothing) api.toast(_('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.'), 7000);
+    if (warnings.length) api.toast(_('Some form fields could not be filled: {fields}', { fields: warnings.slice(0, 3).join(', ') }), 6000);
+
     return new Blob([bytes], { type: 'application/pdf' });
   }
 
@@ -5565,7 +5570,7 @@
     // a PDF whose first page has no text of its own is almost always a scan
     const first = S.info.get(rec.pages[0] && rec.pages[0].uid);
     if (!first || !first.page || (rec.ocr && Object.keys(rec.ocr).length)) return;
-    if ((await isScanPage(first)) && S.rec === rec) api.toast(rec.origin ? 'With Edit text, click the image to read it and make its words editable, or turn on Read whole document.' : 'This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.', 8000);
+    if ((await isScanPage(first)) && S.rec === rec) api.toast(rec.origin ? _('With Edit text, click the image to read it and make its words editable, or turn on Read whole document.') : _('This PDF is a scan (or its letters were saved as shapes). With Edit text, click a page to read it and make its words editable, or turn on Read whole document.'), 8000);
   }
 
   window.NpPdf = {

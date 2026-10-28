@@ -13,6 +13,7 @@
                           franc (vendor/franc), loaded the first time */
 (function () {
   'use strict';
+  const _ = NpI18n.t; // the app's own language (js/i18n.js)
 
   // code (as HTML and Word take it), the ISO 639-3 code franc answers with,
   // and the direction of writing
@@ -33,9 +34,13 @@
 
   let ui = null;
   const names = (locale) => { try { return new Intl.DisplayNames([locale], { type: 'language' }); } catch (e) { return null; } };
-  function name(code) {
-    ui = ui || names(navigator.language || 'en') || names('en');
-    try { return (ui && ui.of(code)) || code; } catch (e) { return code; }
+  // in the app's language; capitalized, as it stands alone in a list or
+  // label ("Inglés"), or as it comes inside a sentence (inline)
+  function name(code, inline) {
+    ui = ui || names(NpI18n.locale) || names('en');
+    let n = code;
+    try { n = (ui && ui.of(code)) || code; } catch (e) { /* the code itself */ }
+    return inline ? n : n.charAt(0).toLocaleUpperCase(NpI18n.locale) + n.slice(1);
   }
   function native(code) {
     const n = names(code);
@@ -63,7 +68,7 @@
         const s = document.createElement('script');
         s.src = 'vendor/franc/franc.min.js';
         s.onload = () => resolve(window.NpFranc);
-        s.onerror = () => reject(new Error('Could not load the language detector.'));
+        s.onerror = () => reject(new Error(_('Could not load the language detector.')));
         document.head.append(s);
       });
       franc.catch(() => { franc = null; });

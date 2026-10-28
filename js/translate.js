@@ -23,6 +23,7 @@
    opts.keep / keep: words and names to leave as they are. */
 (function () {
   'use strict';
+  const _ = NpI18n.t; // the app's own language (js/i18n.js)
 
   const HOST = 'https://files.noteshack.org/translate/v1/';
   const KEEP = 'np-translate-v1'; // the downloaded models (Cache Storage)
@@ -73,7 +74,8 @@
     if (gz) onBytes(f.size);
     else {
       const res = await fetch(f.url, { credentials: 'omit' });
-      if (!res.ok) throw new Error('Could not download the translation model (' + res.status + ').');
+      if (!res.ok) throw new Error(_('Could not download the translation model ({status}).', { status: String(res.status) }));
+
       const chunks = [];
       let got = 0;
       const reader = res.body.getReader();
@@ -85,7 +87,7 @@
         onBytes(got);
       }
       gz = await new Blob(chunks).arrayBuffer();
-      if (hex(await crypto.subtle.digest('SHA-256', gz)) !== f.sha) throw new Error('The translation model did not download correctly. Try again.');
+      if (hex(await crypto.subtle.digest('SHA-256', gz)) !== f.sha) throw new Error(_('The translation model did not download correctly. Try again.'));
       try { await (await caches.open(KEEP)).put(f.url, new Response(gz, { headers: { 'content-type': 'application/gzip' } })); } catch (e) { /* used this time only */ }
     }
     return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
@@ -115,7 +117,7 @@
   const pending = new Set(); // { reject } of translations not yet back
 
   function failAll(err) {
-    broken = err instanceof Error ? err : new Error((err && err.message) || 'The translator stopped.');
+    broken = err instanceof Error ? err : new Error((err && err.message) || _('The translator stopped.'));
     for (const p of pending) p.reject(broken);
     pending.clear();
     const e = engine;

@@ -7,6 +7,7 @@
    of them. */
 (function () {
   'use strict';
+  const _ = NpI18n.t; // the app's own language (js/i18n.js)
 
   const FORMATS = {
     jpeg: { ext: 'jpg', mime: 'image/jpeg', name: 'JPG' },
@@ -31,7 +32,7 @@
       const s = document.createElement('script');
       s.src = src;
       s.onload = resolve;
-      s.onerror = () => reject(new Error('Could not load the TIFF reader. Check your connection and try again.'));
+      s.onerror = () => reject(new Error(_('Could not load the TIFF reader. Check your connection and try again.')));
       document.head.append(s);
     });
   }
@@ -115,7 +116,7 @@
   // { bytes: the PDF, origin: what to save it back as }
   async function toPdf(file) {
     const format = formatOf(file);
-    if (!format) throw new Error('not an image Noteshack can open');
+    if (!format) throw new Error(_('not an image Noteshack can open'));
     const buf = await file.arrayBuffer();
     const pages = []; // { w, h, dpi, jpg | png }
     if (format === 'tiff') {
@@ -128,7 +129,7 @@
         const own = ifd.t282 ? +ifd.t282[0] * (ifd.t296 && ifd.t296[0] === 3 ? 2.54 : 1) : 0;
         pages.push({ w: ifd.width, h: ifd.height, dpi: dpiFor(own, ifd.width, ifd.height), png: (await toBytes(c, 'image/png')).bytes });
       }
-      if (!pages.length) throw new Error('the TIFF has no pages');
+      if (!pages.length) throw new Error(_('the TIFF has no pages'));
     } else {
       // createImageBitmap turns a photo upright by its EXIF orientation
       const bmp = await createImageBitmap(new Blob([buf], { type: FORMATS[format].mime }));
@@ -304,7 +305,8 @@
 
   // what Save as needs to know of each kind: its file endings and type
   const kind = (format) => FORMATS[format] && {
-    ext: FORMATS[format].ext, mime: FORMATS[format].mime, label: FORMATS[format].name + ' image',
+    ext: FORMATS[format].ext, mime: FORMATS[format].mime, label: _('{kind} image', { kind: FORMATS[format].name }),
+
     exts: format === 'jpeg' ? ['jpg', 'jpeg'] : format === 'tiff' ? ['tif', 'tiff'] : [FORMATS[format].ext]
   };
 

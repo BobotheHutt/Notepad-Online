@@ -12,6 +12,7 @@
    NpSpell.learn(lang, word)        add to the person's own dictionary (kept) */
 (function () {
   'use strict';
+  const _ = NpI18n.t; // the app's own language (js/i18n.js)
 
   const LANGS = new Set(['en', 'es', 'fr', 'de', 'pt', 'it']);
   const OWN_KEY = 'np.dict.'; // + lang: the person's own words, kept in this browser
@@ -28,7 +29,7 @@
         waiting.delete(e.data.id);
         if (e.data.error) w.reject(new Error(e.data.error)); else w.resolve(e.data);
       };
-      worker.onerror = () => { for (const w of waiting.values()) w.reject(new Error('Spell checking stopped')); waiting.clear(); worker = null; };
+      worker.onerror = () => { for (const w of waiting.values()) w.reject(new Error(_('Spell checking stopped'))); waiting.clear(); worker = null; };
     }
     const id = ++seq;
     return new Promise((resolve, reject) => { waiting.set(id, { resolve, reject }); worker.postMessage(Object.assign({ id }, msg)); });

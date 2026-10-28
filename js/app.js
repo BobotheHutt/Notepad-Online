@@ -15,9 +15,15 @@
   const titleInput = $('#doc-title');
   const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
+  // the app's own language (js/i18n.js)
+  const _ = NpI18n.t;
+  const _n = NpI18n.n;
+  const LOC = NpI18n.locale;
+  // the page's own menus and labels, in the app's language, before anything else draws
+  NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-44';
+  const APP_VERSION = '2026.10.28-45';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -55,10 +61,10 @@
     toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => { t.hidden = true; }, 200); }, ms);
   }
 
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(LOC, { numeric: 'auto' });
   function ago(t) {
     const s = (t - Date.now()) / 1000;
-    if (Math.abs(s) < 45) return 'just now';
+    if (Math.abs(s) < 45) return _('just now');
     const steps = [[60, 'second'], [60, 'minute'], [24, 'hour'], [7, 'day'], [4.35, 'week'], [12, 'month'], [Infinity, 'year']];
     let v = s;
     for (let i = 0; i < steps.length; i++) {
@@ -68,13 +74,13 @@
     }
     return '';
   }
-  const fmtDate = (t) => new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const fmtNum = (n) => n.toLocaleString();
+  const fmtDate = (t) => new Date(t).toLocaleString(LOC, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const fmtNum = (n) => n.toLocaleString(LOC);
 
   /* =========================================================== constants */
 
   const FONTS = [
-    { key: 'sans', label: 'Sans (default)', css: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
+    { key: 'sans', label: _('Sans (default)'), css: 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
     { key: 'arial', label: 'Arial', css: 'Arial, Helvetica, sans-serif' },
     { key: 'verdana', label: 'Verdana', css: 'Verdana, Geneva, sans-serif' },
     { key: 'trebuchet', label: 'Trebuchet MS', css: '"Trebuchet MS", Helvetica, sans-serif' },
@@ -88,8 +94,9 @@
 
   const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
   const LINE_HEIGHTS = [1, 1.15, 1.5, 2];
-  const PAPER = { letter: { w: '8.5in', h: '11in', css: 'letter', label: 'Letter (8.5 × 11 in)' }, a4: { w: '210mm', h: '297mm', css: 'A4', label: 'A4 (210 × 297 mm)' } };
-  const MARGINS = { narrow: { css: '0.5in', label: 'Narrow (0.5 in)' }, normal: { css: '1in', label: 'Normal (1 in)' }, wide: { css: '1.5in', label: 'Wide (1.5 in)' } };
+  const PAPER = { letter: { w: '8.5in', h: '11in', css: 'letter', label: _('Letter (8.5 × 11 in)') }, a4: { w: '210mm', h: '297mm', css: 'A4', label: _('A4 (210 × 297 mm)') } };
+  const MARGINS = { narrow: { css: '0.5in', label: _('Narrow (0.5 in)') }, normal: { css: '1in', label: _('Normal (1 in)') }, wide: { css: '1.5in', label: _('Wide (1.5 in)') } };
+
   const DOC_DEFAULTS = { font: 'sans', size: 12, lineHeight: 1.5, paper: 'letter', margins: 'normal' };
 
   const PALETTE = [
@@ -153,11 +160,11 @@
   }
 
   function displayTitle(d) {
-    return (d.titleAuto ? autoTitle(d.text) : d.title) || 'Untitled document';
+    return (d.titleAuto ? autoTitle(d.text) : d.title) || _('Untitled document');
   }
 
   // the document is kept in this browser as you work; saving to a file is Save
-  const savedText = () => (NpStore.persistent ? 'Saved in Noteshack' : 'Not saved — temporary');
+  const savedText = () => (NpStore.persistent ? _('Saved in Noteshack') : _('Not saved — temporary'));
 
   function setStatus(text, kind) {
     const s = $('#save-status');
@@ -168,7 +175,7 @@
   function markDirty() {
     if (!current) return;
     dirty = true;
-    setStatus('Saving…', 'pending');
+    setStatus(_('Saving…'), 'pending');
     scheduleSave();
   }
 
@@ -188,7 +195,7 @@
     $('#pdf-pages').lang = code;
     const b = $('#sb-lang');
     b.textContent = NpLang.name(code);
-    b.title = 'Language of this document: ' + NpLang.name(code) + (current.langAuto === false ? '' : ' (found from its text)') + '. Click to change.';
+    b.title = current.langAuto === false ? _('Language of this document: {lang}. Click to change.', { lang: NpLang.name(code) }) : _('Language of this document: {lang} (found from its text). Click to change.', { lang: NpLang.name(code) });
     scheduleSpell();
   }
 
@@ -206,7 +213,7 @@
     if (!current) return;
     const doc = current;
     const auto = el('input', { type: 'checkbox', class: 'switch', checked: doc.langAuto !== false });
-    const search = el('input', { type: 'search', class: 'input', placeholder: 'Find a language', 'aria-label': 'Find a language' });
+    const search = el('input', { type: 'search', class: 'input', placeholder: _('Find a language'), 'aria-label': _('Find a language') });
     let chosen = docLang(doc);
     const rows = NpLang.list.map((l) => {
       const radio = el('input', { type: 'radio', name: 'doc-lang', value: l.code, checked: l.code === chosen });
@@ -214,23 +221,23 @@
       const nat = NpLang.native(l.code);
       const label = NpLang.name(l.code);
       // what Noteshack itself does in it (everything else is the browser's)
-      const tags = [NpSpell.has(l.code.split('-')[0]) ? 'Spell check' : null, NpPdf.readsLanguage(l.code) ? 'Reads scans' : null].filter(Boolean);
+      const tags = [NpSpell.has(l.code.split('-')[0]) ? _('Spell check') : null, NpPdf.readsLanguage(l.code) ? _('Reads scans') : null].filter(Boolean);
       return el('label', { class: 'lang-row', 'data-find': (label + ' ' + nat + ' ' + l.code).toLowerCase() }, radio,
         el('span', { class: 'lang-name' }, label), tags.length ? el('span', { class: 'lang-tags' }, tags.join(' · ')) : null,
         nat !== label ? el('span', { class: 'lang-native', lang: l.code }, nat) : null);
     });
-    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': 'Languages' }, rows);
+    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': _('Languages') }, rows);
     search.addEventListener('input', () => {
       const q = search.value.trim().toLowerCase();
       for (const r of rows) r.hidden = !!q && !r.dataset.find.includes(q);
     });
     const v = await dialog({
-      title: 'Language of this document',
+      title: _('Language of this document'),
       body: el('div', { class: 'stack' },
-        el('p', { class: 'dlg-text' }, 'Used for spell checking, the direction the text runs, and reading scans. It is worked out from the text, on this computer, until you choose one. Noteshack checks spelling and reads scans itself in the languages marked; for the others it uses the browser\u2019s spell check, and reads scans as English.'),
-        el('label', { class: 'toggle-row' }, el('span', {}, 'Work it out from the text'), auto),
+        el('p', { class: 'dlg-text' }, _('Used for spell checking, the direction the text runs, and reading scans. It is worked out from the text, on this computer, until you choose one. Noteshack checks spelling and reads scans itself in the languages marked; for the others it uses the browser\u2019s spell check, and reads scans as English.')),
+        el('label', { class: 'toggle-row' }, el('span', {}, _('Work it out from the text')), auto),
         search, list),
-      actions: [{ label: 'Cancel', value: '' }, { label: 'OK', value: 'ok', primary: true }],
+      actions: [{ label: _('Cancel'), value: '' }, { label: _('OK'), value: 'ok', primary: true }],
       onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
     });
     if (v !== 'ok') return;
@@ -241,7 +248,33 @@
     if (auto.checked) detectLang(doc);
   }
 
+  /* ----- the app's own language ----- */
+
+  // Separate from a document's language: the menus, buttons and messages.
+  // Changing it reloads the app (every phrase is set as the page is built).
+  async function appLanguageDialog() {
+    const cur = NpI18n.setting;
+    const opts = [['auto', _('Automatic: {lang}', { lang: NpLang.native(NpI18n.browserLang()) })]].concat(NpI18n.languages.map((c) => [c, NpLang.native(c)]));
+    const group = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': _('App language') }, opts.map(([c, label]) =>
+      el('label', { class: 'lang-row' }, el('input', { type: 'radio', name: 'app-lang', value: c, checked: c === cur }), el('span', { class: 'lang-name', lang: c === 'auto' ? null : c }, label))));
+    const v = await dialog({
+      title: _('App language'),
+      body: el('div', { class: 'stack' },
+        el('p', { class: 'dlg-text' }, _('The language of Noteshack’s menus, buttons and messages. Each document has a language of its own, shown in the status bar.')),
+        group,
+        el('p', { class: 'muted' }, _('The translations were written with the help of AI and have not yet been checked by a native speaker.'))),
+      actions: [{ label: _('Cancel'), value: '' }, { label: _('OK'), value: 'ok', primary: true }]
+    });
+    if (v !== 'ok') return;
+    const pick = (group.querySelector('input:checked') || {}).value || 'auto';
+    if (pick === cur) return;
+    await saveNow();
+    NpI18n.setLang(pick);
+    location.reload();
+  }
+
   /* ----- translation ----- */
+
 
   // A translated copy: a new document, each paragraph marked until it is
   // checked (data-np-tr="n", its original in doc.translation.originals[n]).
@@ -249,7 +282,9 @@
   // (js/translate.js).
   const KEEP_WORDS = 'np.translate.keep';
   const keepWords = () => { try { return JSON.parse(localStorage.getItem(KEEP_WORDS) || '[]'); } catch (e) { return []; } };
-  const mb = (n) => (n < 1e6 ? '<1' : Math.round(n / 1e6)) + ' MB';
+  const mb = (n) => (n < 1e6 ? '<1' : Math.round(n / 1e6).toLocaleString(LOC)) + ' MB';
+  const pct = (p) => new Intl.NumberFormat(LOC, { style: 'percent' }).format(Math.min(1, p || 0));
+
 
   async function translateDialog() {
     if (!current) return;
@@ -259,9 +294,9 @@
     let to = null;
     let want = null;
     try { want = localStorage.getItem('np.translate.to'); } catch (e) { /* none */ }
-    const fromSel = el('select', { class: 'input', 'aria-label': 'Translate from' },
+    const fromSel = el('select', { class: 'input', 'aria-label': _('Translate from') },
       NpLang.list.map((l) => el('option', { value: l.code, selected: l.code === from }, NpLang.name(l.code))));
-    const search = el('input', { type: 'search', class: 'input', placeholder: 'Find a language', 'aria-label': 'Find a language' });
+    const search = el('input', { type: 'search', class: 'input', placeholder: _('Find a language'), 'aria-label': _('Find a language') });
     const browserCan = new Map(); // code → 'available' | 'downloadable' | null, for the current "from"
     const rows = NpLang.list.map((l) => {
       const radio = el('input', { type: 'radio', name: 'tr-to', value: l.code });
@@ -271,22 +306,22 @@
       return { code: l.code, radio, tags, row: el('label', { class: 'lang-row', 'data-find': (NpLang.name(l.code) + ' ' + nat + ' ' + l.code).toLowerCase() }, radio,
         el('span', { class: 'lang-name' }, NpLang.name(l.code)), tags, nat !== NpLang.name(l.code) ? el('span', { class: 'lang-native', lang: l.code }, nat) : null) };
     });
-    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': 'Translate into' }, rows.map((r) => r.row));
-    const none = el('p', { class: 'dlg-text', hidden: true }, 'Noteshack translates between ' + NpTranslate.languages().map((c) => NpLang.name(c)).join(', ').replace(/, ([^,]*)$/, ' and $1') + '. This browser has no translator of its own for this language.');
+    const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': _('Translate into') }, rows.map((r) => r.row));
+    const none = el('p', { class: 'dlg-text', hidden: true }, _('Noteshack translates between {languages}. This browser has no translator of its own for this language.', { languages: new Intl.ListFormat(LOC, { type: 'conjunction' }).format(NpTranslate.languages().map((c) => NpLang.name(c, true))) }));
     const ours = el('input', { type: 'radio', name: 'tr-engine', value: 'ours' });
     const theirs = el('input', { type: 'radio', name: 'tr-engine', value: 'browser' });
     const oursNote = el('span', { class: 'engine-note' });
-    const engines = el('div', { class: 'engines', role: 'radiogroup', 'aria-label': 'Translator' },
-      el('label', { class: 'engine' }, ours, el('span', {}, el('strong', {}, 'Noteshack’s translator'), el('span', { class: 'engine-note' }, 'Firefox’s translation engine. Keeps bold, links and other formatting.'), oursNote)),
-      el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, 'This browser’s translator'), el('span', { class: 'engine-note' }, 'Formatting inside a paragraph (bold, links) is not kept.'))));
+    const engines = el('div', { class: 'engines', role: 'radiogroup', 'aria-label': _('Translator') },
+      el('label', { class: 'engine' }, ours, el('span', {}, el('strong', {}, _('Noteshack’s translator')), el('span', { class: 'engine-note' }, _('Firefox’s translation engine. Keeps bold, links and other formatting.')), oursNote)),
+      el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, _('This browser’s translator')), el('span', { class: 'engine-note' }, _('Formatting inside a paragraph (bold, links) is not kept.')))));
     // a PDF: translated where its text stands, or its words as a document
     const isPdf = src.type === 'pdf';
     const asLayout = el('input', { type: 'radio', name: 'tr-kind', value: 'layout', checked: true });
     const asDoc = el('input', { type: 'radio', name: 'tr-kind', value: 'doc' });
-    const kinds = isPdf ? el('div', { class: 'engines', role: 'radiogroup', 'aria-label': 'Make' },
-      el('label', { class: 'engine' }, asLayout, el('span', {}, el('strong', {}, 'The same layout'), el('span', { class: 'engine-note' }, 'A translated copy of the PDF: each paragraph in its place, in its font, a little smaller where the translation runs longer.'))),
-      el('label', { class: 'engine' }, asDoc, el('span', {}, el('strong', {}, 'A document'), el('span', { class: 'engine-note' }, 'The words as paragraphs and headings, to check one by one against the original and save as Word or text.')))) : null;
-    const keep = el('textarea', { class: 'input', rows: 3, placeholder: 'Names, brands, terms…', 'aria-label': 'Leave these as they are' });
+    const kinds = isPdf ? el('div', { class: 'engines', role: 'radiogroup', 'aria-label': _('Make') },
+      el('label', { class: 'engine' }, asLayout, el('span', {}, el('strong', {}, _('The same layout')), el('span', { class: 'engine-note' }, _('A translated copy of the PDF: each paragraph in its place, in its font, a little smaller where the translation runs longer.')))),
+      el('label', { class: 'engine' }, asDoc, el('span', {}, el('strong', {}, _('A document')), el('span', { class: 'engine-note' }, _('The words as paragraphs and headings, to check one by one against the original and save as Word or text.'))))) : null;
+    const keep = el('textarea', { class: 'input', rows: 3, placeholder: _('Names, brands, terms…'), 'aria-label': _('Leave these as they are') });
     keep.value = keepWords().join('\n');
 
     // the language last translated into stays chosen, once it turns out possible
@@ -297,7 +332,7 @@
       for (const r of rows) {
         const o = NpTranslate.ours(from, r.code), b = browserCan.get(r.code);
         r.row.hidden = !can(r.code) || (!!q && !r.row.dataset.find.includes(q));
-        r.tags.textContent = [o ? 'Noteshack' : null, b ? 'Browser' : null].filter(Boolean).join(' · ');
+        r.tags.textContent = [o ? 'Noteshack' : null, b ? _('Browser') : null].filter(Boolean).join(' · ');
         if (can(r.code)) any = true;
       }
       to = want && can(want) ? want : null;
@@ -317,13 +352,13 @@
       oursNote.textContent = '';
       if (o) {
         const n = await NpTranslate.toDownload(from, to);
-        if (n) oursNote.textContent = 'Downloads ' + mb(n) + ' the first time, kept for next time.';
+        if (n) oursNote.textContent = _('Downloads {size} the first time, kept for next time.', { size: mb(n) });
       }
     }
     async function checkBrowser() {
       browserCan.clear();
       const f = from;
-      if ('Translator' in window) {
+      if (_('Translator') in window) {
         await Promise.all(NpLang.list.map(async (l) => { const a = await NpTranslate.browser(f, l.code); if (f === from) browserCan.set(l.code, a); }));
       }
       if (f === from) paintList();
@@ -334,21 +369,21 @@
     checkBrowser();
 
     const v = await dialog({
-      title: 'Translate',
+      title: _('Translate'),
       wide: true,
       body: el('div', { class: 'stack' },
-        el('p', { class: 'dlg-text' }, 'Makes a translated copy, on this computer: the text is not sent anywhere. You can then check it paragraph by paragraph against the original.'),
-        el('label', { class: 'field' }, el('span', {}, 'From'), fromSel),
-        el('div', { class: 'field' }, el('span', {}, 'Into'), search, list, none),
+        el('p', { class: 'dlg-text' }, _('Makes a translated copy, on this computer: the text is not sent anywhere. You can then check it paragraph by paragraph against the original.')),
+        el('label', { class: 'field' }, el('span', {}, _('From')), fromSel),
+        el('div', { class: 'field' }, el('span', {}, _('Into')), search, list, none),
         engines,
-        isPdf ? el('div', { class: 'field' }, el('span', {}, 'Make'), kinds) : null,
-        isPdf ? el('p', { class: 'dlg-text' }, 'Scanned pages are read first, in the language translated from.') : null,
-        el('label', { class: 'field' }, el('span', {}, 'Leave these as they are, one per line'), keep)),
-      actions: [{ label: 'Cancel', value: '' }, { label: 'Translate', value: 'go', primary: true }],
+        isPdf ? el('div', { class: 'field' }, el('span', {}, _('Make')), kinds) : null,
+        isPdf ? el('p', { class: 'dlg-text' }, _('Scanned pages are read first, in the language translated from.')) : null,
+        el('label', { class: 'field' }, el('span', {}, _('Leave these as they are, one per line')), keep)),
+      actions: [{ label: _('Cancel'), value: '' }, { label: _('Translate'), value: 'go', primary: true }],
       onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
     });
     if (v !== 'go') return;
-    if (!to || (!ours.checked && !theirs.checked)) { toast('Choose a language to translate into.'); return; }
+    if (!to || (!ours.checked && !theirs.checked)) { toast(_('Choose a language to translate into.')); return; }
     const words = keep.value.split('\n').map((s) => s.trim()).filter(Boolean);
     try { localStorage.setItem(KEEP_WORDS, JSON.stringify(words)); localStorage.setItem('np.translate.to', to); } catch (e) { /* this time only */ }
     if (isPdf && current === src) {
@@ -360,14 +395,14 @@
 
   // A dialog showing how far a long job has got, with Cancel.
   function progressDialog(title) {
-    const status = el('p', { class: 'dlg-text', role: 'status' }, 'Starting…');
+    const status = el('p', { class: 'dlg-text', role: 'status' }, _('Starting…'));
     const bar = el('progress', { class: 'progress', max: 1, value: 0 });
     let box = null;
     const p = { cancelled: false };
     const closed = dialog({
       title,
       body: el('div', { class: 'stack' }, status, bar),
-      actions: [{ label: 'Cancel', value: 'cancel' }],
+      actions: [{ label: _('Cancel'), value: 'cancel' }],
       onOpen: (d) => { box = d; }
     }).then((v) => { if (v !== 'done') p.cancelled = true; });
     p.set = (text, frac) => {
@@ -389,14 +424,14 @@
   // kind: 'doc' (a document, or a PDF's words as one) or 'layout' (a PDF
   // copy, translated where its text stands)
   async function translateDoc(src, from, to, engine, keep, kind) {
-    const pr = progressDialog('Translating into ' + NpLang.name(to));
+    const pr = progressDialog(_('Translating into {lang}', { lang: NpLang.name(to, true) }));
     const title = displayTitle(src) + ' (' + NpLang.name(to) + ')';
     let t = null;
     let copy = null;
     try {
-      t = await NpTranslate.open(from, to, engine, (p) => pr.set((engine === 'browser' ? 'Getting the browser’s translator ready… ' : 'Downloading the translation model… ') + Math.round(p * 100) + '%', p));
-      pr.set('Translating…', 0);
-      const readNote = (d, n) => pr.set('Reading the scanned pages first… ' + d + ' of ' + n, n ? d / n : 0);
+      t = await NpTranslate.open(from, to, engine, (p) => pr.set(engine === 'browser' ? _('Getting the browser’s translator ready… {percent}', { percent: pct(p) }) : _('Downloading the translation model… {percent}', { percent: pct(p) }), p));
+      pr.set(_('Translating…'), 0);
+      const readNote = (d, n) => pr.set(_('Reading the scanned pages first… {done} of {total}', { done: d, total: n }), n ? d / n : 0);
       if (kind === 'layout') {
         // a copy of the PDF, its text replaced paragraph by paragraph
         const now = Date.now();
@@ -415,24 +450,24 @@
           box.innerHTML = NpSanitize.html(h);
           return box.textContent;
         };
-        const n = await NpPdf.translate(tr, (what, d, total) => (what === 'read' ? readNote(d, total) : pr.set('Translating… page ' + Math.min(d + 1, total) + ' of ' + total, total ? d / total : 1)));
+        const n = await NpPdf.translate(tr, (what, d, total) => (what === 'read' ? readNote(d, total) : pr.set(_('Translating… page {page} of {total}', { page: Math.min(d + 1, total), total }), total ? d / total : 1)));
         copy.lang = to;
         await NpStore.putDoc(copy);
         if (current === copy) applyDocLang();
         await pr.close();
-        toast(n ? 'Translated, keeping the layout. Pages → Show original compares a page with the original.' : 'No text was found to translate.', 6000);
+        toast(n ? _('Translated, keeping the layout. The original PDF is unchanged, in your documents.') : _('No text was found to translate.'), 6000);
         return;
       }
       let html = src.html;
       if (src.type === 'pdf') {
         await NpPdf.readEverything(readNote);
         await saveNow('Read before translating');
-        pr.set('Translating…', 0);
+        pr.set(_('Translating…'), 0);
         html = await pdfAsHtml(src);
       }
       const out = await NpTranslate.document(html, t, {
         keep,
-        onUnit: (done, total) => pr.set('Translating… ' + done + ' of ' + total + ' paragraphs', total ? done / total : 1)
+        onUnit: (done, total) => pr.set(_n(total, 'Translating… {done} of {n} paragraph', 'Translating… {done} of {n} paragraphs', { done }), total ? done / total : 1)
       });
       await pr.close();
       const s = src.type === 'pdf' ? undefined : src.settings;
@@ -444,13 +479,13 @@
       reviewHandle = { key: from + to + engine, t };
       t = null;
       showReview();
-      toast(out.originals.length ? 'Translated. Check each paragraph against its original, or choose Done.' : 'Translated.', 5000);
+      toast(out.originals.length ? _('Translated. Check each paragraph against its original, or choose Done.') : _('Translated.'), 5000);
     } catch (e) {
       const stopped = pr.cancelled;
       await pr.close();
       if (copy && current === copy) await saveNow();
-      if (stopped) { if (copy) toast('Stopped. The copy is translated as far as it got.', 6000); return; }
-      toast('Could not translate: ' + ((e && e.message) || e), 6000);
+      if (stopped) { if (copy) toast(_('Stopped. The copy is translated as far as it got.'), 6000); return; }
+      toast(_('Could not translate: {reason}', { reason: (e && e.message) || e }), 6000);
     } finally {
       if (t) t.close();
     }
@@ -478,14 +513,14 @@
   function updateReview() {
     if (reviewBox.hidden || !current || !current.translation) return;
     const left = editor.querySelectorAll('[data-np-tr]').length;
-    $('#review-count').textContent = left === 1 ? '1 paragraph to check' : left + ' paragraphs to check';
+    $('#review-count').textContent = _n(left, '{n} paragraph to check', '{n} paragraphs to check');
     const node = closestInEditor('[data-np-tr]');
     if (node === reviewNode && node) return;
     reviewNode = node;
     const has = !!node;
     reviewBox.classList.toggle('empty', !has);
     for (const b of reviewBox.querySelectorAll('[data-needs-node]')) b.disabled = !has;
-    if (!has) { reviewOrig.contentEditable = 'false'; reviewOrig.textContent = 'Click a highlighted paragraph to see its original.'; return; }
+    if (!has) { reviewOrig.contentEditable = 'false'; reviewOrig.textContent = _('Click a highlighted paragraph to see its original.'); return; }
     reviewOrig.contentEditable = 'true';
     reviewOrig.innerHTML = NpSanitize.html(current.translation.originals[+node.getAttribute('data-np-tr')] || '');
   }
@@ -524,7 +559,7 @@
       if (!reviewHandle || reviewHandle.key !== key) {
         if (reviewHandle) reviewHandle.t.close();
         reviewHandle = null;
-        toast('Getting the translator ready…');
+        toast(_('Getting the translator ready…'));
         reviewHandle = { key, t: await NpTranslate.open(tr.from, tr.to, tr.engine) };
       }
       const html = NpSanitize.html(await NpTranslate.unit(tr.originals[n], reviewHandle.t, tr.keep));
@@ -536,19 +571,19 @@
       reviewNode = null;
       updateReview();
     } catch (e) {
-      toast('Could not translate: ' + ((e && e.message) || e), 6000);
+      toast(_('Could not translate: {reason}', { reason: (e && e.message) || e }), 6000);
     }
   }
 
   async function finishReview(allChecked) {
     if (!allChecked && editor.querySelector('[data-np-tr]') &&
-      !(await confirmDialog('Done checking?', 'The highlighting goes, and the originals are no longer kept with this document.', { ok: 'Done' }))) return;
+      !(await confirmDialog(_('Done checking?'), _('The highlighting goes, and the originals are no longer kept with this document.'), { ok: _('Done') }))) return;
     for (const m of editor.querySelectorAll('[data-np-tr]')) m.removeAttribute('data-np-tr');
     delete current.translation;
     if (reviewHandle) { reviewHandle.t.close(); reviewHandle = null; }
     markDirty();
     showReview();
-    if (allChecked) toast('Every paragraph checked.');
+    if (allChecked) toast(_('Every paragraph checked.'));
   }
 
   reviewOrig.addEventListener('input', debounce(() => {
@@ -588,8 +623,8 @@
         requestPersistence();
       } catch (e) {
         dirty = true;
-        setStatus('Not saved', 'error');
-        toast(/quota/i.test(String(e && e.name) + e) ? 'Storage is full. Download your work, then delete old documents or images.' : 'Could not save: ' + (e && e.message || e), 6000);
+        setStatus(_('Not saved'), 'error');
+        toast(/quota/i.test(String(e && e.name) + e) ? _('Storage is full. Download your work, then delete old documents or images.') : _('Could not save: {reason}', { reason: (e && e.message) || e }), 6000);
       }
     })();
     await saving;
@@ -680,7 +715,8 @@
   }
 
   async function addRecord(doc) {
-    try { await NpStore.putDoc(doc); } catch (e) { toast(/quota/i.test(String(e && e.name) + e) ? 'There is not enough storage space for that file.' : 'Could not create the document: ' + e.message); return null; }
+    try { await NpStore.putDoc(doc); } catch (e) { toast(/quota/i.test(String(e && e.name) + e) ? _('There is not enough storage space for that file.') : _('Could not create the document: {reason}', { reason: e.message })); return null; }
+
     docs.unshift(doc);
     await openDoc(doc.id, { force: true });
     return doc;
@@ -689,7 +725,7 @@
   // A PDF, or an image opened as one (see images.js): origin then says what
   // kind of image it was, to download it as again.
   async function createPdfDoc(file, name, image) {
-    setStatus(image ? 'Opening image…' : 'Opening PDF…', 'pending');
+    setStatus(image ? _('Opening image…') : _('Opening PDF…'), 'pending');
     let buf = null;
     let origin;
     if (image) ({ bytes: buf, origin } = await NpImages.toPdf(file));
@@ -711,7 +747,7 @@
     tmp.innerHTML = html.replace(/<\/(p|h[1-6]|li|div|pre|blockquote|tr)>/g, '$&\n');
     doc.text = tmp.textContent || '';
     doc.words = (doc.text.match(WORD_RE) || []).length;
-    try { await NpStore.putDoc(doc); } catch (e) { toast('Could not create the document: ' + e.message); return null; }
+    try { await NpStore.putDoc(doc); } catch (e) { toast(_('Could not create the document: {reason}', { reason: e.message })); return null; }
     docs.unshift(doc);
     await openDoc(doc.id, { force: true });
     if (!opts.keepFocus) setTimeout(placeCaretAtStart, 0);
@@ -721,7 +757,7 @@
   async function deleteDoc(id) {
     const doc = docs.find((d) => d.id === id);
     if (!doc) return;
-    const ok = await confirmDialog('Delete “' + displayTitle(doc) + '”?', 'The document and its version history are removed from this browser. This cannot be undone.', { ok: 'Delete', danger: true });
+    const ok = await confirmDialog(_('Delete “{title}”?', { title: displayTitle(doc) }), _('The document and its version history are removed from this browser. This cannot be undone.'), { ok: _('Delete'), danger: true });
     if (!ok) return;
     await NpStore.deleteDoc(id);
     docs = docs.filter((d) => d.id !== id);
@@ -734,7 +770,7 @@
     } else {
       renderDocList();
     }
-    toast('Document deleted');
+    toast(_('Document deleted'));
   }
 
   function updateTitle() {
@@ -771,7 +807,7 @@
           applyDocSettings();
           refreshMetrics();
           updateTitle();
-          toast('Updated from another tab');
+          toast(_('Updated from another tab'));
         } else if (i >= 0) docs[i] = fresh;
         else docs.push(fresh);
         sortDocs();
@@ -781,7 +817,7 @@
         if (current && current.id === m.id) {
           current = null;
           if (docs.length) openDoc(docs[0].id, { force: true }); else createDoc();
-          toast('This document was deleted in another tab');
+          toast(_('This document was deleted in another tab'));
         } else renderDocList();
       }
     };
@@ -904,7 +940,7 @@
     if (!hit) return;
     e.preventDefault();
     const lang = spellLang();
-    const menu = el('div', { class: 'pdf-word-menu spell-menu', role: 'menu' }, el('div', { class: 'pdf-menu-read' }, 'Looking for corrections…'));
+    const menu = el('div', { class: 'pdf-word-menu spell-menu', role: 'menu' }, el('div', { class: 'pdf-menu-read' }, _('Looking for corrections…')));
     const close = () => { menu.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); };
     const away = (ev) => { if (!menu.contains(ev.target)) close(); };
     const esc = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); close(); editor.focus(); } };
@@ -925,10 +961,11 @@
       afterEdit();
     };
     menu.replaceChildren(
-      ...(list.length ? list.map((w) => item(w, () => replace(w))) : [el('div', { class: 'pdf-menu-read' }, 'No suggestions')]),
+      ...(list.length ? list.map((w) => item(w, () => replace(w))) : [el('div', { class: 'pdf-menu-read' }, _('No suggestions'))]),
       el('div', { class: 'pdf-menu-sep' }),
-      item('Add “' + hit.word + '” to the dictionary', async () => { await NpSpell.learn(lang, hit.word); spellPass(); }),
-      item('Ignore it in this document', () => {
+      item(_('Add “{word}” to the dictionary', { word: hit.word }), async () => { await NpSpell.learn(lang, hit.word); spellPass(); }),
+
+      item(_('Ignore it in this document'), () => {
         if (!ignored.has(current.id)) ignored.set(current.id, new Set());
         ignored.get(current.id).add(hit.word);
         spellPass();
@@ -1460,7 +1497,8 @@
   const tbSize = $('#tb-size');
 
   function buildToolbar() {
-    tbFont.innerHTML = FONTS.map((f) => '<option value="' + f.key + '" style="font-family:' + escapeHtml(f.css) + '">' + escapeHtml(f.label) + '</option>').join('') + '<option value="" hidden id="tb-font-other">Other</option>';
+    tbFont.innerHTML = FONTS.map((f) => '<option value="' + f.key + '" style="font-family:' + escapeHtml(f.css) + '">' + escapeHtml(f.label) + '</option>').join('') + '<option value="" hidden id="tb-font-other">' + escapeHtml(_('Other')) + '</option>';
+
     tbSize.innerHTML = SIZES.map((s) => '<option value="' + s + '">' + s + '</option>').join('') + '<option value="" hidden id="tb-size-other"></option>';
     tbBlock.addEventListener('change', () => { setBlock(tbBlock.value); });
     tbFont.addEventListener('change', () => { if (tbFont.value) applyFont(tbFont.value); });
@@ -1527,40 +1565,40 @@
       const size = (label, val) => el('button', { class: 'ctx-btn text' + (w === val ? ' on' : ''), type: 'button', onclick: () => setImage(img, (c) => { if (val) c.style.width = val; else c.style.removeProperty('width'); if (!c.getAttribute('style')) c.removeAttribute('style'); }) }, label);
       const align = (icon, label, cls) => ctxButton(icon, label, () => setImage(img, (c) => { c.classList.remove('img-left', 'img-center', 'img-right'); if (cls) c.classList.add(cls); if (!c.className) c.removeAttribute('class'); }), { class: 'ctx-btn' + ((cls ? img.classList.contains(cls) : !/img-/.test(img.className)) ? ' on' : '') });
       content = [
-        el('span', { class: 'ctx-label' }, 'Image'),
-        size('25%', '25%'), size('50%', '50%'), size('75%', '75%'), size('Full', '100%'), size('Original', ''),
+        el('span', { class: 'ctx-label' }, _('Image')),
+        size('25%', '25%'), size('50%', '50%'), size('75%', '75%'), size(_('Full'), '100%'), size(_('Original'), ''),
         el('span', { class: 'tb-sep' }),
-        align('alignLeft', 'Inline with text', ''), align('alignCenter', 'Center', 'img-center'),
-        el('button', { class: 'ctx-btn text' + (img.classList.contains('img-left') ? ' on' : ''), type: 'button', title: 'Wrap text, image on the left', onclick: () => setImage(img, (c) => { c.classList.remove('img-center', 'img-right'); c.classList.add('img-left'); }) }, 'Wrap left'),
-        el('button', { class: 'ctx-btn text' + (img.classList.contains('img-right') ? ' on' : ''), type: 'button', title: 'Wrap text, image on the right', onclick: () => setImage(img, (c) => { c.classList.remove('img-center', 'img-left'); c.classList.add('img-right'); }) }, 'Wrap right'),
+        align('alignLeft', _('Inline with text'), ''), align('alignCenter', _('Center'), 'img-center'),
+        el('button', { class: 'ctx-btn text' + (img.classList.contains('img-left') ? ' on' : ''), type: 'button', title: _('Wrap text, image on the left'), onclick: () => setImage(img, (c) => { c.classList.remove('img-center', 'img-right'); c.classList.add('img-left'); }) }, _('Wrap left')),
+        el('button', { class: 'ctx-btn text' + (img.classList.contains('img-right') ? ' on' : ''), type: 'button', title: _('Wrap text, image on the right'), onclick: () => setImage(img, (c) => { c.classList.remove('img-center', 'img-left'); c.classList.add('img-right'); }) }, _('Wrap right')),
         el('span', { class: 'tb-sep' }),
-        el('button', { class: 'ctx-btn text', type: 'button', onclick: () => editAlt(img) }, 'Alt text'),
-        ctxButton('trash', 'Delete image', () => { hideImageFrame(); selectNode(img); exec('delete'); })
+        el('button', { class: 'ctx-btn text', type: 'button', onclick: () => editAlt(img) }, _('Alt text')),
+        ctxButton('trash', _('Delete image'), () => { hideImageFrame(); selectNode(img); exec('delete'); })
       ];
     } else {
       const a = closestInEditor('a[href]');
       const cell = closestInEditor('td,th');
       if (a) {
         content = [
-          el('span', { class: 'ctx-label' }, 'Link'),
+          el('span', { class: 'ctx-label' }, _('Link')),
           el('a', { class: 'ctx-url', href: a.href, target: '_blank', rel: 'noopener', title: a.href }, a.getAttribute('href')),
-          ctxButton('external', 'Open link', () => window.open(a.href, '_blank', 'noopener')),
-          ctxButton('edit', 'Edit link', () => linkDialog(a)),
-          ctxButton('unlink', 'Remove link', () => { selectNode(a, true); exec('unlink'); })
+          ctxButton('external', _('Open link'), () => window.open(a.href, '_blank', 'noopener')),
+          ctxButton('edit', _('Edit link'), () => linkDialog(a)),
+          ctxButton('unlink', _('Remove link'), () => { selectNode(a, true); exec('unlink'); })
         ];
       } else if (cell) {
         content = [
-          el('span', { class: 'ctx-label' }, 'Table'),
-          ctxButton('rowAbove', 'Insert row above', () => tableOp('row-above')),
-          ctxButton('rowBelow', 'Insert row below', () => tableOp('row-below')),
-          ctxButton('colLeft', 'Insert column left', () => tableOp('col-left')),
-          ctxButton('colRight', 'Insert column right', () => tableOp('col-right')),
+          el('span', { class: 'ctx-label' }, _('Table')),
+          ctxButton('rowAbove', _('Insert row above'), () => tableOp('row-above')),
+          ctxButton('rowBelow', _('Insert row below'), () => tableOp('row-below')),
+          ctxButton('colLeft', _('Insert column left'), () => tableOp('col-left')),
+          ctxButton('colRight', _('Insert column right'), () => tableOp('col-right')),
           el('span', { class: 'tb-sep' }),
-          ctxButton('delRow', 'Delete row', () => tableOp('del-row')),
-          ctxButton('delCol', 'Delete column', () => tableOp('del-col')),
-          ctxButton('header', 'Header row on or off', () => tableOp('header'), { class: 'ctx-btn' + (cell.closest('table').rows[0] && cell.closest('table').rows[0].cells[0] && cell.closest('table').rows[0].cells[0].tagName === 'TH' ? ' on' : '') }),
+          ctxButton('delRow', _('Delete row'), () => tableOp('del-row')),
+          ctxButton('delCol', _('Delete column'), () => tableOp('del-col')),
+          ctxButton('header', _('Header row on or off'), () => tableOp('header'), { class: 'ctx-btn' + (cell.closest('table').rows[0] && cell.closest('table').rows[0].cells[0] && cell.closest('table').rows[0].cells[0].tagName === 'TH' ? ' on' : '') }),
           el('span', { class: 'tb-sep' }),
-          ctxButton('trash', 'Delete table', () => tableOp('del-table'))
+          ctxButton('trash', _('Delete table'), () => tableOp('del-table'))
         ];
       }
     }
@@ -1661,7 +1699,7 @@
   async function printPdf() {
     NpPdf.finishEditing();
     const rec = current;
-    const list = el('div', { class: 'print-pages' }, el('p', { class: 'print-wait' }, 'Making the PDF…'));
+    const list = el('div', { class: 'print-pages' }, el('p', { class: 'print-wait' }, _('Making the PDF…')));
     let view = null;
     let blob = null;
     let failed = false;
@@ -1676,11 +1714,11 @@
           const page = await view.page(i);
           const vp1 = page.getViewport({ scale: 1 });
           const scale = width / vp1.width;
-          const c = el('canvas', { class: 'print-page', 'aria-label': 'Page ' + (i + 1) });
+          const c = el('canvas', { class: 'print-page', 'aria-label': _('Page {page}', { page: i + 1 }) });
           c.width = Math.round(vp1.width * scale * dpr);
           c.height = Math.round(vp1.height * scale * dpr);
           c.style.width = Math.round(vp1.width * scale) + 'px';
-          list.append(c, el('div', { class: 'print-num' }, 'Page ' + (i + 1) + ' of ' + view.count));
+          list.append(c, el('div', { class: 'print-num' }, _('Page {page} of {total}', { page: i + 1, total: view.count })));
           const g = c.getContext('2d');
           g.fillStyle = '#fff';
           g.fillRect(0, 0, c.width, c.height);
@@ -1688,12 +1726,12 @@
         }
       } catch (e) {
         failed = true;
-        list.replaceChildren(el('p', { class: 'print-wait' }, 'Could not make the PDF: ' + (e.message || e)));
+        list.replaceChildren(el('p', { class: 'print-wait' }, _('Could not make the PDF: {reason}', { reason: e.message || e })));
       }
     })();
     const choice = await dialog({
-      title: 'Print preview', wide: true, body: list,
-      actions: [{ label: 'Close', value: '' }, { label: 'Save as PDF…', value: 'save' }, { label: 'Open in a new tab', value: 'tab' }, { label: 'Print', value: 'print', primary: true }]
+      title: _('Print preview'), wide: true, body: list,
+      actions: [{ label: _('Close'), value: '' }, { label: _('Save as PDF…'), value: 'save' }, { label: _('Open in a new tab'), value: 'tab' }, { label: _('Print'), value: 'print', primary: true }]
     });
     if (!choice) { await ready; if (view) view.destroy(); return; }
     // where to save, asked straight after the click (the browser allows the dialog only then)
@@ -1703,12 +1741,12 @@
         if (e.name === 'AbortError') { await ready; if (view) view.destroy(); return; }
       }
     }
-    toast(blob ? 'One moment…' : 'Making the PDF…', 2000);
+    toast(blob ? _('One moment…') : _('Making the PDF…'), 2000);
     await ready;
     if (failed || !blob) { if (view) view.destroy(); return; }
     if (choice === 'save') {
       if (handle) {
-        try { const w = await handle.createWritable(); await w.write(blob); await w.close(); toast('Saved to “' + handle.name + '”'); } catch (e) { toast('Could not save: ' + (e.message || e), 7000); }
+        try { const w = await handle.createWritable(); await w.write(blob); await w.close(); toast(_('Saved to “{name}”', { name: handle.name })); } catch (e) { toast(_('Could not save: {reason}', { reason: e.message || e }), 7000); }
       } else download(blob, safeFileName(displayTitle(rec), 'pdf'));
     }
     else if (choice === 'tab') {
@@ -1721,7 +1759,7 @@
 
   // The pages as images at print resolution, in a hidden frame that is printed.
   async function printPages(view, title) {
-    toast('Getting the pages ready to print…', 3000);
+    toast(_('Getting the pages ready to print…'), 3000);
     const urls = [];
     const sizes = [];
     const dpi = 200;
@@ -1765,6 +1803,7 @@
     'save-as': () => saveAs(),
     'export': exportAs,
     'doc-lang': languageDialog,
+    'app-lang': appLanguageDialog,
     translate: translateDialog,
     'review-prev': () => reviewStep(-1),
     'review-next': () => reviewStep(1),
@@ -1814,8 +1853,9 @@
     goal: goalDialog,
     speak: toggleSpeak,
     voice: voiceDialog,
-    spellcheck: () => { settings.spellcheck = !settings.spellcheck; saveSettings(); applySpellcheck(); toast('Spell check ' + (settings.spellcheck ? 'on' : 'off')); },
-    'smart-md': () => { settings.smartMd = !settings.smartMd; saveSettings(); toast('Markdown shortcuts ' + (settings.smartMd ? 'on' : 'off')); },
+    spellcheck: () => { settings.spellcheck = !settings.spellcheck; saveSettings(); applySpellcheck(); toast(settings.spellcheck ? _('Spell check on') : _('Spell check off')); },
+    'smart-md': () => { settings.smartMd = !settings.smartMd; saveSettings(); toast(settings.smartMd ? _('Markdown shortcuts on') : _('Markdown shortcuts off')); },
+
     shortcuts: shortcutsDialog,
     about: aboutDialog,
     'find-next': () => findStep(1),
@@ -1931,21 +1971,21 @@
   function colorPicker(kind, anchor) {
     const wrap = el('div', { class: 'color-pop' });
     const reset = el('button', { class: 'color-reset', type: 'button', onclick: () => { closePopover(); setColor(kind, null); } },
-      kind === 'fore' ? 'Automatic' : 'No highlight');
-    const grid = el('div', { class: 'swatches', role: 'listbox', 'aria-label': kind === 'fore' ? 'Text color' : 'Highlight color' });
+      kind === 'fore' ? _('Automatic') : _('No highlight'));
+    const grid = el('div', { class: 'swatches', role: 'listbox', 'aria-label': kind === 'fore' ? _('Text color') : _('Highlight color') });
     for (const c of PALETTE) {
       grid.append(el('button', { class: 'swatch', type: 'button', title: c, 'aria-label': c, style: 'background:' + c, onclick: () => { closePopover(); setColor(kind, c); } }));
     }
-    const custom = el('input', { type: 'color', value: (kind === 'fore' ? settings.lastFore : settings.lastBack) || '#2563eb', 'aria-label': 'Custom color' });
+    const custom = el('input', { type: 'color', value: (kind === 'fore' ? settings.lastFore : settings.lastBack) || '#2563eb', 'aria-label': _('Custom color') });
     custom.addEventListener('change', () => { closePopover(); setColor(kind, custom.value); });
-    wrap.append(reset, grid, el('label', { class: 'custom-color' }, custom, el('span', {}, 'Custom color…')));
+    wrap.append(reset, grid, el('label', { class: 'custom-color' }, custom, el('span', {}, _('Custom color…'))));
     openPopover(anchor, wrap, 'pop-color');
   }
 
   function tablePicker(anchor) {
     const MAX = 10;
     const wrap = el('div', { class: 'grid-pop' });
-    const label = el('div', { class: 'grid-label' }, 'Insert table');
+    const label = el('div', { class: 'grid-label' }, _('Insert table'));
     const grid = el('div', { class: 'grid-cells', style: 'grid-template-columns: repeat(' + MAX + ', 18px)' });
     const cells = [];
     const mark = (r, c) => {
@@ -1979,11 +2019,11 @@
       const d = el('dialog', { class: 'dialog' + (wide ? ' wide' : '') });
       const form = el('form', { method: 'dialog' });
       const head = el('header', { class: 'dlg-head' }, el('h2', {}, title),
-        el('button', { class: 'icon-btn sm', type: 'button', 'data-icon': 'close', 'aria-label': 'Close', onclick: () => d.close('') }));
+        el('button', { class: 'icon-btn sm', type: 'button', 'data-icon': 'close', 'aria-label': _('Close'), onclick: () => d.close('') }));
       const main = el('div', { class: 'dlg-body' });
       if (typeof body === 'string') main.innerHTML = body; else if (body) main.append(body);
       const foot = el('footer', { class: 'dlg-foot' });
-      for (const a of actions || [{ label: 'Close', value: '' }]) {
+      for (const a of actions || [{ label: _('Close'), value: '' }]) {
         foot.append(el('button', { class: 'btn' + (a.primary ? ' btn-primary' : '') + (a.danger ? ' btn-danger' : ''), value: a.value, type: a.primary ? 'submit' : 'button',
           onclick: a.primary ? null : () => d.close(a.value) }, a.label));
       }
@@ -2008,15 +2048,15 @@
     });
   }
 
-  async function confirmDialog(title, text, { ok = 'OK', danger = false } = {}) {
-    const v = await dialog({ title, body: el('p', { class: 'dlg-text' }, text), actions: [{ label: 'Cancel', value: '' }, { label: ok, value: 'ok', primary: true, danger }] });
+  async function confirmDialog(title, text, { ok = _('OK'), danger = false } = {}) {
+    const v = await dialog({ title, body: el('p', { class: 'dlg-text' }, text), actions: [{ label: _('Cancel'), value: '' }, { label: ok, value: 'ok', primary: true, danger }] });
     return v === 'ok';
   }
 
   async function promptDialog(title, label, value, opts = {}) {
     const input = el('input', { type: opts.type || 'text', class: 'input', value: value || '', placeholder: opts.placeholder || '', min: opts.min, max: opts.max });
     const body = el('label', { class: 'field' }, el('span', {}, label), input);
-    const v = await dialog({ title, body, actions: [{ label: 'Cancel', value: '' }, { label: opts.ok || 'OK', value: 'ok', primary: true }], initial: 'input' });
+    const v = await dialog({ title, body, actions: [{ label: _('Cancel'), value: '' }, { label: opts.ok || _('OK'), value: 'ok', primary: true }], initial: 'input' });
     return v === 'ok' ? input.value : null;
   }
 
@@ -2029,15 +2069,15 @@
     restoreSelection();
     const range = currentRange();
     const selected = existing ? existing.textContent : (getSelection().toString() || '');
-    const textIn = el('input', { class: 'input', type: 'text', value: selected, placeholder: 'Text to show' });
-    const urlIn = el('input', { class: 'input url-in', type: 'text', value: existing ? existing.getAttribute('href') : '', placeholder: 'https://example.com or name@example.com' });
+    const textIn = el('input', { class: 'input', type: 'text', value: selected, placeholder: _('Text to show') });
+    const urlIn = el('input', { class: 'input url-in', type: 'text', value: existing ? existing.getAttribute('href') : '', placeholder: _('https://example.com or name@example.com') });
     const body = el('div', { class: 'stack' },
-      el('label', { class: 'field' }, el('span', {}, 'Text'), textIn),
-      el('label', { class: 'field' }, el('span', {}, 'Link'), urlIn));
-    const actions = [{ label: 'Cancel', value: '' }];
-    if (existing) actions.push({ label: 'Remove link', value: 'remove' });
-    actions.push({ label: existing ? 'Update' : 'Insert', value: 'ok', primary: true });
-    const v = await dialog({ title: existing ? 'Edit link' : 'Insert link', body, actions, initial: '.url-in' });
+      el('label', { class: 'field' }, el('span', {}, _('Text')), textIn),
+      el('label', { class: 'field' }, el('span', {}, _('Link')), urlIn));
+    const actions = [{ label: _('Cancel'), value: '' }];
+    if (existing) actions.push({ label: _('Remove link'), value: 'remove' });
+    actions.push({ label: existing ? _('Update') : _('Insert'), value: 'ok', primary: true });
+    const v = await dialog({ title: existing ? _('Edit link') : _('Insert link'), body, actions, initial: '.url-in' });
     editor.focus({ preventScroll: true });
     if (range) { getSelection().removeAllRanges(); getSelection().addRange(range); }
     if (v === 'remove' && existing) { selectNode(existing, true); exec('unlink'); return; }
@@ -2046,7 +2086,7 @@
     if (!url) return;
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(url)) url = 'mailto:' + url;
     else if (!/^[a-z][a-z0-9+.-]*:|^#|^\//i.test(url)) url = 'https://' + url;
-    if (!NpSanitize.safeHref(url)) { toast('That link type is not allowed.'); return; }
+    if (!NpSanitize.safeHref(url)) { toast(_('That link type is not allowed.')); return; }
     const text = textIn.value || url;
     if (existing) {
       const inner = text === existing.textContent ? existing.innerHTML : escapeHtml(text);
@@ -2065,13 +2105,13 @@
     const size = el('select', { class: 'input' }, SIZES.map((n) => el('option', { value: n, selected: n === s.size }, n + ' pt')));
     const body = el('div', { class: 'stack' },
       el('div', { class: 'row2' },
-        el('label', { class: 'field' }, el('span', {}, 'Font'), font),
-        el('label', { class: 'field' }, el('span', {}, 'Size'), size)),
-      el('div', { class: 'field' }, el('span', {}, 'Line spacing'), radioGroup('lh', LINE_HEIGHTS.map((n) => [n, n === 1 ? 'Single' : n === 2 ? 'Double' : String(n)]), s.lineHeight)),
-      el('div', { class: 'field' }, el('span', {}, 'Paper size'), radioGroup('paper', Object.entries(PAPER).map(([k, v]) => [k, v.label]), s.paper)),
-      el('div', { class: 'field' }, el('span', {}, 'Margins'), radioGroup('margins', Object.entries(MARGINS).map(([k, v]) => [k, v.label]), s.margins)),
-      el('label', { class: 'toggle-row' }, el('span', {}, 'Use these settings for new documents'), el('input', { type: 'checkbox', class: 'switch', id: 'ps-default' })));
-    const v = await dialog({ title: 'Page setup', body, actions: [{ label: 'Cancel', value: '' }, { label: 'Apply', value: 'ok', primary: true }] });
+        el('label', { class: 'field' }, el('span', {}, _('Font')), font),
+        el('label', { class: 'field' }, el('span', {}, _('Size')), size)),
+      el('div', { class: 'field' }, el('span', {}, _('Line spacing')), radioGroup('lh', LINE_HEIGHTS.map((n) => [n, n === 1 ? _('Single') : n === 2 ? _('Double') : String(n)]), s.lineHeight)),
+      el('div', { class: 'field' }, el('span', {}, _('Paper size')), radioGroup('paper', Object.entries(PAPER).map(([k, v]) => [k, v.label]), s.paper)),
+      el('div', { class: 'field' }, el('span', {}, _('Margins')), radioGroup('margins', Object.entries(MARGINS).map(([k, v]) => [k, v.label]), s.margins)),
+      el('label', { class: 'toggle-row' }, el('span', {}, _('Use these settings for new documents')), el('input', { type: 'checkbox', class: 'switch', id: 'ps-default' })));
+    const v = await dialog({ title: _('Page setup'), body, actions: [{ label: _('Cancel'), value: '' }, { label: _('Apply'), value: 'ok', primary: true }] });
     if (v !== 'ok') return;
     const next = {
       font: font.value, size: +size.value,
@@ -2087,7 +2127,7 @@
 
   async function goalDialog() {
     if (!current) return;
-    const v = await promptDialog('Word goal', 'Words to aim for in this document (0 turns it off)', String(current.goal || ''), { type: 'number', min: 0, placeholder: 'e.g. 1000', ok: 'Set goal' });
+    const v = await promptDialog(_('Word goal'), _('Words to aim for in this document (0 turns it off)'), String(current.goal || ''), { type: 'number', min: 0, placeholder: _('e.g. 1000'), ok: _('Set goal') });
     if (v == null) return;
     current.goal = Math.max(0, parseInt(v, 10) || 0);
     markDirty();
@@ -2107,30 +2147,36 @@
     };
   }
 
+  const unit = (n, u) => new Intl.NumberFormat(LOC, { style: 'unit', unit: u, unitDisplay: 'short' }).format(n);
   function minutes(m) {
-    if (m < 1) return m * 60 < 1 ? '0 sec' : Math.max(1, Math.round(m * 60)) + ' sec';
-    if (m < 60) return Math.round(m) + ' min';
-    return Math.floor(m / 60) + ' hr ' + Math.round(m % 60) + ' min';
+    if (m < 1) return unit(m * 60 < 1 ? 0 : Math.max(1, Math.round(m * 60)), 'second');
+    if (m < 60) return unit(Math.round(m), 'minute');
+    return unit(Math.floor(m / 60), 'hour') + ' ' + unit(Math.round(m % 60), 'minute');
   }
 
   function wordCountDialog() {
     const all = stats(plainText());
     const s = getSelection();
     const sel = selectionInEditor() && !s.isCollapsed ? stats(s.toString()) : null;
-    const rows = [['Words', 'words'], ['Characters', 'chars'], ['Characters without spaces', 'charsNoSpace'], ['Paragraphs', 'paragraphs'], ['Sentences', 'sentences']];
+    const rows = [[_('Words'), 'words'], [_('Characters'), 'chars'], [_('Characters without spaces'), 'charsNoSpace'], [_('Paragraphs'), 'paragraphs'], [_('Sentences'), 'sentences']];
     const table = el('table', { class: 'stats' },
-      el('thead', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Document'), sel ? el('th', {}, 'Selection') : null)),
+      el('thead', {}, el('tr', {}, el('th', {}, ''), el('th', {}, _('Document')), sel ? el('th', {}, _('Selection')) : null)),
       el('tbody', {}, rows.map(([label, k]) => el('tr', {}, el('td', {}, label), el('td', {}, fmtNum(all[k])), sel ? el('td', {}, fmtNum(sel[k])) : null)),
-        el('tr', {}, el('td', {}, 'Reading time'), el('td', {}, minutes(all.read)), sel ? el('td', {}, minutes(sel.read)) : null),
-        el('tr', {}, el('td', {}, 'Speaking time'), el('td', {}, minutes(all.speak)), sel ? el('td', {}, minutes(sel.speak)) : null)));
-    dialog({ title: 'Word count', body: table });
+        el('tr', {}, el('td', {}, _('Reading time')), el('td', {}, minutes(all.read)), sel ? el('td', {}, minutes(sel.read)) : null),
+        el('tr', {}, el('td', {}, _('Speaking time')), el('td', {}, minutes(all.speak)), sel ? el('td', {}, minutes(sel.speak)) : null)));
+    dialog({ title: _('Word count'), body: table });
   }
+
+  // Why a version was kept: stored in English, shown in the app's language.
+  const REASONS = { 'Autosave': () => _('Autosave'), 'Before restoring': () => _('Before restoring'), 'Before replace all': () => _('Before replace all'),
+    'Read before translating': () => _('Read before translating'), 'Saved by you': () => _('Saved by you') };
+  const reasonText = (r) => (REASONS[r] ? REASONS[r]() : r);
 
   async function historyDialog() {
     if (!current) return;
     await saveNow();
     const list = await NpStore.listVersions(current.id);
-    const preview = el('div', { class: 'hist-preview editor' }, el('p', { class: 'muted' }, list.length ? 'Pick a version to preview it.' : 'No earlier versions yet. A restore point is saved every 10 minutes while you write, and whenever you save.'));
+    const preview = el('div', { class: 'hist-preview editor' }, el('p', { class: 'muted' }, list.length ? _('Pick a version to preview it.') : _('No earlier versions yet. A restore point is saved every 10 minutes while you write, and whenever you save.')));
     let chosen = null;
     const items = el('ul', { class: 'hist-list' }, list.map((v) => el('li', {},
       el('button', { type: 'button', class: 'hist-item', onclick: async (e) => {
@@ -2138,14 +2184,14 @@
         e.currentTarget.classList.add('on');
         const full = await NpStore.getVersion(v.vid);
         chosen = full;
-        preview.innerHTML = NpSanitize.html(full.html) || '<p class="muted">(empty)</p>';
+        preview.innerHTML = NpSanitize.html(full.html) || '<p class="muted">' + escapeHtml(_('(empty)')) + '</p>';
         restoreBtn.disabled = false;
-      } }, el('strong', {}, fmtDate(v.time)), el('span', {}, v.reason + ' · ' + ago(v.time))))));
+      } }, el('strong', {}, fmtDate(v.time)), el('span', {}, reasonText(v.reason) + ' · ' + ago(v.time))))));
     const restoreBtn = el('button', { class: 'btn btn-primary', type: 'button', disabled: true, onclick: () => d && d.close('restore') });
-    restoreBtn.textContent = 'Restore this version';
+    restoreBtn.textContent = _('Restore this version');
     let d = null;
     const body = el('div', { class: 'hist' }, items, preview);
-    const p = dialog({ title: 'Version history', body, wide: true, actions: [{ label: 'Close', value: '' }], onOpen: (dlg) => { d = dlg; dlg.querySelector('.dlg-foot').prepend(restoreBtn); } });
+    const p = dialog({ title: _('Version history'), body, wide: true, actions: [{ label: _('Close'), value: '' }], onOpen: (dlg) => { d = dlg; dlg.querySelector('.dlg-foot').prepend(restoreBtn); } });
     const v = await p;
     if (v === 'restore' && chosen) {
       await NpStore.addVersion(current.id, serialize(), displayTitle(current), 'Before restoring');
@@ -2154,22 +2200,22 @@
       document.execCommand('insertHTML', false, NpSanitize.html(chosen.html) || '<p><br></p>');
       afterEdit();
       await saveNow();
-      toast('Version restored. Undo (Ctrl+Z) brings back what you had.');
+      toast(_('Version restored. Undo (Ctrl+Z) brings back what you had.'));
     }
   }
 
   function shortcutsDialog() {
-    const k = (s) => s.split(' / ').map((x) => '<kbd>' + escapeHtml(isMac ? x.replace(/Ctrl/g, '⌘').replace(/Alt/g, '⌥').replace(/Shift/g, '⇧') : x) + '</kbd>').join(' ');
+    const k = (s) => s.split(' / ').map((x) => '<kbd>' + escapeHtml(isMac ? x.replace(/Ctrl/g, '⌘').replace(/Alt/g, '⌥').replace(/Shift/g, '⇧') : NpI18n.keys(x)) + '</kbd>').join(' ');
     const groups = [
-      ['Text', [['Bold', 'Ctrl+B'], ['Italic', 'Ctrl+I'], ['Underline', 'Ctrl+U'], ['Strikethrough', 'Ctrl+Shift+X'], ['Inline code', 'Ctrl+E'], ['Superscript / subscript', 'Ctrl+. / Ctrl+,'], ['Link', 'Ctrl+K'], ['Clear formatting', 'Ctrl+\\']]],
-      ['Paragraphs', [['Normal text', 'Ctrl+Alt+0'], ['Heading 1–3', 'Ctrl+Alt+1 / Ctrl+Alt+3'], ['Numbered list', 'Ctrl+Shift+7'], ['Bulleted list', 'Ctrl+Shift+8'], ['Checklist', 'Ctrl+Shift+9'], ['Align left / center / right / justify', 'Ctrl+Shift+L / Ctrl+Shift+E / Ctrl+Shift+R / Ctrl+Shift+J'], ['Indent list item', 'Tab / Shift+Tab'], ['Page break', 'Ctrl+Enter']]],
-      ['Document', [['Save', 'Ctrl+S'], ['Save as', 'Ctrl+Shift+S'], ['Open a file', 'Ctrl+O'], ['New document', 'Ctrl+Alt+N'], ['Find / replace', 'Ctrl+F / Ctrl+H'], ['Print', 'Ctrl+P'], ['Word count', 'Ctrl+Shift+C'], ['Focus mode', 'Ctrl+Shift+F'], ['Paste without formatting', 'Ctrl+Shift+V']]],
-      ['PDF tools (single keys, while a PDF is open)', [['Select and move', 'V'], ['Edit the PDF’s text', 'E'], ['Add text', 'T'], ['Highlight', 'H'], ['White-out', 'W'], ['Draw', 'D'], ['Box', 'B'], ['Delete what is selected', 'Delete'], ['Nudge what is selected', 'Arrow keys']]],
-      ['Markdown shortcuts (type, then space)', [['Heading 1, 2, 3', '# / ## / ###'], ['Bulleted list', '- / *'], ['Numbered list', '1.'], ['Checklist', '[ ]'], ['Quote', '>'], ['Code block', '```'], ['Horizontal line (then Enter)', '---']]]
+      [_('Text'), [[_('Bold'), 'Ctrl+B'], [_('Italic'), 'Ctrl+I'], [_('Underline'), 'Ctrl+U'], [_('Strikethrough'), 'Ctrl+Shift+X'], [_('Inline code'), 'Ctrl+E'], [_('Superscript / subscript'), 'Ctrl+. / Ctrl+,'], [_('Link'), 'Ctrl+K'], [_('Clear formatting'), 'Ctrl+\\']]],
+      [_('Paragraphs'), [[_('Normal text'), 'Ctrl+Alt+0'], [_('Heading 1–3'), 'Ctrl+Alt+1 / Ctrl+Alt+3'], [_('Numbered list'), 'Ctrl+Shift+7'], [_('Bulleted list'), 'Ctrl+Shift+8'], [_('Checklist'), 'Ctrl+Shift+9'], [_('Align left / center / right / justify'), 'Ctrl+Shift+L / Ctrl+Shift+E / Ctrl+Shift+R / Ctrl+Shift+J'], [_('Indent list item'), 'Tab / Shift+Tab'], [_('Page break'), 'Ctrl+Enter']]],
+      [_('Document'), [[_('Save'), 'Ctrl+S'], [_('Save as'), 'Ctrl+Shift+S'], [_('Open a file'), 'Ctrl+O'], [_('New document'), 'Ctrl+Alt+N'], [_('Find / replace'), 'Ctrl+F / Ctrl+H'], [_('Print'), 'Ctrl+P'], [_('Word count'), 'Ctrl+Shift+C'], [_('Focus mode'), 'Ctrl+Shift+F'], [_('Paste without formatting'), 'Ctrl+Shift+V']]],
+      [_('PDF tools (single keys, while a PDF is open)'), [[_('Select and move'), 'V'], [_('Edit the PDF’s text'), 'E'], [_('Add text'), 'T'], [_('Highlight'), 'H'], [_('White-out'), 'W'], [_('Draw'), 'D'], [_('Box'), 'B'], [_('Delete what is selected'), 'Delete'], [_('Nudge what is selected'), _('Arrow keys')]]],
+      [_('Markdown shortcuts (type, then space)'), [[_('Heading 1, 2, 3'), '# / ## / ###'], [_('Bulleted list'), '- / *'], [_('Numbered list'), '1.'], [_('Checklist'), '[ ]'], [_('Quote'), '>'], [_('Code block'), '```'], [_('Horizontal line (then Enter)'), '---']]]
     ];
     const html = groups.map(([g, rows]) => '<h3>' + escapeHtml(g) + '</h3><table class="keys">' +
-      rows.map(([a, b]) => '<tr><td>' + escapeHtml(a) + '</td><td>' + (g.startsWith('Markdown') ? b.split(' / ').map((x) => '<code>' + escapeHtml(x) + '</code>').join(' ') : k(b)) + '</td></tr>').join('') + '</table>').join('');
-    dialog({ title: 'Keyboard shortcuts', body: el('div', { class: 'keys-wrap', html }), wide: true });
+      rows.map(([a, b]) => '<tr><td>' + escapeHtml(a) + '</td><td>' + (g === groups[4][0] ? b.split(' / ').map((x) => '<code>' + escapeHtml(x) + '</code>').join(' ') : k(b)) + '</td></tr>').join('') + '</table>').join('');
+    dialog({ title: _('Keyboard shortcuts'), body: el('div', { class: 'keys-wrap', html }), wide: true });
   }
 
   // What Noteshack does, shown when the site opens until someone ticks
@@ -2180,14 +2226,14 @@
     const feature = (title, text) => el('li', {}, el('strong', {}, title), el('span', {}, text));
     const check = el('input', { type: 'checkbox', id: 'welcome-hide' });
     const body = el('div', { class: 'welcome' },
-      el('p', { class: 'dlg-text' }, 'A free word processor and PDF editor that works right in your browser.'),
+      el('p', { class: 'dlg-text' }, _('A free word processor and PDF editor that works right in your browser.')),
       el('ul', { class: 'welcome-list' },
-        feature('Write', 'A full word processor. Open and save Word documents, Markdown, web pages and plain text.'),
-        feature('Edit any PDF', 'Change its text in the original font, fill in forms, sign, highlight, add notes and pages.'),
-        feature('Scans become editable', 'Open a scanned PDF or a photo of a page, click it, and its words become real text you can change, set in letters taken from the scan itself.'),
-        feature('Private', 'Everything happens on your computer. Nothing you open or write is uploaded, and it works offline.')),
-      el('label', { class: 'welcome-hide' }, check, el('span', {}, 'Don’t show this again')));
-    await dialog({ title: 'Welcome to Noteshack', body, actions: [{ label: 'Get started', value: 'ok', primary: true }] });
+        feature(_('Write'), _('A full word processor. Open and save Word documents, Markdown, web pages and plain text.')),
+        feature(_('Edit any PDF'), _('Change its text in the original font, fill in forms, sign, highlight, add notes and pages.')),
+        feature(_('Scans become editable'), _('Open a scanned PDF or a photo of a page, click it, and its words become real text you can change, set in letters taken from the scan itself.')),
+        feature(_('Private'), _('Everything happens on your computer. Nothing you open or write is uploaded, and it works offline.'))),
+      el('label', { class: 'welcome-hide' }, check, el('span', {}, _('Don’t show this again'))));
+    await dialog({ title: _('Welcome to Noteshack'), body, actions: [{ label: _('Get started'), value: 'ok', primary: true }] });
     try { if (check.checked) localStorage.setItem(WELCOME_KEY, 'hidden'); } catch (e) { /* ignore */ }
   }
 
@@ -2200,14 +2246,14 @@
     const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
     try { if (!safari || installed || localStorage.getItem(SAFARI_KEY)) return; localStorage.setItem(SAFARI_KEY, 'shown'); } catch (e) { return; }
     await dialog({
-      title: 'Keeping your documents in Safari',
+      title: _('Keeping your documents in Safari'),
       body: el('div', { class: 'stack' },
-        el('p', { class: 'dlg-text' }, 'Noteshack keeps your documents in this browser. Safari may clear what a website keeps if you don\u2019t visit it for 7 days. Ways to keep them safe:'),
+        el('p', { class: 'dlg-text' }, _('Noteshack keeps your documents in this browser. Safari may clear what a website keeps if you don\u2019t visit it for 7 days. Ways to keep them safe:')),
         el('ul', { class: 'welcome-list' },
-          el('li', {}, el('strong', {}, 'Add Noteshack to your Dock or Home Screen'), el('span', {}, 'Installed, it is kept like any app. On a Mac: File \u2192 Add to Dock. On an iPhone or iPad: Share \u2192 Add to Home Screen.')),
-          el('li', {}, el('strong', {}, 'Save your documents as files'), el('span', {}, 'File \u2192 Save puts a copy in your Downloads.')),
-          el('li', {}, el('strong', {}, 'Back up now and then'), el('span', {}, 'File \u2192 Back up all documents saves everything in one file you can restore anywhere.')))),
-      actions: [{ label: 'Got it', value: 'ok', primary: true }]
+          el('li', {}, el('strong', {}, _('Add Noteshack to your Dock or Home Screen')), el('span', {}, _('Installed, it is kept like any app. On a Mac: File \u2192 Add to Dock. On an iPhone or iPad: Share \u2192 Add to Home Screen.'))),
+          el('li', {}, el('strong', {}, _('Save your documents as files')), el('span', {}, _('File \u2192 Save puts a copy in your Downloads.'))),
+          el('li', {}, el('strong', {}, _('Back up now and then')), el('span', {}, _('File \u2192 Back up all documents saves everything in one file you can restore anywhere.'))))),
+      actions: [{ label: _('Got it'), value: 'ok', primary: true }]
     });
   }
 
@@ -2216,40 +2262,44 @@
     try {
       if (navigator.storage && navigator.storage.estimate) {
         const e = await navigator.storage.estimate();
-        usage = (e.usage / 1048576).toFixed(1) + ' MB used';
+        usage = _('{size} MB used', { size: (e.usage / 1048576).toLocaleString(LOC, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
       }
     } catch (e) { /* not available */ }
     let persisted = false;
     try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; } catch (e) { /* not available */ }
     const body = el('div', { class: 'stack about' },
-      el('p', {}, 'Noteshack is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.'),
+      el('p', {}, _('Noteshack is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.')),
       el('ul', { class: 'facts' },
-        el('li', {}, el('strong', {}, String(docs.length)), ' document' + (docs.length === 1 ? '' : 's') + (usage ? ' · ' + usage : '')),
-        el('li', {}, NpStore.persistent ? (persisted ? 'Storage is marked persistent: the browser will not clear it to free space.' : 'Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.') : 'This browser is not allowing storage (private window?). Work is kept only until you close the tab.'),
-        el('li', {}, 'Works offline once loaded, and can be installed as an app from your browser’s menu.'),
-        el('li', {}, 'Version ' + APP_VERSION)),
-      el('p', { class: 'muted' }, 'Tip: File → Back up all documents saves everything to one file you can restore on another computer.'),
-      el('details', { class: 'about-more' }, el('summary', {}, 'Privacy'),
-        el('p', {}, 'There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.'),
-        el('p', {}, 'Two things are fetched from other websites: when a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document; and pictures in your documents that link to a web address are loaded from that address.')),
-      el('details', { class: 'about-more' }, el('summary', {}, 'Disclaimer'),
-        el('p', {}, 'Noteshack is provided as is, without warranty of any kind. Text recognition and font matching can be wrong: check a PDF before you send, submit or sign it. Keep backups of anything important.'),
-        el('p', {}, 'You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.')),
-      el('details', { class: 'about-more' }, el('summary', {}, 'Credits and licenses'),
+        el('li', {}, _n(docs.length, '{n} document', '{n} documents') + (usage ? ' · ' + usage : '')),
+        el('li', {}, NpStore.persistent ? (persisted ? _('Storage is marked persistent: the browser will not clear it to free space.') : _('Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.')) : _('This browser is not allowing storage (private window?). Work is kept only until you close the tab.')),
+        el('li', {}, _('Works offline once loaded, and can be installed as an app from your browser’s menu.')),
+        el('li', {}, _('Version {version}', { version: APP_VERSION }))),
+      el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
+      el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
+        el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.')),
+        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And the first time you translate between two languages, the model for them is downloaded from Noteshack’s own file storage (files.noteshack.org) and kept in this browser; the text itself is translated on this device.'))),
+      el('details', { class: 'about-more' }, el('summary', {}, _('Disclaimer')),
+        el('p', {}, _('Noteshack is provided as is, without warranty of any kind. Text recognition, translation and font matching can be wrong: check a document before you send, submit or sign it. Keep backups of anything important.')),
+        el('p', {}, _('You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.'))),
+      el('details', { class: 'about-more' }, el('summary', {}, _('Credits and licenses')),
         el('ul', { class: 'facts' },
-          el('li', {}, 'PDF.js (Mozilla), Apache License 2.0: shows PDF pages'),
-          el('li', {}, 'pdf-lib and @pdf-lib/fontkit, MIT License: write PDFs'),
-          el('li', {}, 'Tesseract.js, Tesseract OCR and its English data, Apache License 2.0: read text on scans'),
-          el('li', {}, 'opentype.js, MIT License: builds fonts from a scan’s letters'),
-          el('li', {}, 'Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks')),
-        el('p', {}, 'Noteshack’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.')),
-      el('details', { class: 'about-more' }, el('summary', {}, 'Trademarks'),
-        el('p', {}, 'Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Noteshack is not affiliated with or endorsed by them.')));
-    dialog({ title: 'About and storage', body });
+          el('li', {}, _('PDF.js (Mozilla), Apache License 2.0: shows PDF pages')),
+          el('li', {}, _('pdf-lib and @pdf-lib/fontkit, MIT License: write PDFs')),
+          el('li', {}, _('Tesseract.js, Tesseract OCR and its language data, Apache License 2.0: read text on scans')),
+          el('li', {}, _('opentype.js, MIT License: builds fonts from a scan’s letters')),
+          el('li', {}, _('UTIF.js and pako, MIT License: read TIFF images')),
+          el('li', {}, _('Hunspell (MPL 1.1) with Hunspell dictionaries, each under its own license: spell checking')),
+          el('li', {}, _('franc, MIT License: tells which language a text is in')),
+          el('li', {}, _('Bergamot, Firefox’s translation engine, and Mozilla’s translation models, Mozilla Public License 2.0: translation')),
+          el('li', {}, _('Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks'))),
+        el('p', {}, _('Noteshack’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.'))),
+      el('details', { class: 'about-more' }, el('summary', {}, _('Trademarks')),
+        el('p', {}, _('Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Noteshack is not affiliated with or endorsed by them.'))));
+    dialog({ title: _('About and storage'), body });
   }
 
   async function editAlt(img) {
-    const v = await promptDialog('Alt text', 'Describe the image for screen readers and when it cannot load', img.getAttribute('alt') || '');
+    const v = await promptDialog(_('Alt text'), _('Describe the image for screen readers and when it cannot load'), img.getAttribute('alt') || '');
     if (v == null) return;
     setImage(img, (c) => c.setAttribute('alt', v));
   }
@@ -2257,26 +2307,27 @@
   async function imageUrlDialog() {
     restoreSelection();
     const range = currentRange();
-    const v = await promptDialog('Image from a link', 'Image address (https://…)', '', { placeholder: 'https://example.com/picture.jpg', ok: 'Insert' });
+    const v = await promptDialog(_('Image from a link'), _('Image address (https://…)'), '', { placeholder: 'https://example.com/picture.jpg', ok: _('Insert') });
     if (!v) return;
-    if (!/^https?:\/\//i.test(v.trim())) { toast('Use an address starting with https://'); return; }
+    if (!/^https?:\/\//i.test(v.trim())) { toast(_('Use an address starting with https://')); return; }
     editor.focus();
     if (range) { getSelection().removeAllRanges(); getSelection().addRange(range); }
     exec('insertHTML', '<img src="' + escapeHtml(v.trim()) + '" alt="">');
   }
 
   function voiceDialog() {
-    if (!('speechSynthesis' in window)) { toast('This browser cannot read text aloud.'); return; }
+    if (!('speechSynthesis' in window)) { toast(_('This browser cannot read text aloud.')); return; }
     const voices = speechSynthesis.getVoices();
-    const select = el('select', { class: 'input' }, el('option', { value: '' }, 'Default voice'),
+    const select = el('select', { class: 'input' }, el('option', { value: '' }, _('Default voice')),
       voices.map((v) => el('option', { value: v.name, selected: v.name === settings.voice }, v.name + ' (' + v.lang + ')')));
     const rate = el('input', { type: 'range', min: '0.5', max: '2', step: '0.1', value: String(settings.rate) });
     const rateLabel = el('span', { class: 'muted' }, settings.rate.toFixed(1) + '×');
     rate.addEventListener('input', () => { rateLabel.textContent = (+rate.value).toFixed(1) + '×'; });
     const body = el('div', { class: 'stack' },
-      el('label', { class: 'field' }, el('span', {}, 'Voice'), select),
-      el('label', { class: 'field' }, el('span', {}, 'Speed ', rateLabel), rate));
-    dialog({ title: 'Voice settings', body, actions: [{ label: 'Cancel', value: '' }, { label: 'Save', value: 'ok', primary: true }] }).then((v) => {
+      el('label', { class: 'field' }, el('span', {}, _('Voice')), select),
+      el('label', { class: 'field' }, el('span', {}, _('Speed'), ' ', rateLabel), rate));
+
+    dialog({ title: _('Voice settings'), body, actions: [{ label: _('Cancel'), value: '' }, { label: _('Save'), value: 'ok', primary: true }] }).then((v) => {
       if (v !== 'ok') return;
       settings.voice = select.value;
       settings.rate = +rate.value;
@@ -2343,7 +2394,7 @@
     const count = $('#find-count');
     if (!re) {
       clearFindHighlights();
-      count.textContent = re === false ? 'Bad pattern' : '';
+      count.textContent = re === false ? _('Bad pattern') : '';
       count.classList.toggle('bad', re === false);
       return;
     }
@@ -2374,7 +2425,7 @@
 
   function paintFind() {
     const n = findState.ranges.length;
-    $('#find-count').textContent = findQ.value ? (n ? (findState.cur + 1) + ' of ' + n + (n >= 5000 ? '+' : '') : 'No results') : '';
+    $('#find-count').textContent = findQ.value ? (n ? _('{at} of {total}', { at: findState.cur + 1, total: fmtNum(n) + (n >= 5000 ? '+' : '') }) : _('No results')) : '';
     if (!hasHighlights) return;
     CSS.highlights.set('np-find', new Highlight(...findState.ranges));
     const cur = findState.ranges[findState.cur];
@@ -2448,7 +2499,8 @@
     afterEdit();
     runFind(true);
     findR.focus();
-    toast('Replaced ' + fmtNum(n) + ' match' + (n === 1 ? '' : 'es'));
+    toast(_n(n, 'Replaced {n} match', 'Replaced {n} matches'));
+
   }
 
   /* =========================================================== images */
@@ -2542,7 +2594,7 @@
       const img = await new Promise((resolve, reject) => {
         const i = new Image();
         i.onload = () => resolve(i);
-        i.onerror = () => reject(new Error('That image could not be read.'));
+        i.onerror = () => reject(new Error(_('That image could not be read.')));
         i.src = url;
       });
       const max = 1800;
@@ -2568,7 +2620,7 @@
       const alt = file.name ? file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ') : '';
       exec('insertHTML', '<img src="' + src + '" alt="' + escapeHtml(alt) + '">');
     } catch (e) {
-      toast(e.message || 'That image could not be added.');
+      toast(e.message || _('That image could not be added.'));
     }
   }
 
@@ -2724,10 +2776,10 @@
   const fileLinks = new Map();
 
   const KINDS = {
-    docx: { ext: 'docx', exts: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'Word document' },
-    md: { ext: 'md', exts: ['md', 'markdown'], mime: 'text/markdown', label: 'Markdown' },
-    html: { ext: 'html', exts: ['html', 'htm'], mime: 'text/html', label: 'Web page' },
-    txt: { ext: 'txt', exts: ['txt', 'text'], mime: 'text/plain', label: 'Plain text' },
+    docx: { ext: 'docx', exts: ['docx'], mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: _('Word document') },
+    md: { ext: 'md', exts: ['md', 'markdown'], mime: 'text/markdown', label: _('Markdown') },
+    html: { ext: 'html', exts: ['html', 'htm'], mime: 'text/html', label: _('Web page') },
+    txt: { ext: 'txt', exts: ['txt', 'text'], mime: 'text/plain', label: _('Plain text') },
     pdf: { ext: 'pdf', exts: ['pdf'], mime: 'application/pdf', label: 'PDF' }
   };
   const kindInfo = (kind) => KINDS[kind] || NpImages.kind(kind);
@@ -2848,7 +2900,7 @@
     if (doc.type === 'pdf') NpPdf.finishEditing();
     await saveNow('Saved by you');
     const info = kindInfo(kind);
-    setStatus('Saving the ' + info.label + '…', 'pending');
+    setStatus(_('Saving the file…'), 'pending');
     try {
       const out = await makeFile(doc, kind);
       if (handle && !out.zip) {
@@ -2856,16 +2908,16 @@
         await w.write(out.blob);
         await w.close();
         if (!exporting) fileLinks.set(doc.id, { handle, kind, name: handle.name });
-        toast((exporting ? 'Exported to “' : 'Saved to “') + handle.name + '”');
+        toast(exporting ? _('Exported to “{name}”', { name: handle.name }) : _('Saved to “{name}”', { name: handle.name }));
       } else {
         download(out.blob, out.filename);
-        if (out.zip) toast('One ' + info.label + ' holds one page, so the ' + info.label + 's were saved together in a zip.', 7000);
-        else if (exporting) toast('Exported to your Downloads.');
-        else if (!canWriteFiles()) toast('Saved to your Downloads. (This browser does not let websites save over a file, so each save is a new copy.)', 7000);
+        if (out.zip) toast(_('An image holds one page, so the pages were saved as images together in a zip.'), 7000);
+        else if (exporting) toast(_('Exported to your Downloads.'));
+        else if (!canWriteFiles()) toast(_('Saved to your Downloads. (This browser does not let websites save over a file, so each save is a new copy.)'), 7000);
       }
-      if (out.fellBack) toast('This browser cannot save WebP images, so it was saved as PNG.', 6000);
+      if (out.fellBack) toast(_('This browser cannot save WebP images, so it was saved as PNG.'), 6000);
     } catch (e) {
-      toast('Could not save: ' + (e.message || e), 7000);
+      toast(_('Could not save: {reason}', { reason: e.message || e }), 7000);
     }
     setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
     updateSaveUi();
@@ -2884,7 +2936,7 @@
     if (!pdfMode()) doc.text = plainText().slice(0, 200000); // the name may come from a line just typed
     // a document written here becomes a PDF by printing it
     if (kinds.length === 1 && kinds[0] === 'pdf' && doc.type !== 'pdf') {
-      toast('In the print window, choose “Save as PDF” as the printer.', 5000);
+      toast(_('In the print window, choose “Save as PDF” as the printer.'), 5000);
       setTimeout(printDoc, 400);
       return;
     }
@@ -2908,12 +2960,12 @@
       }
     }
     if (!kind) {
-      const select = el('select', { class: 'input', 'aria-label': 'File type' },
+      const select = el('select', { class: 'input', 'aria-label': _('File type') },
         kinds.map((k) => el('option', { value: k }, kindInfo(k).label + ' (.' + kindInfo(k).ext + ')')));
       const v = await dialog({
-        title: exporting ? 'Export' : 'Save as',
-        body: el('label', { class: 'field' }, el('span', {}, 'File type'), select),
-        actions: [{ label: 'Cancel', value: '' }, { label: exporting ? 'Export' : 'Save', value: 'save', primary: true }],
+        title: exporting ? _('Export') : _('Save as'),
+        body: el('label', { class: 'field' }, el('span', {}, _('File type')), select),
+        actions: [{ label: _('Cancel'), value: '' }, { label: exporting ? _('Export') : _('Save'), value: 'save', primary: true }],
         onOpen: () => select.focus()
       });
       if (v !== 'save') return;
@@ -2935,9 +2987,9 @@
         // it loses them, so that is asked once.
         if (ok && f.imported) {
           const v = await dialog({
-            title: 'Save over “' + f.name + '”?',
-            body: el('p', { class: 'dlg-text' }, 'Noteshack opened the everyday parts of this ' + kindInfo(f.kind).label.toLowerCase() + '. Anything it could not open (comments, tracked changes, headers and footers, text boxes, a page’s scripts) would be lost from the file. Save as keeps the original as it is.'),
-            actions: [{ label: 'Cancel', value: '' }, { label: 'Save as…', value: 'as' }, { label: 'Save over it', value: 'over', primary: true }]
+            title: _('Save over “{name}”?', { name: f.name }),
+            body: el('p', { class: 'dlg-text' }, _('Noteshack opened the everyday parts of this file. Anything it could not open (comments, tracked changes, headers and footers, text boxes, a page’s scripts) would be lost from the file. Save as keeps the original as it is.')),
+            actions: [{ label: _('Cancel'), value: '' }, { label: _('Save as…'), value: 'as' }, { label: _('Save over it'), value: 'over', primary: true }]
           });
           if (v === 'as') return saveAs();
           if (v !== 'over') return;
@@ -2955,9 +3007,10 @@
   // The File menu and the PDF toolbar say where Save goes.
   function updateSaveUi() {
     const f = current && fileLinks.get(current.id);
-    const where = f && canWriteFiles() ? 'Save to “' + f.name + '”' : 'Save';
+    const where = f && canWriteFiles() ? _('Save to “{name}”', { name: f.name }) : _('Save');
     $('#save-item span').textContent = where;
-    $('.pdf-download').title = where + ' (Ctrl+S)';
+    $('.pdf-download').title = where + ' (' + NpI18n.keys('Ctrl+S') + ')';
+
   }
 
   // Link a newly opened document to the file it came from, so Save writes back to it.
@@ -2991,21 +3044,21 @@
         else if (NpImages.formatOf(file)) doc = await createPdfDoc(file, name, true);
         if (doc) { await linkFile(doc, handles[i], kind); last = doc; continue; }
         if (ext === 'docx') html = NpSanitize.html(await NpDocx.import(await file.arrayBuffer()));
-        else if (ext === 'doc') { toast('Old .doc files cannot be opened. In Word, use Save As → .docx first.', 6000); continue; }
+        else if (ext === 'doc') { toast(_('Old .doc files cannot be opened. In Word, use Save As → .docx first.'), 6000); continue; }
         else if (ext === 'md' || ext === 'markdown' || file.type === 'text/markdown') html = NpSanitize.html(NpMarkdown.toHtml(await file.text()));
         else if (ext === 'html' || ext === 'htm' || file.type === 'text/html') html = NpSanitize.html(await file.text(), { external: true });
         else if (ext === 'json') { await restoreBackupFile(file); continue; }
         else if (file.type.startsWith('text/') || ['txt', 'text', 'csv', 'log', ''].includes(ext)) {
           const text = (await file.text()).replace(/\r\n?/g, '\n');
           html = text.split('\n').map((l) => '<p>' + (escapeHtml(l) || '<br>') + '</p>').join('');
-        } else { toast('“' + file.name + '” is not a file type Noteshack can open.'); continue; }
+        } else { toast(_('“{name}” is not a file type Noteshack can open.', { name: file.name })); continue; }
         doc = await createDoc(html || '<p><br></p>', name, { keepFocus: true });
         if (doc) { await linkFile(doc, handles[i], kind); last = doc; updateSaveUi(); }
       } catch (e) {
         await openFailed(file.name, e);
       }
     }
-    if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? 'Files opened as new documents' : 'Opened as a new document'); updateSaveUi(); }
+    if (last) { if (last.type !== 'pdf') placeCaretAtStart(); toast(files.length > 1 ? _('Files opened as new documents') : _('Opened as a new document')); updateSaveUi(); }
   }
 
   // A file that would not open: said plainly, with the technical detail
@@ -3014,13 +3067,13 @@
     setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn');
     const locked = e && e.name === 'PasswordException';
     const why = locked
-      ? 'It is password-protected. Remove the password in another app (open it there, and save or print it without one), then open it here again.'
-      : 'The file may be damaged or incomplete, or saved in a way Noteshack cannot read. If it opens in another program, saving a fresh copy from there often helps.';
+      ? _('It is password-protected. Remove the password in another app (open it there, and save or print it without one), then open it here again.')
+      : _('The file may be damaged or incomplete, or saved in a way Noteshack cannot read. If it opens in another program, saving a fresh copy from there often helps.');
     await dialog({
-      title: 'Couldn’t open “' + name + '”',
+      title: _('Couldn’t open “{name}”', { name }),
       body: el('div', { class: 'stack' }, el('p', { class: 'dlg-text' }, why),
-        locked ? null : el('p', { class: 'muted open-detail' }, 'Details: ' + ((e && e.message) || e))),
-      actions: [{ label: 'OK', value: 'ok', primary: true }]
+        locked ? null : el('p', { class: 'muted open-detail' }, _('Details: {detail}', { detail: (e && e.message) || e }))),
+      actions: [{ label: _('OK'), value: 'ok', primary: true }]
     });
   }
 
@@ -3031,7 +3084,7 @@
     let handles;
     try {
       handles = await window.showOpenFilePicker({ id: 'noteshack', multiple: true, types: [{
-        description: 'Documents, PDFs and images',
+        description: _('Documents, PDFs and images'),
         accept: { 'application/octet-stream': $('#file-open').accept.split(',').filter((x) => x.startsWith('.')) }
       }] });
     } catch (e) {
@@ -3054,15 +3107,16 @@
     if (src.type === 'pdf') {
       const now = Date.now();
       const copy = Object.assign(JSON.parse(JSON.stringify(Object.assign({}, src, { sources: null }))), {
-        id: uid(), title: 'Copy of ' + displayTitle(src), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
+        id: uid(), title: _('Copy of {title}', { title: displayTitle(src) }), titleAuto: false, created: now, updated: now, sources: src.sources.map((b) => b.slice(0)),
         scanFonts: src.scanFonts ? Object.fromEntries(Object.entries(src.scanFonts).map(([k, b]) => [k, b instanceof ArrayBuffer ? b.slice(0) : b])) : undefined
       });
       await addRecord(copy);
-      toast('Copy created');
+      toast(_('Copy created'));
       return;
     }
-    await createDoc(unmarked(src.html), 'Copy of ' + displayTitle(src), { settings: src.settings, keepFocus: true });
-    toast('Copy created');
+    await createDoc(unmarked(src.html), _('Copy of {title}', { title: displayTitle(src) }), { settings: src.settings, keepFocus: true });
+
+    toast(_('Copy created'));
   }
 
   async function backupAll() {
@@ -3074,7 +3128,7 @@
     const data = { app: 'notepad-online', format: 1, exported: new Date().toISOString(), docs: all };
     const stamp = new Date().toISOString().slice(0, 10);
     download(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'noteshack-backup-' + stamp + '.json');
-    toast('Backup downloaded (' + all.length + ' document' + (all.length === 1 ? '' : 's') + ')');
+    toast(_n(all.length, 'Backup downloaded ({n} document)', 'Backup downloaded ({n} documents)'));
   }
 
   function bufToB64(buf) {
@@ -3112,9 +3166,9 @@
 
   async function restoreBackupFile(file) {
     let data;
-    try { data = JSON.parse(await file.text()); } catch (e) { toast('That is not a Noteshack backup file.'); return; }
+    try { data = JSON.parse(await file.text()); } catch (e) { toast(_('That is not a Noteshack backup file.')); return; }
     // (the backup format keeps the app's first name, so older backups still load)
-    if (!data || data.app !== 'notepad-online' || !Array.isArray(data.docs)) { toast('That is not a Noteshack backup file.'); return; }
+    if (!data || data.app !== 'notepad-online' || !Array.isArray(data.docs)) { toast(_('That is not a Noteshack backup file.')); return; }
     let added = 0;
     let skipped = 0;
     for (const raw of data.docs) {
@@ -3146,7 +3200,7 @@
     }
     sortDocs();
     renderDocList();
-    toast('Restored ' + added + ' document' + (added === 1 ? '' : 's') + (skipped ? ' (' + skipped + ' already here)' : ''));
+    toast(_n(added, 'Restored {n} document', 'Restored {n} documents') + (skipped ? ' ' + _n(skipped, '({n} already here)', '({n} already here)') : ''));
   }
 
   $('#file-backup').addEventListener('change', (e) => {
@@ -3175,11 +3229,11 @@
         el('button', { class: 'doc-open', type: 'button', 'aria-current': active ? 'true' : null, onclick: () => openDoc(d.id) },
           el('span', { class: 'doc-name' }, d.type === 'pdf' ? el('span', { class: 'doc-badge' }, 'PDF') : null, displayTitle(d)),
           el('span', { class: 'doc-meta' }, snippet || (ago(d.updated) + ' · ' + (d.type === 'pdf'
-            ? fmtNum(d.pageCount || (d.pages || []).length) + ' page' + ((d.pageCount || (d.pages || []).length) === 1 ? '' : 's')
-            : fmtNum(d.words || 0) + ' word' + (d.words === 1 ? '' : 's'))))),
-        el('button', { class: 'doc-del icon-btn sm', type: 'button', 'data-icon': 'trash', title: 'Delete', 'aria-label': 'Delete ' + displayTitle(d), onclick: (e) => { e.stopPropagation(); deleteDoc(d.id); } }));
+            ? _n(d.pageCount || (d.pages || []).length, '{n} page', '{n} pages')
+            : _n(d.words || 0, '{n} word', '{n} words'))))),
+        el('button', { class: 'doc-del icon-btn sm', type: 'button', 'data-icon': 'trash', title: _('Delete'), 'aria-label': _('Delete {title}', { title: displayTitle(d) }), onclick: (e) => { e.stopPropagation(); deleteDoc(d.id); } }));
     }));
-    if (!list.length) docList.append(el('li', { class: 'doc-empty' }, q ? 'No documents match.' : 'No documents yet.'));
+    if (!list.length) docList.append(el('li', { class: 'doc-empty' }, q ? _('No documents match.') : _('No documents yet.')));
     NpIcons.inject(docList);
   }
   docSearch.addEventListener('input', debounce(renderDocList, 100));
@@ -3198,8 +3252,9 @@
     if (!current || current.type === 'pdf') return;
     const text = plainText();
     const st = stats(text);
-    $('#sb-count').textContent = fmtNum(st.words) + ' word' + (st.words === 1 ? '' : 's');
-    $('#sb-read').textContent = st.words ? minutes(st.read) + ' read' : '';
+    $('#sb-count').textContent = _n(st.words, '{n} word', '{n} words');
+    delete $('#sb-count').dataset.sel;
+    $('#sb-read').textContent = st.words ? _('{time} read', { time: minutes(st.read) }) : '';
     editor.classList.toggle('is-empty', isEmptyDoc());
     if (settings.view === 'page') {
       const s = docSettings();
@@ -3207,7 +3262,7 @@
       const mar = { narrow: 0.5, normal: 1, wide: 1.5 }[s.margins] * inch;
       const pageH = (s.paper === 'a4' ? 11.69 : 11) * inch - mar * 2;
       const pages = Math.max(1, Math.ceil((editor.scrollHeight - parseFloat(getComputedStyle(editor).paddingTop) * 2) / pageH));
-      $('#sb-pages').textContent = '≈ ' + pages + ' page' + (pages === 1 ? '' : 's');
+      $('#sb-pages').textContent = '≈ ' + _n(pages, '{n} page', '{n} pages');
     } else $('#sb-pages').textContent = '';
     const goal = current.goal || 0;
     const meter = $('#goal-meter');
@@ -3216,11 +3271,11 @@
       meter.hidden = false;
       $('#goal-fill').style.width = pct + '%';
       $('#sb-goal').classList.toggle('met', pct >= 100);
-      $('#goal-text').textContent = pct >= 100 ? 'Goal met' : fmtNum(st.words) + ' / ' + fmtNum(goal);
+      $('#goal-text').textContent = pct >= 100 ? _('Goal met') : fmtNum(st.words) + ' / ' + fmtNum(goal);
     } else {
       meter.hidden = true;
       $('#sb-goal').classList.remove('met');
-      $('#goal-text').textContent = 'Set a goal';
+      $('#goal-text').textContent = _('Set a goal');
     }
     if (current.titleAuto) {
       current.text = text;
@@ -3234,8 +3289,10 @@
     if (selectionInEditor() && !s.isCollapsed) {
       const n = (s.toString().match(WORD_RE) || []).length;
       const all = (plainText().match(WORD_RE) || []).length;
-      total.textContent = fmtNum(n) + ' of ' + fmtNum(all) + ' words';
-    } else if (/ of /.test(total.textContent)) refreshMetrics();
+      total.textContent = _n(all, '{selected} of {n} word', '{selected} of {n} words', { selected: fmtNum(n) });
+      total.dataset.sel = '1';
+    } else if (total.dataset.sel) refreshMetrics();
+
   }, 150);
 
   /* =========================================================== speech */
@@ -3251,18 +3308,18 @@
   function setSpeaking(on) {
     speaking = on;
     $('#sb-speak').hidden = !on;
-    $('#speak-label').textContent = on ? 'Stop reading' : 'Read aloud';
+    $('#speak-label').textContent = on ? _('Stop reading') : _('Read aloud');
     if (!on && hasHighlights) CSS.highlights.delete('np-speak');
   }
 
   function toggleSpeak() {
-    if (!('speechSynthesis' in window)) { toast('This browser cannot read text aloud.'); return; }
+    if (!('speechSynthesis' in window)) { toast(_('This browser cannot read text aloud.')); return; }
     if (speaking) { stopSpeaking(); return; }
     const s = getSelection();
     const useSel = selectionInEditor() && !s.isCollapsed;
     const idx = useSel ? null : textIndex();
     const text = useSel ? s.toString() : idx.text;
-    if (!text.trim()) { toast('There is nothing to read yet.'); return; }
+    if (!text.trim()) { toast(_('There is nothing to read yet.')); return; }
     const u = new SpeechSynthesisUtterance(text);
     const voice = speechSynthesis.getVoices().find((v) => v.name === settings.voice);
     if (voice) u.voice = voice;
@@ -3305,7 +3362,7 @@
     btn.innerHTML = '';
     delete btn.dataset.iconDone;
     NpIcons.inject(btn.parentElement);
-    btn.title = dark ? 'Switch to light' : 'Switch to dark';
+    btn.title = dark ? _('Switch to light') : _('Switch to dark');
   }
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
 
@@ -3351,7 +3408,7 @@
   function toggleFocus() {
     const on = !document.body.classList.contains('focus');
     document.body.classList.toggle('focus', on);
-    if (on) toast('Focus mode — press Esc to leave', 2000);
+    if (on) toast(_('Focus mode — press Esc to leave'), 2000);
     restoreSelection();
   }
 
@@ -3400,9 +3457,9 @@
 
     const ok = await NpStore.open();
     if (!ok) {
-      $('#storage-note').textContent = 'Not saving — storage blocked';
+      $('#storage-note').textContent = _('Not saving — storage blocked');
       $('#sb-foot').classList.add('warn');
-      toast('This browser is blocking storage, so documents last only until the tab closes. Download your work before leaving.', 8000);
+      toast(_('This browser is blocking storage, so documents last only until the tab closes. Download your work before leaving.'), 8000);
     }
     docs = await NpStore.allDocs();
     if (!docs.length) await migrateLegacy();

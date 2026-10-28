@@ -15,6 +15,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="styles.css">
   <script src="js/boot.js"></script>
+  <script src="js/i18n.js"></script>
   <style id="page-rule"></style>
 </head>
 <body class="view-page">
@@ -32,7 +33,7 @@
   <!-- ===================== Documents panel ===================== -->
   <aside class="sidebar" id="sidebar" aria-label="Documents">
     <div class="sb-head">
-      <h1 class="brand"><img src="icon.svg" alt="" width="22" height="22"> Noteshack</h1>
+      <h1 class="brand" translate="no"><img src="icon.svg" alt="" width="22" height="22"> Noteshack</h1>
       <button class="btn btn-primary btn-sm" data-action="new" title="New document (Ctrl+Alt+N)"><span data-icon="plus"></span>New</button>
     </div>
     <div class="sb-search">
@@ -178,7 +179,10 @@
               <div class="menu-sep"></div>
               <button role="menuitemcheckbox" data-action="toggle-sidebar" data-check="sidebar"><span>Documents panel</span></button>
               <button role="menuitem" data-action="focus"><span>Focus mode</span><kbd>Ctrl+Shift+F</kbd></button>
+              <div class="menu-sep"></div>
+              <button role="menuitem" data-action="app-lang"><span>App language…</span></button>
             </div>
+
           </div>
 
           <div class="menu">
@@ -201,7 +205,7 @@
         </nav>
       </div>
       <div class="top-right">
-        <span class="save-status" id="save-status" role="status" aria-live="polite">Saved</span>
+        <span class="save-status" id="save-status" role="status" aria-live="polite"></span>
         <button class="icon-btn" data-action="toggle-theme" id="theme-btn" title="Switch light or dark" aria-label="Switch light or dark" data-icon="moon"></button>
         <button class="icon-btn" data-action="focus" data-icon="focus" title="Focus mode (Ctrl+Shift+F)" aria-label="Focus mode"></button>
       </div>
@@ -266,7 +270,7 @@
       <button class="tb" data-pdf="image" data-icon="image" title="Add an image" aria-label="Add an image"></button>
       <button class="tb tb-label" data-pdf="sign" data-icon="signature" title="Add your signature">Sign</button>
       <span class="tb-group" id="pdf-readall-wrap" hidden><label class="tb-toggle" for="pdf-readall"><input type="checkbox" class="switch" id="pdf-readall" role="switch"> Read whole document</label>
-      <button type="button" class="tb tb-info" aria-label="What Read whole document does" aria-describedby="pdf-readall-tip">i<span class="tb-tip" id="pdf-readall-tip" role="tooltip"><strong>Off:</strong> a scanned page is read when you click it with Edit text, and only that page. Nothing else is read, so large documents open and stay quick.<br><br><strong>On:</strong> every scanned page is read in the background, several at a time, so the whole document becomes editable, searchable and copyable. A page you click goes first. Turning it off pauses; it carries on where it stopped next time. It works the computer harder while it runs.</span></button></span>
+      <button type="button" class="tb tb-info" aria-label="What Read whole document does" aria-describedby="pdf-readall-tip"><span translate="no">i</span><span class="tb-tip" id="pdf-readall-tip" role="tooltip"><strong>Off:</strong> a scanned page is read when you click it with Edit text, and only that page. Nothing else is read, so large documents open and stay quick.<br><br><strong>On:</strong> every scanned page is read in the background, several at a time, so the whole document becomes editable, searchable and copyable. A page you click goes first. Turning it off pauses; it carries on where it stopped next time. It works the computer harder while it runs.</span></button></span>
       <button class="tb tb-label" data-pdf="original" hidden aria-pressed="false" title="Show the pages as they were scanned, to check what was read">Original</button>
       <span class="grow"></span>
       <button class="tb" data-pdf="zoom-out" data-icon="zoomOut" title="Zoom out" aria-label="Zoom out"></button>
@@ -351,11 +355,11 @@
         <span id="goal-text">Set a goal</span>
         <span class="goal-meter" id="goal-meter" hidden><span id="goal-fill"></span></span>
       </button>
-      <button class="sb-btn" data-doc-only id="sb-count" data-action="word-count" title="Word count (Ctrl+Shift+C)">0 words</button>
+      <button class="sb-btn" data-doc-only id="sb-count" data-action="word-count" title="Word count (Ctrl+Shift+C)"></button>
       <span class="sb-item sb-hide-sm" data-doc-only id="sb-read"></span>
       <span class="sb-item sb-hide-sm" data-doc-only id="sb-pages"></span>
       <span class="sb-item" id="sb-pdf" data-pdf-only></span>
-      <button class="sb-btn" id="sb-lang" data-action="doc-lang" title="Language of this document">English</button>
+      <button class="sb-btn" id="sb-lang" translate="no" data-action="doc-lang" title="Language of this document"></button>
       <button class="sb-btn" id="sb-zoom" data-action="zoom" data-arg="reset" title="Zoom (click for actual size)">100%</button>
     </footer>
   </div>

@@ -1,7 +1,7 @@
 // A document's own language: found from its text, or chosen; it sets the
 // way text runs, and goes into saved files.
 import fs from 'node:fs';
-import { test, expect, openFile, saveAsType } from './helpers.mjs';
+import { test, expect, openFile, saveAsType, waitToast } from './helpers.mjs';
 
 const SPANISH = 'La reunión del consejo se celebrará el próximo martes en la sala principal del ayuntamiento, y todos los vecinos están invitados a participar.';
 
@@ -44,4 +44,13 @@ test('a PDF gets its language from its text', async ({ app: p }) => {
   await expect(p.locator('#sb-lang')).toHaveText('Spanish');
   await openFile(p, 'letter.pdf');
   await expect(p.locator('#sb-lang')).toHaveText('English');
+});
+
+test('a Spanish scan is read in Spanish, and its language found', async ({ app: p }) => {
+  await openFile(p, 'scan-es.pdf');
+  await p.click('label[for="pdf-readall"]');
+  await waitToast(p, /whole document is read/);
+  await expect(p.locator('#sb-lang')).toHaveText('Spanish');
+  const text = (await p.locator('.pdf-conv').allTextContents()).join(' ');
+  for (const w of ['señora', 'Muñoz', 'reunión', 'celebrará', 'próximo', 'miércoles', 'atención', 'público', 'documentación']) expect(text).toContain(w);
 });

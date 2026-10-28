@@ -8,11 +8,12 @@ Third-party libraries, unmodified:
 - pdf-lib/    pdf-lib 1.17.1, MIT. Writes edited PDFs.
               fontkit.umd.min.js: @pdf-lib/fontkit 1.1.1, MIT. Embeds
               downloaded fonts.
-- tesseract/  Tesseract.js 5.1.1 + core 5.1.1 (SIMD, LSTM) + English data
-              (4.0.0_best_int; Tesseract data is Apache-2.0). Apache-2.0. Reads
-              text on scanned pages. fast/: Tesseract's fast English model
-              (tessdata_fast), Apache-2.0, read first; the accurate model
-              re-reads the lines it is unsure of.
+- tesseract/  Tesseract.js 5.1.1 + core 5.1.1 (SIMD, LSTM) + English, Spanish,
+              French, German, Portuguese and Italian data (4.0.0_best_int, from
+              @tesseract.js-data; Tesseract data is Apache-2.0). Apache-2.0. Reads
+              text on scanned pages. fast/: Tesseract's fast models
+              (tessdata_fast) for the same six languages, Apache-2.0, read
+              first; the accurate model re-reads the lines it is unsure of.
 - opentype/   opentype.js 1.3.4, MIT. Builds fonts from a scan's own letters.
 - utif/       UTIF.js (utif2 4.1.0, Photopea), MIT, with pako 2.1.0's inflate
               (MIT) that it uses for compressed TIFFs. Reads TIFF images.

@@ -17,7 +17,7 @@
   const mod = (e) => (isMac ? e.metaKey : e.ctrlKey);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-40';
+  const APP_VERSION = '2026.10.28-41';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -210,8 +210,11 @@
       radio.addEventListener('change', () => { chosen = l.code; auto.checked = false; });
       const nat = NpLang.native(l.code);
       const label = NpLang.name(l.code);
+      // what Noteshack itself does in it (everything else is the browser's)
+      const tags = [NpSpell.has(l.code.split('-')[0]) ? 'Spell check' : null, NpPdf.readsLanguage(l.code) ? 'Reads scans' : null].filter(Boolean);
       return el('label', { class: 'lang-row', 'data-find': (label + ' ' + nat + ' ' + l.code).toLowerCase() }, radio,
-        el('span', { class: 'lang-name' }, label), nat !== label ? el('span', { class: 'lang-native', lang: l.code }, nat) : null);
+        el('span', { class: 'lang-name' }, label), tags.length ? el('span', { class: 'lang-tags' }, tags.join(' · ')) : null,
+        nat !== label ? el('span', { class: 'lang-native', lang: l.code }, nat) : null);
     });
     const list = el('div', { class: 'lang-list', role: 'radiogroup', 'aria-label': 'Languages' }, rows);
     search.addEventListener('input', () => {
@@ -221,7 +224,7 @@
     const v = await dialog({
       title: 'Language of this document',
       body: el('div', { class: 'stack' },
-        el('p', { class: 'dlg-text' }, 'Used for spell checking, the direction the text runs, and reading scans. It is worked out from the text, on this computer, until you choose one.'),
+        el('p', { class: 'dlg-text' }, 'Used for spell checking, the direction the text runs, and reading scans. It is worked out from the text, on this computer, until you choose one. Noteshack checks spelling and reads scans itself in the languages marked; for the others it uses the browser\u2019s spell check, and reads scans as English.'),
         el('label', { class: 'toggle-row' }, el('span', {}, 'Work it out from the text'), auto),
         search, list),
       actions: [{ label: 'Cancel', value: '' }, { label: 'OK', value: 'ok', primary: true }],
@@ -1860,6 +1863,26 @@
     try { if (check.checked) localStorage.setItem(WELCOME_KEY, 'hidden'); } catch (e) { /* ignore */ }
   }
 
+  // Safari may delete what a site keeps in the browser after 7 days without
+  // a visit, unless the site is installed as an app. Said once, with the
+  // ways to keep documents safe; whether that matters is theirs to judge.
+  const SAFARI_KEY = 'np.safari-note';
+  async function safariNote() {
+    const safari = /Apple/.test(navigator.vendor || '') && !/CriOS|FxiOS|EdgiOS/.test(navigator.userAgent);
+    const installed = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    try { if (!safari || installed || localStorage.getItem(SAFARI_KEY)) return; localStorage.setItem(SAFARI_KEY, 'shown'); } catch (e) { return; }
+    await dialog({
+      title: 'Keeping your documents in Safari',
+      body: el('div', { class: 'stack' },
+        el('p', { class: 'dlg-text' }, 'Noteshack keeps your documents in this browser. Safari may clear what a website keeps if you don\u2019t visit it for 7 days. Ways to keep them safe:'),
+        el('ul', { class: 'welcome-list' },
+          el('li', {}, el('strong', {}, 'Add Noteshack to your Dock or Home Screen'), el('span', {}, 'Installed, it is kept like any app. On a Mac: File \u2192 Add to Dock. On an iPhone or iPad: Share \u2192 Add to Home Screen.')),
+          el('li', {}, el('strong', {}, 'Save your documents as files'), el('span', {}, 'File \u2192 Save puts a copy in your Downloads.')),
+          el('li', {}, el('strong', {}, 'Back up now and then'), el('span', {}, 'File \u2192 Back up all documents saves everything in one file you can restore anywhere.')))),
+      actions: [{ label: 'Got it', value: 'ok', primary: true }]
+    });
+  }
+
   async function aboutDialog() {
     let usage = '';
     try {
@@ -3037,7 +3060,9 @@
       el, toast, dialog, changed: () => markDirty(), status: setStatus,
       saved: () => setStatus(savedText(), NpStore.persistent ? 'ok' : 'warn'),
       // saved at once: a page closed right after must not lose it
-      saveNow: () => { markDirty(); return saveNow(); }
+      saveNow: () => { markDirty(); return saveNow(); },
+      // reading a scan found its language
+      langChanged: () => { applyDocLang(); markDirty(); }
     });
     applyTheme();
     setView(settings.view);
@@ -3059,7 +3084,7 @@
     else await createDoc('', '', { keepFocus: true });
     renderDocList();
     document.body.classList.add('ready');
-    welcomeDialog();
+    welcomeDialog().then(safariNote);
 
     // Save before the tab goes away or into the background.
     document.addEventListener('visibilitychange', () => { if (document.hidden && dirty) saveNow(); });

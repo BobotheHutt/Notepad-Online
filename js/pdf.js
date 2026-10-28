@@ -1869,7 +1869,13 @@
   // Several readers at once, as many as the computer can spare, on
   // Tesseract's fast model; and one careful reader on the accurate model,
   // for the lines the fast ones were unsure of.
-  const OCR = { pool: null, best: null };
+  // Readers, by the language they read (Tesseract's codes): a pool of fast
+  // ones for pages, and one careful one for lines it is unsure of.
+  const OCR = { pools: new Map(), bests: new Map(), size: 0 };
+  // the languages scans can be read in: the document's, else English
+  const READ_LANGS = { en: 'eng', es: 'spa', fr: 'fra', de: 'deu', pt: 'por', it: 'ita' };
+  const readLangOf = (code) => READ_LANGS[String(code || '').split('-')[0]] || null;
+  const readLang = () => readLangOf((S.rec && S.rec.lang) || NpLang.preferred()) || 'eng';
 
   function poolSize() {
     const cores = navigator.hardwareConcurrency || 2;
@@ -1884,9 +1890,9 @@
     if (typeof Tesseract === 'undefined') await loadScript(VENDOR + 'tesseract/tesseract.min.js');
   }
 
-  function newReader(model) {
+  function newReader(model, lang) {
     const abs = (path) => new URL(VENDOR + 'tesseract/' + path, location.href).href;
-    return Tesseract.createWorker('eng', 1, {
+    return Tesseract.createWorker(lang, 1, {
       workerPath: abs('worker.min.js'),
       corePath: abs('tesseract-core-simd-lstm.wasm.js'),
       langPath: abs(model === 'fast' ? 'fast' : '').replace(/\/$/, ''),
@@ -1895,45 +1901,48 @@
   }
 
   // { recognize(image) } that hands each page to whichever reader is free
-  async function getOcr() {
+  async function getOcr(lang = readLang()) {
     await tesseract();
-    if (!OCR.pool) {
-      OCR.pool = (async () => {
+    if (!OCR.pools.has(lang)) {
+      const pool = (async () => {
         api.status('Getting text recognition ready…', 'pending');
         const sch = Tesseract.createScheduler();
-        const ws = await Promise.all(Array.from({ length: poolSize() }, () => newReader('fast')));
+        const ws = await Promise.all(Array.from({ length: poolSize() }, () => newReader('fast', lang)));
         ws.forEach((w) => sch.addWorker(w));
-        return { recognize: (img) => sch.addJob('recognize', img), size: ws.length };
+        return { recognize: (img) => sch.addJob('recognize', img), size: ws.length, lang };
       })();
-      OCR.pool.catch(() => { OCR.pool = null; });
+      OCR.pools.set(lang, pool);
+      pool.catch(() => OCR.pools.delete(lang));
     }
-    return OCR.pool;
+    return OCR.pools.get(lang);
   }
 
-  async function getCareful() {
+  async function getCareful(lang = readLang()) {
     await tesseract();
-    if (!OCR.best) {
-      OCR.best = (async () => {
-        const w = await newReader('best');
+    if (!OCR.bests.has(lang)) {
+      const best = (async () => {
+        const w = await newReader('best', lang);
         // it is only ever given one line
         await w.setParameters({ tessedit_pageseg_mode: '7' });
         return w;
       })();
-      OCR.best.catch(() => { OCR.best = null; });
+      OCR.bests.set(lang, best);
+      best.catch(() => OCR.bests.delete(lang));
     }
-    return OCR.best;
+    return OCR.bests.get(lang);
   }
+
 
   // Lines the fast reader was unsure of, read again by the careful one; its
   // reading is kept where it is surer. Line and word boxes are in the
   // coordinates of the page image c.
-  async function carefulLines(lines, c) {
+  async function carefulLines(lines, c, lang) {
     // a word mixing letters and digits ("condici6n") is almost always a misread
     const odd = (t) => /\p{L}\d|\d\p{L}/u.test(t) && !/^\d+(st|nd|rd|th|s)$/i.test(t);
     const unsure = lines.filter((l) => l.text && l.text.trim() && (l.confidence < 85 || (l.words || []).some((w) => w.confidence < 80 || odd((w.text || '').replace(/[^\p{L}\p{N}]/gu, '')))));
     if (!unsure.length) return lines;
     let best;
-    try { best = await getCareful(); } catch (e) { return lines; }
+    try { best = await getCareful(lang); } catch (e) { return lines; }
     const out = lines.slice();
     for (const l of unsure) {
       const b = l.bbox;
@@ -2101,7 +2110,7 @@
     const px = g.getImageData(0, 0, c.width, c.height).data;
     const clean = withoutRules(c, px);
     const { data } = await worker.recognize(clean);
-    data.lines = await carefulLines(data.lines || [], clean);
+    data.lines = await carefulLines(data.lines || [], clean, worker.lang);
     // OCR's word boxes can be off by a letter's stem: move each edge to where
     // the ink actually starts and ends (on the copy without borders)
     const cd = clean.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, clean.width, clean.height).data;
@@ -2440,8 +2449,25 @@
         if (skew) RQ.stats.straightened++;
       }
     }
-    const { lines, rules } = await ocrPage(ocr, info);
+    let { lines, rules } = await ocrPage(ocr, info);
     if (!alive()) return;
+    // The language the page turns out to be in: until the document's language
+    // is set by hand, what is read decides it, and a page read in another
+    // language is read again in its own.
+    if (rec.langAuto !== false && lines.length) {
+      let code = null;
+      try { code = await NpLang.detect(lines.map((l) => l.text).join(' ')); } catch (e) { code = null; }
+      if (code && code !== rec.lang && alive()) {
+        rec.lang = code;
+        api.langChanged();
+        const lang = readLangOf(code);
+        if (lang && lang !== ocr.lang) {
+          const again = await ocrPage(await getOcr(lang), info);
+          if (!alive()) return;
+          ({ lines, rules } = again);
+        }
+      }
+    }
     // words learned from the document so far, this page's sure words included
     learnWords(S.lex, lines);
     fixFromWords(S.lex, lines);
@@ -5276,6 +5302,8 @@
     // the closest fonts from the last look-based match, for diagnosing a poor match
     get lastMatch() { return S.lastMatch; },
     init, open, close, newRecord,
+    // whether scans can be read in a language
+    readsLanguage: (code) => !!readLangOf(code),
     libs: loadLibs,
     export: exportPdf,
     // a finished PDF (as a Blob) opened for viewing: { count, page(i), destroy() }

@@ -30,7 +30,7 @@ export const test = base.extend({
   context: async ({ context, welcome }, use) => {
     await localFonts(context);
     // the welcome popup stays away unless a test is about it
-    if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); } catch (e) { /* ignore */ } });
+    if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); localStorage.setItem('np.safari-note', 'shown'); } catch (e) { /* ignore */ } });
     await use(context);
   },
   errors: async ({ page }, use) => {

@@ -119,6 +119,15 @@ export default async function globalSetup() {
       { t: 'Signature and date of signing' }
     ];
     files['scan.pdf'] = await scanPdf([scanPage(form1, { skew: 1.2 })]);
+    // a scan of a Spanish letter, with the accents and ñ the English reader misses
+    files['scan-es.pdf'] = await scanPdf([scanPage([
+      { t: 'SOLICITUD DE SERVICIO', bold: true, size: 60 },
+      { t: 'Estimada señora Muñoz:' },
+      { t: 'La reunión se celebrará el próximo miércoles' },
+      { t: 'en la oficina de atención al público.' },
+      { t: 'Por favor, traiga su documentación completa' },
+      { t: 'y la solicitud firmada por ambas partes.' }
+    ])]);
     // the same scan as image files, and as a phone photo stored sideways with
     // an EXIF note to turn it (orientation 8: turn a quarter left to show)
     const blob = async (c, type) => new Uint8Array(await (await new Promise((r) => c.toBlob(r, type, 0.9))).arrayBuffer());

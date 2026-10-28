@@ -48,7 +48,7 @@ and lets you edit and sign PDFs.
   - **Pages → Keep this page as scanned** puts the scan back; Edit text then changes single words and leaves the rest of the scan exactly as it was.
   - **Read whole document** (a switch in the toolbar, off by default; hover its ⓘ for details) reads every scanned page in the background instead, several pages at a time, so a long document becomes editable and searchable without clicking each page. A page you click goes first; turning it off pauses, and it carries on where it stopped next time the document is opened.
   - Reading is quick first and careful where it needs to be: a fast reader reads each page, and the lines it was unsure of are read again by the accurate one. Words read surely anywhere in the document are remembered, and a word read unsurely that is one letter away from one of them (seen at least twice) is corrected to it.
-  - English only for now; needs the app opened from its web address, not from a file on disk.
+  - Read in the document's language: English, Spanish, French, German, Portuguese or Italian (other languages are read as English). A scan's language is worked out from the first words read, and a page read in the wrong one is read again. Needs the app opened from its web address, not from a file on disk.
 - Pages: rotate, delete, reorder, insert blank pages, and add pages from other PDFs
 - Undo and redo for everything; your changes are saved as you go
 - **Export…** turns a PDF (or an image) into another kind of file, as a separate file (Save keeps going to the original): images (JPG, PNG, WebP, BMP, one per page, or one multi-page TIFF), plain text, or a Word document of its words as paragraphs and headings (not its exact layout). Text read from scanned pages comes along.
@@ -120,9 +120,12 @@ with their license texts:
 - [PDF.js](https://mozilla.github.io/pdf.js/) (Mozilla), Apache License 2.0
 - [pdf-lib](https://pdf-lib.js.org) and @pdf-lib/fontkit, MIT License
 - [Tesseract.js](https://tesseract.projectnaptha.com), Tesseract OCR and its
-  English data, Apache License 2.0
+  English, Spanish, French, German, Portuguese and Italian data, Apache License 2.0
 - [opentype.js](https://opentype.js.org), MIT License
 - [UTIF.js](https://github.com/photopea/UTIF.js) (Photopea), MIT License, with [pako](https://github.com/nodeca/pako), MIT License
+- [Hunspell](https://hunspell.github.io) (as hunspell-wasm), MPL 1.1, with Hunspell dictionaries from [wooorm/dictionaries](https://github.com/wooorm/dictionaries), each under its own license (see `vendor/dictionaries`)
+- [franc](https://github.com/wooorm/franc), MIT License
+- 31 fonts from [Fontsource](https://fontsource.org), SIL Open Font License (Roboto Slab: Apache 2.0)
 
 Fonts come from [Fontsource](https://fontsource.org) when needed and are
 not stored in this repository; each is under its own free license (SIL Open

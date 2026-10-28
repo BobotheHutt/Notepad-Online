@@ -1,10 +1,10 @@
 // Translating a document into a copy, on this computer, and checking it.
 import { test, expect } from './helpers.mjs';
 
-// In the test tool's WebKit, requests from a page the offline cache controls
-// skip the test's stand-in for files.noteshack.org (which answers only
-// noteshack.org), so the cache is left out here.
-test.use({ serviceWorkers: 'block' });
+// The models come from the tests' stand-in for files.noteshack.org (which
+// answers only noteshack.org). In the test tool's WebKit, requests from a
+// page the offline cache controls skip the stand-in, so the cache is left out.
+test.use({ models: true, serviceWorkers: 'block' });
 
 const LETTER = '<h1>The meeting</h1>' +
   '<p>The council meeting will be held next <b>Tuesday</b> in the main hall.</p>' +

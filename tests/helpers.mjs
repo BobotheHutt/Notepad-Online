@@ -49,9 +49,10 @@ async function translationModels(context) {
 }
 
 export const test = base.extend({
-  context: async ({ context, welcome }, use) => {
+  context: async ({ context, welcome, models }, use) => {
     await localFonts(context);
-    await translationModels(context);
+    // only where asked: in Firefox, any stand-in keeps the offline cache from answering
+    if (models) await translationModels(context);
     // the welcome popup stays away unless a test is about it
     if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); localStorage.setItem('np.safari-note', 'shown'); } catch (e) { /* ignore */ } });
     await use(context);
@@ -74,6 +75,8 @@ export const test = base.extend({
   filePickers: [false, { option: true }],
   // the welcome popup, off unless a test is about it
   welcome: [false, { option: true }],
+  // the translation models served from tests/.fixtures/models (see above)
+  models: [false, { option: true }],
   app: async ({ page, errors, filePickers }, use) => {
     if (!filePickers) await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
     else {

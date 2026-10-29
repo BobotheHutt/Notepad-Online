@@ -93,6 +93,9 @@ translator, reports) stand it in with `page.route`, and need
   with a short note of what is in hand. A new session can read an earlier
   session's transcript (the claude-code-remote tools) for anything this file
   does not have.
+- **Use helper agents routinely** (the owner asked for it): send them the
+  heavy reading, searching, research and long test runs, and keep only
+  their conclusions here, so the session stays sharp for longer.
 
 ## Working with the owner
 

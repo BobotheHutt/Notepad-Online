@@ -80,7 +80,7 @@ test('a translation into Japanese breaks its lines between words, and keeps to t
       create: async () => ({ translate: async (t) => (/^Signed/.test(t) ? '署名：施設管理室' : ja), destroy() {} })
     };
   }, JA);
-  await p.reload();
+  await p.reload(); await p.waitForSelector('body.ready');
   await openFile(p, 'memo.pdf');
   await p.click('.menu-btn:has-text("Tools")');
   await p.click('[data-action="translate"]');

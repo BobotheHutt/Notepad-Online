@@ -53,7 +53,7 @@ test('a document becomes a translated copy, formatting kept, checked paragraph b
   await expect(ed.locator('h1[data-np-tr]')).toHaveCount(0);
   // the marks and originals are kept with the document
   await p.waitForTimeout(1200);
-  await p.reload();
+  await p.reload(); await p.waitForSelector('body.ready');
   await expect(p.locator('#review-count')).toHaveText('3 paragraphs to check');
   // change the original, translate again
   await ed.locator('li').click();
@@ -106,7 +106,7 @@ test('the browser’s own translator, where there is one, for more languages', a
       create: async () => ({ translate: async (t) => '【' + t + '】', destroy() {} })
     };
   });
-  await p.reload();
+  await p.reload(); await p.waitForSelector('body.ready');
   await openHtml(p, 'Plain.html', '<p>Good morning to <b>everyone</b> here.</p><p>See you at Noteshack tomorrow.</p>');
   await translate(p, 'Japanese', { keep: 'Noteshack' });
   await expect(p.locator('#doc-title')).toHaveValue(/\(Japanese\)$/, { timeout: 30000 });

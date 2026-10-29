@@ -3518,7 +3518,7 @@
     rec.scanFonts = rec.scanFonts || {};
     const todo = Object.entries(all).filter(([key, per]) => !rec.scanFonts[key] && Object.values(per).some((l) => l.length >= 2));
     if (!todo.length) return;
-    if (!scanFontLib) scanFontLib = Promise.all([loadScript(VENDOR + 'opentype/opentype.min.js'), loadScript('js/scanfont.js')]);
+    if (!scanFontLib) scanFontLib = Promise.all([loadScript(VENDOR + 'opentype/opentype.min.js'), loadScript('js/scanfont.js?' + window.NP_V)]);
     await scanFontLib;
     api.status(_('Making fonts from the scan’s letters…'), 'pending');
     for (const [key, per] of todo) {

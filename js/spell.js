@@ -22,7 +22,7 @@
   const waiting = new Map();
   function ask(msg) {
     if (!worker) {
-      worker = new Worker('js/spellworker.js', { type: 'module' });
+      worker = new Worker('js/spellworker.js?' + window.NP_V, { type: 'module' });
       worker.onmessage = (e) => {
         const w = waiting.get(e.data.id);
         if (!w) return;

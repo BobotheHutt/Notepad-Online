@@ -252,5 +252,8 @@ tests/                 the tests (see Tests above)
 ```
 
 After changing any file, bump `CACHE` in `sw.js` so installed copies pick up
-the update. After changing a file under `vendor/`, bump `VENDOR` there too: those
+the update, and the `?v=` number on each of the app's files in `index.html` to
+match it (Cloudflare and browsers keep the code files for hours; a new number
+is a new address, so nobody gets new pages with old code; the tests check
+the two agree). After changing a file under `vendor/`, bump `VENDOR` there too: those
 files are cached apart and are not fetched again otherwise.

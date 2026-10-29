@@ -40,7 +40,7 @@
 
   let cat = null;
   const missing = new Set();
-  if (!pseudo && lang !== 'en') document.write('<script src="locales/' + lang + '.js"><\/script>');
+  if (!pseudo && lang !== 'en') document.write('<script src="locales/' + lang + '.js?' + window.NP_V + '"><\/script>');
   document.documentElement.lang = lang;
   document.documentElement.dir = dir;
 

@@ -642,5 +642,11 @@ NpI18n.add({
   "No translation models or fonts are downloaded.": "No hay modelos de traducción ni fuentes descargados.",
   "Remove": "Quitar",
   "Removed. They download again when needed.": "Quitados. Se volverán a descargar cuando hagan falta.",
-  "Your documents are kept. Translation models and fonts download again the first time they are needed.": "Tus documentos no se tocan. Los modelos de traducción y las fuentes se vuelven a descargar la primera vez que hagan falta."
+  "Your documents are kept. Translation models and fonts download again the first time they are needed.": "Tus documentos no se tocan. Los modelos de traducción y las fuentes se vuelven a descargar la primera vez que hagan falta.",
+  "A new version of Noteshack is ready.": "Hay una versión nueva de Noteshack.",
+  "Reload": "Recargar",
+  "Check for updates": "Buscar actualizaciones",
+  "Checking…": "Comprobando…",
+  "Could not check. Are you online?": "No se ha podido comprobar. ¿Tienes conexión?",
+  "You have the newest version.": "Tienes la versión más reciente."
 });

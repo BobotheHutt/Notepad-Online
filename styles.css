@@ -1020,6 +1020,26 @@ input[type="range"] { accent-color: var(--accent); }
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 
+/* a new release, for a tab left open (js/app.js checkForUpdate) */
+.update-note {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  z-index: 89;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 24px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 10px;
+  background: #1f2328;
+  color: #fff;
+  font-size: 13.5px;
+  box-shadow: var(--shadow-pop);
+}
+.update-note .icon-btn { color: inherit; }
+
 /* ============================================================ focus mode */
 
 .focus-exit { display: none; }

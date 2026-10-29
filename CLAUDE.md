@@ -34,7 +34,8 @@ privacy promises, the file list and the credits; read the part you need.
 1. Make the change. Run **only the tests it affects**, here, in Chromium.
 2. Bump the release: `CACHE` in `sw.js`, the `?v=` number on every file in
    `index.html` (same number; `tests/release.spec.mjs` checks), and
-   `APP_VERSION` in `js/app.js`. `VENDOR` in `sw.js` too if `vendor/` changed.
+   `APP_VERSION` in `js/app.js` (it ends with the same number: a tab left
+   open compares it with `sw.js` every hour to offer Reload). `VENDOR` in `sw.js` too if `vendor/` changed.
 3. Commit and push straight to `main`. No work-branch push first: it only
    doubles GitHub's test run.
 4. Check it is live: `https://noteshack.org/sw.js` shows the new `CACHE`.

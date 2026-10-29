@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-53';
+  const APP_VERSION = '2026.10.29-54';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2383,12 +2383,58 @@
     dialog({ title: _('Storage'), body });
   }
 
+  // Updates. Opening the page always gets the newest release (sw.js fetches
+  // the app's files fresh when online), so nothing is checked then; a tab
+  // left open asks every hour, or when "Check for updates" is pressed. The
+  // release is the number in sw.js's CACHE, which APP_VERSION ends with.
+  const RELEASE = Number(APP_VERSION.split('-').pop());
+  async function newestRelease() {
+    const res = await fetch('sw.js', { cache: 'no-store' });
+    const m = res.ok && (await res.text()).match(/const CACHE = 'noteshack-v(\d+)'/);
+    if (!m) throw new Error('no release');
+    return Number(m[1]);
+  }
+  async function reloadForUpdate() {
+    if (dirty) await saveNow();
+    location.reload();
+  }
+  let updateShown = false;
+  async function checkForUpdate() {
+    if (updateShown || !navigator.onLine) return;
+    let newest;
+    try { newest = await newestRelease(); } catch (e) { return; }
+    if (newest <= RELEASE || updateShown) return;
+    updateShown = true;
+    const note = el('div', { class: 'update-note', role: 'status' },
+      el('span', {}, _('A new version of Noteshack is ready.')),
+      el('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: reloadForUpdate }, _('Reload')),
+      el('button', { class: 'icon-btn sm', type: 'button', 'data-icon': 'close', 'aria-label': _('Close'), onclick: () => note.remove() }));
+    document.body.append(note);
+    NpIcons.inject(note);
+  }
+
+  // About's "Check for updates": says what it found, in its place
+  function updateButton() {
+    const out = el('span', { class: 'update-result' });
+    const btn = el('button', { class: 'btn btn-sm', type: 'button', onclick: async () => {
+      btn.disabled = true;
+      out.replaceChildren(_('Checking…'));
+      let newest;
+      try { newest = await newestRelease(); } catch (e) { newest = null; }
+      btn.disabled = false;
+      if (newest == null) out.replaceChildren(_('Could not check. Are you online?'));
+      else if (newest <= RELEASE) out.replaceChildren(_('You have the newest version.'));
+      else out.replaceChildren(_('A new version of Noteshack is ready.'), ' ', el('button', { class: 'btn btn-sm btn-primary', type: 'button', onclick: reloadForUpdate }, _('Reload')));
+    } }, _('Check for updates'));
+    return el('span', {}, btn, ' ', out);
+  }
+
   async function aboutDialog() {
     const body = el('div', { class: 'stack about' },
       el('p', {}, _('Noteshack is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.')),
       el('ul', { class: 'facts' },
         el('li', {}, _('Works offline once loaded, and can be installed as an app from your browser’s menu.')),
-        el('li', {}, _('Version {version}', { version: APP_VERSION }))),
+        el('li', { class: 'update-line' }, _('Version {version}', { version: APP_VERSION }), ' ', updateButton())),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
         el('p', {}, _('There is no account, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
         el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing. A problem report, when you send one (Tools → Report a problem), goes the same way to Noteshack’s GitHub page, where it is public: only what you write, the app’s version, your browser and the app’s language.'))),
@@ -3598,6 +3644,7 @@
 
     if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
       navigator.serviceWorker.register('sw.js').catch(() => {});
+      setInterval(checkForUpdate, 3600000);
     }
   }
 

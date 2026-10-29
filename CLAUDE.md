@@ -83,6 +83,17 @@ translator, reports) stand it in with `page.route`, and need
 4. The app's translations have not been checked by native speakers, and
    none are available.
 
+## Keeping this file current
+
+- **This file is the handover.** A change to how things work, a decision,
+  or finished open work goes into this file in the same commit, not at the
+  end of the session.
+- Long sessions get sloppy. When one has run long, say so and offer a fresh
+  one: this file brought up to date first, then the new session started
+  with a short note of what is in hand. A new session can read an earlier
+  session's transcript (the claude-code-remote tools) for anything this file
+  does not have.
+
 ## Working with the owner
 
 - **Never ask for a secret in chat.** Secrets go in GitHub's secrets or the

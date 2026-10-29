@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 import { test, expect, openFile, newestDoc } from './helpers.mjs';
 
-test.use({ remote: true });
+// The fonts come from the tests' stand-in for files.noteshack.org; in the test
+// tool's WebKit, requests from a page the offline cache controls skip it.
+test.use({ remote: true, serviceWorkers: 'block' });
 
 // a downloaded PDF, opened again: what it reads as
 async function reopen(p, dl, name) {

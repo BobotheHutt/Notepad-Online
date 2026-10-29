@@ -10,7 +10,7 @@ privacy promises, the file list and the credits; read the part you need.
 |---|---|
 | The site | GitHub Pages from `main` (repo BobotheHutt/Noteshack), behind Cloudflare. **A push to `main` is live.** |
 | Translation models, Noto fonts | Cloudflare R2 bucket `noteshack-files`, served at `files.noteshack.org`. Uploaded by `tools/translation-models.py`, `tools/noto-fonts.py`. |
-| Online translator, problem reports | Cloudflare Worker `noteshack-api` at `api.noteshack.org` (`worker/index.js`). Deployed by `.github/workflows/worker.yml` on a push to `main` that touches `worker/`, then checked live. |
+| Online translator, problem reports | Cloudflare Worker `noteshack-api` at `api.noteshack.org` (`worker/index.js`). Deployed by `.github/workflows/worker.yml` on a push to `main` that touches `worker/`, then checked live. Translating stops for the day (until midnight UTC) at **$1** of Workers AI, counted in the Durable Object `Budget`: the account is on Workers Paid, so past the free allowance it is billed, not stopped. |
 | Cloudflare account | `c047d9e1fea222a9db788c3e9a79cc37`, on **Workers Paid** (shared with another project). |
 | Analytics | Cloudflare Web Analytics, added to the page by Cloudflare; allowed in the CSP. |
 
@@ -70,22 +70,15 @@ translator, reports) stand it in with `page.route`, and need
 
 ## Open work
 
-1. **A daily spending cap on the online translator.** Agreed in principle;
-   the amount was not settled ($1/day was suggested). The account is on
-   Workers Paid, so Workers AI past the free daily allowance is **billed, not
-   stopped**, and the Origin check does not stop a script. Plan: a counter in
-   a Durable Object; once the day's budget is spent, answer
-   `{ error: 'limit' }` (the app already says "reached today's limit").
-   Confirm the amount with the owner before building.
-2. Proposed, **not approved**: an About-and-storage line to remove downloaded
+1. Proposed, **not approved**: an About-and-storage line to remove downloaded
    models and fonts; a monthly GitHub check that warns before
    `NOTESHACK_ISSUES_TOKEN` expires.
-3. Later, only if asked: translation with your own key (DeepL, Google…); a
+2. Later, only if asked: translation with your own key (DeepL, Google…); a
    Buy Me a Coffee link.
-4. Flaky tests: `editor.spec` once found 4 documents instead of 3 (not
+3. Flaky tests: `editor.spec` once found 4 documents instead of 3 (not
    reproduced in 30 runs; it now prints the names if it happens again);
    reading a scan in WebKit once found no text.
-5. The app's translations have not been checked by native speakers, and
+4. The app's translations have not been checked by native speakers, and
    none are available.
 
 ## Working with the owner

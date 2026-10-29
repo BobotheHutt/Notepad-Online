@@ -1,7 +1,7 @@
 // Noteshack's online translator (worker/index.js), run here with a stand-in
 // for Workers AI: who it answers, what it takes, what it says back.
 import { test, expect } from '@playwright/test';
-import worker from '../worker/index.js';
+import worker, { Budget, DAY_TOKENS, tokens } from '../worker/index.js';
 
 const ORIGIN = 'https://noteshack.org';
 const ask = (body, { origin = ORIGIN, method = 'POST', path = '/translate' } = {}, env) => worker.fetch(new Request('https://api.noteshack.org' + path, {
@@ -45,6 +45,46 @@ test('says when the day’s allowance or a visitor’s limit is reached', async 
   expect(await busy.json()).toEqual({ error: 'busy' });
   const broken = ai(() => { throw new Error('model error'); });
   expect((await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, broken)).status).toBe(502);
+});
+
+// the real Budget, with its storage kept in memory: what Cloudflare runs
+const budget = () => {
+  const kept = new Map();
+  const b = new Budget({ storage: { get: async (k) => kept.get(k), put: async (k, v) => { kept.set(k, v); } } });
+  const stub = { fetch: (url, init) => b.fetch(new Request(url, init)) };
+  return { kept, BUDGET: { idFromName: (n) => n, get: (id) => { expect(id).toBe('translate'); return stub; } } };
+};
+
+test('stops translating for the day once a dollar is spent', async () => {
+  // $1 at $0.342 a million tokens
+  expect(DAY_TOKENS).toBe(2923976);
+  // a token for 3 bytes, plus 4: English is counted high, Chinese about right
+  expect(tokens('Good morning, how are you?')).toBe(13);
+  expect(tokens('早上好')).toBe(7);
+
+  const { kept, BUDGET } = budget();
+  const env = Object.assign({ BUDGET }, good);
+  const day = new Date().toISOString().slice(0, 10);
+  const r = await ask({ from: 'en', to: 'sv', texts: ['Hello there.', '123'] }, {}, env);
+  expect(r.status).toBe(200);
+  // the text in and as much again out (the number is not counted), then the
+  // longer translation's extra
+  const asked = tokens('Hello there.');
+  expect(kept.get('today')).toEqual({ day, used: 2 * asked + tokens('sv:Hello there.') - asked });
+
+  // nearly spent: what would pass the budget is turned away, and not counted
+  kept.set('today', { day, used: DAY_TOKENS - 10 });
+  const over = await ask({ from: 'en', to: 'sv', texts: ['Hello there.'] }, {}, env);
+  expect(over.status).toBe(429);
+  expect(await over.json()).toEqual({ error: 'limit' });
+  expect(kept.get('today').used).toBe(DAY_TOKENS - 10);
+  // a day later it starts again from nothing
+  kept.set('today', { day: '2000-01-01', used: DAY_TOKENS });
+  expect((await ask({ from: 'en', to: 'sv', texts: ['Hello there.'] }, {}, env)).status).toBe(200);
+  expect(kept.get('today').day).toBe(day);
+  // no budget answering: nothing is translated
+  const down = Object.assign({ BUDGET: { idFromName: (n) => n, get: () => ({ fetch: async () => { throw new Error('down'); } }) } }, good);
+  expect((await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, down)).status).toBe(502);
 });
 
 test('a problem report is filed on GitHub, shown as written; a bot’s is dropped', async () => {

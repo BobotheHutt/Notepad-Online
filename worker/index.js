@@ -1,6 +1,7 @@
 /* Noteshack's online service: api.noteshack.org, a Cloudflare Worker.
-   Answers only noteshack.org, with a limit for each visitor; nothing is
-   kept or logged.
+   Answers only noteshack.org, with a limit for each visitor and a daily
+   spending cap on translating; nothing is kept or logged (the cap keeps only
+   a count of today's text, in the Durable Object Budget).
 
    POST /translate  { from, to, texts: [string] }  →  { texts: [string] }
      Used only when someone picks "Online" in Tools → Translate. The text is
@@ -12,11 +13,12 @@
      is thanked and dropped.
 
    Errors: { error: 'busy' } (429: too many requests from this visitor this
-   minute; try again shortly), { error: 'limit' } (429: today's free
-   allowance is used up), { error: 'bad' } (400), { error: 'failed' } (502).
+   minute; try again shortly), { error: 'limit' } (429: today's budget is
+   spent, until midnight UTC), { error: 'bad' } (400), { error: 'failed' }
+   (502).
 
    Deployed by tools/worker.py, with the AI binding (AI), rate limits
-   (LIMIT; REPORTS, stricter) and the GitHub key. */
+   (LIMIT; REPORTS, stricter), the budget (BUDGET) and the GitHub key. */
 
 const MODEL = '@cf/meta/m2m100-1.2b';
 const ORIGINS = ['https://noteshack.org', 'https://www.noteshack.org'];
@@ -29,6 +31,43 @@ const MAX_TEXTS = 32;
 const MAX_TEXT = 2000;
 const MAX_TOTAL = 12000;
 const REPO = 'BobotheHutt/Noteshack';
+
+// The daily cap. The account is on Workers Paid, so Workers AI past its free
+// daily allowance is billed, not stopped. M2M-100 costs $0.342 a million
+// tokens, in and out alike; the cap counts from $0 (the free allowance is
+// shared with another project), so $1 is about 2.9 million tokens a day.
+const BUDGET_USD = 1;
+const PRICE = 0.342 / 1e6;
+export const DAY_TOKENS = Math.floor(BUDGET_USD / PRICE);
+// The model does not say how many tokens it used, so they are estimated on
+// the high side: a token for every 3 bytes of UTF-8 (about 4 letters of a
+// European language make one; a Chinese or Hindi letter is 3 bytes, about a
+// token), and 4 more for each text's start, end and language.
+export const tokens = (text) => Math.ceil(new TextEncoder().encode(text).length / 3) + 4;
+
+/* Today's spending, as tokens: one for the whole service (BUDGET, named
+   'translate'). POST { tokens, force } adds them and answers { ok: true },
+   or, unless forced, { ok: false } when they would pass the day's budget and
+   adds nothing. A Durable Object takes one request at a time, so the count
+   is exact. */
+export class Budget {
+  constructor(ctx) { this.storage = ctx.storage; }
+  async fetch(req) {
+    const { tokens: n, force } = await req.json();
+    const day = new Date().toISOString().slice(0, 10);
+    const today = await this.storage.get('today');
+    const used = today && today.day === day ? today.used : 0;
+    if (!force && used + n > DAY_TOKENS) return Response.json({ ok: false });
+    await this.storage.put('today', { day, used: used + n });
+    return Response.json({ ok: true });
+  }
+}
+
+const spend = async (env, n, force = false) => {
+  if (!env.BUDGET) return true;
+  const r = await env.BUDGET.get(env.BUDGET.idFromName('translate')).fetch('https://budget/', { method: 'POST', body: JSON.stringify({ tokens: n, force }) });
+  return (await r.json()).ok;
+};
 
 function answer(body, status, origin) {
   const headers = { 'content-type': 'application/json', 'cache-control': 'no-store', vary: 'Origin' };
@@ -93,16 +132,25 @@ export default {
       return answer({ error: 'bad' }, 400, origin);
     }
 
+    // the text in, and as much again coming out, is held against the day's
+    // budget first; what a longer translation used past that is added after
+    const words = texts.filter((t) => /\p{L}/u.test(t));
+    const asked = words.reduce((n, t) => n + tokens(t), 0);
+    try {
+      if (asked && !(await spend(env, 2 * asked))) return answer({ error: 'limit' }, 429, origin);
+    } catch (e) { return answer({ error: 'failed' }, 502, origin); }
+
     try {
       const out = await Promise.all(texts.map(async (text) => {
         if (!/\p{L}/u.test(text)) return text;
         const r = await env.AI.run(MODEL, { text, source_lang: from, target_lang: to });
         return String((r && r.translated_text) || '');
       }));
+      const more = out.filter((t, i) => /\p{L}/u.test(texts[i])).reduce((n, t) => n + tokens(t), 0) - asked;
+      if (more > 0) await spend(env, more, true).catch(() => {});
       return answer({ texts: out }, 200, origin);
     } catch (e) {
-      // the day's free allowance used up (the account is on the free plan,
-      // so it stops rather than charging)
+      // Workers AI turning it away for its own limits
       const limit = /neuron|allocation|quota|capacity|429|4006/i.test(String((e && e.message) || e));
       return answer({ error: limit ? 'limit' : 'failed' }, limit ? 429 : 502, origin);
     }

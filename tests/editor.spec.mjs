@@ -61,7 +61,8 @@ test('saving, reloading, exporting and a second document', async ({ app: p }) =>
   await expect(p.locator('#editor')).toContainText('This survives a reload.');
   await p.click('.sb-head [data-action="new"]');
   await p.keyboard.type('Second doc');
-  await expect(p.locator('.doc-item')).toHaveCount(3, { timeout: 10000 });
+  // (named, so that if a document too many ever turns up, which one shows)
+  await expect.poll(() => p.locator('.doc-item').allTextContents(), { timeout: 10000 }).toHaveLength(3);
 });
 
 const DIRTY = '<p>Pasted <b>bold</b> <img src=x onerror="window.pwned=1"> <a href="javascript:window.pwned=3">bad</a> <span style="color:#ff0000">red</span></p><script>window.pwned=2</script>';

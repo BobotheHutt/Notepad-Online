@@ -11,7 +11,8 @@
      field people never see; a report with it filled in came from a bot, and
      is thanked and dropped.
 
-   Errors: { error: 'limit' } (429: too many requests, or today's free
+   Errors: { error: 'busy' } (429: too many requests from this visitor this
+   minute; try again shortly), { error: 'limit' } (429: today's free
    allowance is used up), { error: 'bad' } (400), { error: 'failed' } (502).
 
    Deployed by tools/worker.py, with the AI binding (AI), rate limits
@@ -37,6 +38,9 @@ function answer(body, status, origin) {
 
 // one line, short, for a title
 const line = (s, n) => String(s).replace(/\s+/g, ' ').trim().slice(0, n);
+// the version, browser and language: letters, digits and a little
+// punctuation, so they cannot become links, pictures or mentions
+const plain = (s, n) => line(String(s).replace(/[^\p{L}\p{N} .,()\-]/gu, ''), n);
 // what people wrote, shown as written: in a block GitHub does not format,
 // so it cannot make links, pictures or mentions
 const block = (s) => '~~~text\n' + String(s).replace(/~{3,}/g, (m) => m.replace(/~/g, '∼')).trim() + '\n~~~';
@@ -49,7 +53,7 @@ async function report(q, env, origin) {
   const body = [
     '**What happened**', block(what),
     steps.trim() ? '**What they were doing**\n' + block(steps) : '',
-    '**Noteshack** ' + line(version, 40) + ' · **Browser** ' + line(browser, 120) + ' · **App language** ' + line(lang, 10),
+    '**Noteshack** ' + plain(version, 40) + ' · **Browser** ' + plain(browser, 120) + ' · **App language** ' + plain(lang, 10),
     '_Sent from the app (Tools → Report a problem)._'
   ].filter(Boolean).join('\n\n');
   const res = await fetch('https://api.github.com/repos/' + REPO + '/issues', {
@@ -75,7 +79,7 @@ export default {
     const limiter = url.pathname === '/report' ? env.REPORTS : env.LIMIT;
     if (limiter) {
       const { success } = await limiter.limit({ key: who });
-      if (!success) return answer({ error: 'limit' }, 429, origin);
+      if (!success) return answer({ error: 'busy' }, 429, origin);
     }
 
     let q;

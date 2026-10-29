@@ -177,6 +177,7 @@
   /* ----- online: Noteshack's service on Cloudflare ----- */
 
   const API = 'https://api.noteshack.org/translate';
+  const BUSY_WAIT = 8000; // ms between tries while the service is busy
   // the app's language codes → the model's; Chinese written the traditional
   // way can be translated from, not into
   const M2M = { nb: 'no', 'zh-Hans': 'zh', 'zh-Hant': 'zh' };
@@ -195,18 +196,24 @@
     const f = m2m(from), t = m2m(to);
     const queue = []; // { text, resolve, reject }
     let timer = null, running = 0, closed = false;
-    const why = (status, body) => (status === 429 || (body && body.error === 'limit')
+    const why = (status, body) => (status === 429
       ? _('The online translator is busy, or has reached today’s limit. Try again later, or choose a translator on this computer.')
       : _('The online translator could not be reached ({status}).', { status }));
     async function send(batch) {
       running++;
       try {
-        let res;
-        try {
-          res = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: f, to: t, texts: batch.map((b) => b.text) }), credentials: 'omit', referrerPolicy: 'no-referrer' });
-        } catch (e) { throw new Error(_('The online translator could not be reached. Check your connection.')); }
-        let body = null;
-        try { body = await res.json(); } catch (e) { /* none */ }
+        let res, body;
+        // busy (the service's limit for each visitor, a minute at a time):
+        // wait and carry on, as a long PDF can ask more often than that
+        for (let tries = 0; ; tries++) {
+          try {
+            res = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: f, to: t, texts: batch.map((b) => b.text) }), credentials: 'omit', referrerPolicy: 'no-referrer' });
+          } catch (e) { throw new Error(_('The online translator could not be reached. Check your connection.')); }
+          body = null;
+          try { body = await res.json(); } catch (e) { /* none */ }
+          if (res.status !== 429 || !body || body.error !== 'busy' || tries >= 8 || closed) break;
+          await new Promise((r) => setTimeout(r, BUSY_WAIT));
+        }
         if (!res.ok || !body || !Array.isArray(body.texts) || body.texts.length !== batch.length) throw new Error(why(res.status, body));
         batch.forEach((b, i) => b.resolve(body.texts[i]));
       } catch (e) {
@@ -227,7 +234,9 @@
     // a piece longer than the service takes is sent sentence by sentence
     async function one(text) {
       if (text.length > 2000) {
-        const parts = text.match(/[^.!?。！？]+[.!?。！？]*\s*/gu) || [text];
+        // every character in some sentence, punctuation leading one included
+        const parts = (text.match(/[^.!?。！？]*[.!?。！？]+\s*|[^.!?。！？]+$/gu) || []).filter(Boolean);
+        if (parts.join('') !== text) parts.splice(0, parts.length, text);
         const out = [];
         let cur = '';
         for (const p of parts) { if (cur && cur.length + p.length > 2000) { out.push(cur); cur = ''; } cur += p; }

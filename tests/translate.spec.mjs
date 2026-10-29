@@ -235,6 +235,29 @@ test('online, for more languages, only when chosen', async ({ app: p }) => {
   expect(sent[0]).toEqual({ from: 'en', to: 'sv', texts: ['Good morning to everyone.', 'See you at'] });
 });
 
+test('the online translator waits while it is busy, and carries on', async ({ app: p, errors }) => {
+  test.setTimeout(60000);
+  let asked = 0;
+  await p.route('https://api.noteshack.org/translate', (route) => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'content-type': 'application/json' };
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    asked++;
+    if (asked === 1) return route.fulfill({ status: 429, headers: cors, body: '{"error":"busy"}' });
+    return route.fulfill({ status: 200, headers: cors, body: JSON.stringify({ texts: route.request().postDataJSON().texts.map((t) => 'SV ' + t) }) });
+  });
+  await openHtml(p, 'Wait.html', '<p>Good morning to everyone.</p>');
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  const dlg = p.locator('dialog[open]');
+  await dlg.getByRole('radio', { name: /^Swedish/ }).check();
+  await dlg.locator('input[name="tr-engine"][value="online"]').check();
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+  await expect(p.locator('#editor p').first()).toHaveText('SV Good morning to everyone.', { timeout: 30000 });
+  expect(asked).toBe(2);
+  // the busy answer this test made
+  errors.splice(0, errors.length, ...errors.filter((e) => !/429/.test(e)));
+});
+
 test('the online translator says when it has reached its limit', async ({ app: p, errors }) => {
   await p.route('https://api.noteshack.org/translate', (route) => route.fulfill({ status: 429, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'content-type': 'application/json' }, body: '{"error":"limit"}' }));
   await openHtml(p, 'Busy.html', '<p>Good morning to everyone.</p>');

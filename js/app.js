@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-51';
+  const APP_VERSION = '2026.10.29-52';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2272,7 +2272,8 @@
   // app's language go; nothing from any document.
   function browserName() {
     const ua = navigator.userAgent;
-    const b = (ua.match(/(Edg|OPR|Firefox|FxiOS|CriOS|Chrome|Version)\/(\d+)/) || []);
+    // most particular first: Edge and Opera also say Chrome, Chrome also says Safari
+    const b = ['Edg', 'OPR', 'FxiOS', 'Firefox', 'CriOS', 'Chrome', 'Version'].map((n) => ua.match(new RegExp('(' + n + ')/(\\d+)'))).find(Boolean) || [];
     const name = { Edg: 'Edge', OPR: 'Opera', FxiOS: 'Firefox', CriOS: 'Chrome', Version: 'Safari' }[b[1]] || b[1] || 'Unknown';
     const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : '';
     return (name + ' ' + (b[2] || '')).trim() + (os ? ' on ' + os : '');

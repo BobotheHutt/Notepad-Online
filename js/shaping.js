@@ -449,8 +449,12 @@
         const len = new DataView(X.memory.buffer).getUint32(lenPtr, true);
         result = mem().slice(dp, dp + len);
         X.free(lenPtr);
+        X.hb_blob_destroy(ob);
+        X.hb_face_destroy(out);
       }
       X.hb_subset_input_destroy(input);
+      X.hb_face_destroy(face);
+      X.hb_blob_destroy(blob);
       X.free(ptr);
       return result;
     };

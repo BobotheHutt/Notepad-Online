@@ -38,8 +38,11 @@ test('says when the day’s allowance or a visitor’s limit is reached', async 
   const r = await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, spent);
   expect(r.status).toBe(429);
   expect(await r.json()).toEqual({ error: 'limit' });
+  // a visitor's limit is "busy" (the app waits and tries again), not the day's
   const limited = Object.assign({ LIMIT: { limit: async () => ({ success: false }) } }, good);
-  expect((await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, limited)).status).toBe(429);
+  const busy = await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, limited);
+  expect(busy.status).toBe(429);
+  expect(await busy.json()).toEqual({ error: 'busy' });
   const broken = ai(() => { throw new Error('model error'); });
   expect((await ask({ from: 'en', to: 'sv', texts: ['Hi'] }, {}, broken)).status).toBe(502);
 });
@@ -55,9 +58,14 @@ test('a problem report is filed on GitHub, shown as written; a bot’s is droppe
     const env = Object.assign({ GITHUB_TOKEN: 'key' }, good);
     const send = (body) => ask(body, { path: '/report' }, env);
     const r = await send({ what: 'The PDF would not save.\n~~~\n@someone ![x](https://example.com/x.png)', steps: 'Clicked Download.', version: '2026.10.29-48', browser: 'Chrome 141 on Windows', lang: 'es' });
+    // the other fields are not shown as written, so only plain characters stay in them
+    await send({ what: 'The PDF would not save at all.', version: '1 @someone', browser: '![x](https://example.com/x.png) **Edge**', lang: '<b>es</b>' });
     expect(r.status).toBe(200);
     expect(await r.json()).toEqual({ url: 'https://github.com/BobotheHutt/Noteshack/issues/7' });
-    expect(filed.length).toBe(1);
+    expect(filed.length).toBe(2);
+    expect(filed[1].body.body).toContain('**Noteshack** 1 someone · **Browser** x(httpsexample.comx.png) Edge · **App language** besb');
+    expect(filed[1].body.body).not.toMatch(/@|!\[|<b>/);
+    filed.splice(1);
     expect(filed[0].url).toBe('https://api.github.com/repos/BobotheHutt/Noteshack/issues');
     expect(filed[0].auth).toBe('Bearer key');
     expect(filed[0].body.title).toBe('Report: The PDF would not save. ~~~ @someone ![x](https://example.com/x.png)');

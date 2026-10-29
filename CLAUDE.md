@@ -19,7 +19,8 @@ privacy promises, the file list and the credits; read the part you need.
 - **GitHub repository secrets:** `CLOUDFLARE_API_TOKEN` (deploys the Worker:
   Workers Scripts Edit, Workers Routes Edit and Zone Read on noteshack.org) and
   `NOTESHACK_ISSUES_TOKEN` (fine-grained, Noteshack only, Issues read and write;
-  the Worker files reports with it).
+  the Worker files reports with it). Both are set to never expire, so no
+  expiry check is needed.
 - **This cloud environment:** a Bearer secret for `api.cloudflare.com`, path
   `/client/v4/accounts/c047d9e1fea222a9db788c3e9a79cc37/r2/` only. It reaches
   R2 and nothing else in Cloudflare.
@@ -73,8 +74,7 @@ translator, reports) stand it in with `page.route`, and need
 ## Open work
 
 1. Proposed, **not approved**: an About-and-storage line to remove downloaded
-   models and fonts; a monthly GitHub check that warns before
-   `NOTESHACK_ISSUES_TOKEN` expires.
+   models and fonts.
 2. Later, only if asked: translation with your own key (DeepL, Google…); a
    Buy Me a Coffee link.
 3. Flaky tests: `editor.spec` once found 4 documents instead of 3 (not

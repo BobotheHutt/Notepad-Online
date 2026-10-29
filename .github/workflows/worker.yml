@@ -15,3 +15,18 @@ jobs:
       - run: python3 tools/worker.py
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # it answers, translates, and turns other sites away (the new address
+      # can take a minute to start answering)
+      - name: Check it live
+        run: |
+          for i in $(seq 1 12); do
+            out=$(curl -s -X POST https://api.noteshack.org/translate -H 'origin: https://noteshack.org' -H 'content-type: application/json' \
+              -d '{"from":"en","to":"es","texts":["Good morning, how are you?"]}') || true
+            echo "$out" | grep -q '"texts"' && break
+            sleep 10
+          done
+          echo "$out"
+          echo "$out" | grep -q '"texts":\["[^"]' || exit 1
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.noteshack.org/translate -H 'origin: https://example.com' -H 'content-type: application/json' -d '{}')
+          echo "other site: $code"
+          test "$code" = 403

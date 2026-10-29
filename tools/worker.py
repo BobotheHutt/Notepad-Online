@@ -6,8 +6,11 @@ Workers as `noteshack-api`, answering at api.noteshack.org.
 Run by GitHub Actions (.github/workflows/worker.yml) when worker/ changes,
 with the token in the repository's secrets. The token needs Account →
 Workers Scripts → Edit, and for noteshack.org Zone → Workers Routes → Edit
-and Zone → Zone → Read. The Worker gets Workers AI (the AI binding) and a
-rate limit per visitor (LIMIT); it answers at api.noteshack.org, and its
+and Zone → Zone → Read. The Worker gets Workers AI (the AI binding), rate
+limits per visitor (LIMIT for translating, REPORTS for problem reports) and
+the GitHub key reports are filed with (GITHUB_TOKEN, from the repository
+secret NOTESHACK_ISSUES_TOKEN: a fine-grained token for this repository
+only, Issues read and write). It answers at api.noteshack.org, and its
 workers.dev address is turned off."""
 import json, os, urllib.parse, urllib.request, uuid
 
@@ -26,6 +29,8 @@ METADATA = {
         {'type': 'ai', 'name': 'AI'},
         # requests per visitor per minute (a paragraph batch is one request)
         {'type': 'ratelimit', 'name': 'LIMIT', 'namespace_id': '1001', 'simple': {'limit': 60, 'period': 60}},
+        # problem reports per visitor per minute
+        {'type': 'ratelimit', 'name': 'REPORTS', 'namespace_id': '1002', 'simple': {'limit': 3, 'period': 60}},
     ],
     # nothing about requests is logged
     'observability': {'enabled': False},
@@ -44,6 +49,10 @@ def call(url, data=None, method='GET', kind='application/json'):
 
 
 def main():
+    if os.environ.get('NOTESHACK_ISSUES_TOKEN'):
+        METADATA['bindings'].append({'type': 'secret_text', 'name': 'GITHUB_TOKEN', 'text': os.environ['NOTESHACK_ISSUES_TOKEN']})
+    else:
+        METADATA['keep_bindings'] = ['secret_text']
     code = open(os.path.join(ROOT, 'worker', 'index.js'), 'rb').read()
     b = uuid.uuid4().hex
     parts = [

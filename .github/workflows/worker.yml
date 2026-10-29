@@ -1,6 +1,7 @@
-# Deploys the online translator (worker/, at api.noteshack.org) to Cloudflare
-# when it changes. The token is the repository secret CLOUDFLARE_API_TOKEN.
-name: Online translator
+# Deploys Noteshack's online service (worker/, at api.noteshack.org) to Cloudflare
+# when it changes. The tokens are the repository secrets CLOUDFLARE_API_TOKEN
+# and NOTESHACK_ISSUES_TOKEN (the key problem reports are filed with).
+name: Online service
 on:
   push:
     branches: [main, 'claude/**']
@@ -15,6 +16,7 @@ jobs:
       - run: python3 tools/worker.py
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          NOTESHACK_ISSUES_TOKEN: ${{ secrets.NOTESHACK_ISSUES_TOKEN }}
       # it answers, translates, and turns other sites away (the new address
       # can take a minute to start answering)
       - name: Check it live
@@ -30,3 +32,7 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.noteshack.org/translate -H 'origin: https://example.com' -H 'content-type: application/json' -d '{}')
           echo "other site: $code"
           test "$code" = 403
+          # reports: an empty one is turned away (a real one would be filed)
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.noteshack.org/report -H 'origin: https://noteshack.org' -H 'content-type: application/json' -d '{"what":""}')
+          echo "empty report: $code"
+          test "$code" = 400

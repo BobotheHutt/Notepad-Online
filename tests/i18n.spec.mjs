@@ -129,7 +129,7 @@ test('the test language leaves no phrase in English', async ({ app: p }) => {
     await p.keyboard.press('Escape');
   }
   // dialogs the code builds
-  for (const action of ['word-count', 'translate', 'shortcuts', 'about', 'app-lang', 'page-setup', 'history']) {
+  for (const action of ['word-count', 'translate', 'shortcuts', 'report', 'about', 'app-lang', 'page-setup', 'history']) {
     await p.locator('.menu', { has: p.locator('[data-action="' + action + '"]') }).locator('.menu-btn').click();
     await p.click('.menu.open [data-action="' + action + '"]');
     await expect(p.locator('dialog[open]')).toBeVisible();

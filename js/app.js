@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-47';
+  const APP_VERSION = '2026.10.29-48';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1864,6 +1864,7 @@
     'smart-md': () => { settings.smartMd = !settings.smartMd; saveSettings(); toast(settings.smartMd ? _('Markdown shortcuts on') : _('Markdown shortcuts off')); },
 
     shortcuts: shortcutsDialog,
+    report: () => reportDialog(),
     about: aboutDialog,
     'find-next': () => findStep(1),
     'find-prev': () => findStep(-1),
@@ -2264,6 +2265,64 @@
     });
   }
 
+  // Tools → Report a problem: sent through Noteshack's service
+  // (worker/index.js), which files it on Noteshack's GitHub, where it is
+  // public. Only what is written here, the version, the browser and the
+  // app's language go; nothing from any document.
+  function browserName() {
+    const ua = navigator.userAgent;
+    const b = (ua.match(/(Edg|OPR|Firefox|FxiOS|CriOS|Chrome|Version)\/(\d+)/) || []);
+    const name = { Edg: 'Edge', OPR: 'Opera', FxiOS: 'Firefox', CriOS: 'Chrome', Version: 'Safari' }[b[1]] || b[1] || 'Unknown';
+    const os = /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Mac OS X/.test(ua) ? 'macOS' : /CrOS/.test(ua) ? 'ChromeOS' : /Linux/.test(ua) ? 'Linux' : '';
+    return (name + ' ' + (b[2] || '')).trim() + (os ? ' on ' + os : '');
+  }
+
+  async function reportDialog(draft = {}) {
+    const what = el('textarea', { class: 'input', rows: 5, maxlength: 4000, 'aria-label': _('What went wrong?') });
+    const steps = el('textarea', { class: 'input', rows: 3, maxlength: 4000, 'aria-label': _('What were you doing when it happened? (optional)') });
+    what.value = draft.what || '';
+    steps.value = draft.steps || '';
+    // a field people never see: only a bot fills it in
+    const trap = el('input', { type: 'text', name: 'website', tabindex: -1, autocomplete: 'off', 'aria-hidden': 'true', class: 'trap' });
+    const sent = { version: APP_VERSION, browser: browserName(), lang: NpI18n.lang };
+    const v = await dialog({
+      title: _('Report a problem'),
+      body: el('div', { class: 'stack' },
+        draft.error ? el('p', { class: 'dlg-text', role: 'alert' }, draft.error) : null,
+        el('p', { class: 'dlg-text' }, _('Something not working, or a translation that reads wrong? Tell us here. Reports are posted publicly on Noteshack’s GitHub page, so leave out anything personal and anything from your documents.')),
+        el('label', { class: 'field' }, el('span', {}, _('What went wrong?')), what),
+        el('label', { class: 'field' }, el('span', {}, _('What were you doing when it happened? (optional)')), steps),
+        el('p', { class: 'dlg-text muted' }, _('Also sent: Noteshack {version}, {browser}, app language {lang}.', sent)),
+        trap),
+      actions: [{ label: _('Cancel'), value: '' }, { label: _('Send'), value: 'send', primary: true }],
+      initial: 'textarea'
+    });
+    if (v !== 'send') return;
+    const again = (error) => reportDialog({ what: what.value, steps: steps.value, error });
+    if (what.value.trim().length < 10) return again(_('Say a little more about what went wrong.'));
+    toast(_('Sending…'), 20000);
+    let res = null, body = null;
+    try {
+      res = await fetch('https://api.noteshack.org/report', {
+        method: 'POST', headers: { 'content-type': 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer',
+        body: JSON.stringify(Object.assign({ what: what.value, steps: steps.value, website: trap.value }, sent))
+      });
+      body = await res.json();
+    } catch (e) { /* below */ }
+    toast('', 1);
+    if (!res || !res.ok || !body) {
+      return again(res && res.status === 429 ? _('Too many reports at once. Wait a minute and send it again.')
+        : res ? _('The report could not be sent ({status}). Try again in a moment.', { status: res.status })
+          : _('The report could not be sent. Check your connection and try again.'));
+    }
+    await dialog({
+      title: _('Thank you'),
+      body: el('div', { class: 'stack' },
+        el('p', { class: 'dlg-text' }, _('Your report was sent.')),
+        body.url ? el('p', { class: 'dlg-text' }, el('a', { href: body.url, target: '_blank', rel: 'noopener noreferrer' }, _('See it on GitHub'))) : null)
+    });
+  }
+
   async function aboutDialog() {
     let usage = '';
     try {
@@ -2284,7 +2343,7 @@
       el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
         el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
-        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing.'))),
+        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing. A problem report, when you send one (Tools → Report a problem), goes the same way to Noteshack’s GitHub page, where it is public: only what you write, the app’s version, your browser and the app’s language.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Disclaimer')),
         el('p', {}, _('Noteshack is provided as is, without warranty of any kind. Text recognition, translation and font matching can be wrong: check a document before you send, submit or sign it. Keep backups of anything important.')),
         el('p', {}, _('You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.'))),

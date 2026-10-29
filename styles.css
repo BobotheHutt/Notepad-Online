@@ -1345,3 +1345,6 @@ body.pdf-show-original .pdf-conv { visibility: hidden; }
   [dir="rtl"] .sidebar { inset: 0 0 0 auto; transform: translateX(100%); }
   [dir="rtl"] body.sidebar-open .sidebar { transform: none; }
 }
+
+/* a form field only bots fill in (Report a problem) */
+.trap { position: absolute; left: -10000px; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

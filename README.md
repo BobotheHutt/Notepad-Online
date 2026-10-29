@@ -25,7 +25,8 @@ and lets you edit and sign PDFs.
   - In **Chrome and Edge on a computer**, Save as uses the system's own Save dialog (pick the kind of file in its type list), and **Save** (Ctrl+S) then writes straight back to that file, like a desktop program. A file opened through File → Open, or dropped on the window, is saved back to the same way. This lasts while the tab is open: after a reload or a new visit, the first Save shows the dialog again, in the same folder with the same name. Saving over a Word file or web page made elsewhere asks first (once), since Noteshack opens their everyday parts, not all of them.
   - **Firefox, Safari and phones** do not let websites write to a file on disk, so there each save is a new copy in Downloads; Save as asks which kind of file.
 - Page setup per document: font, size, line spacing, Letter or A4, margins
-- **The app in your language**: English, Spanish, French, German, Portuguese or Italian, chosen in View → App language (or the browser's language, at first). Menus, messages, dates and numbers follow it; each document keeps a language of its own. The translations were written with the help of AI and have not yet been checked by native speakers.
+- **The app in your language**: English, Spanish, French, German, Portuguese or Italian, chosen in View → App language (or the browser's language, at first). Menus, messages, dates and numbers follow it; each document keeps a language of its own. The translations were written with the help of AI and have not yet been checked by native speakers. Corrections are welcome through Tools → Report a problem.
+- **Report a problem** (Tools): say what went wrong, in the app, with no account; the report is filed on Noteshack's GitHub page, where it is public.
 - **Each document has a language**, shown in the status bar: worked out from its text on your computer, or chosen from 55. It sets spell checking and which way text runs (Arabic, Hebrew, Persian and Urdu run right to left), and saved Word files, web pages and PDFs record it.
 - **Spell checking in the document's language**: English, Spanish, French, German, Portuguese and Italian are checked by Noteshack itself, with the Hunspell dictionaries LibreOffice uses. Misspelled words are underlined; right-click one for corrections, to add it to your dictionary, or to ignore it in that document (Shift + right-click gives the browser's own menu). Other languages use the browser's spell check.
 - **Translation, on your computer** (Tools → Translate…): makes a translated copy of a document; with a translator on your computer, the text is not sent anywhere. Noteshack's own translator is Firefox's translation engine with Mozilla's models, between English, Spanish, French, German, Portuguese and Italian (two of the others go through English); it keeps bold, links and other formatting, and downloads each language's model (about 25 MB) the first time, then keeps it. Where the browser has a translator of its own (Chrome), its languages are offered too, as plain text. **Online**, only when you choose it, Noteshack's own translation service on Cloudflare translates between 53 languages (Meta's M2M-100 model, run by Workers AI), as plain text: the text is sent there, translated and sent back, and not kept, so it is not for anything confidential. Names and terms you list are left as they are, and so are pictures and code. Each paragraph of the copy is highlighted until checked: the panel shows its original, which you can change and translate again. A PDF (or a scan, read first) can be translated keeping its layout: a copy in which each paragraph is replaced where it stands, in its matched font, set a little smaller where the translation runs longer so it stays in its space, with the original left as it was; or into a document of its words, to check paragraph by paragraph and save as Word or text.
@@ -88,7 +89,7 @@ documents list automatically the first time you open the new version.
 ## Privacy
 
 There is no account, no analytics, no ads and no cookies, and documents are
-never uploaded. Three things are fetched from the internet, and one is sent only when you ask:
+never uploaded. Three things are fetched from the internet, and two are sent only when you ask:
 
 - **Uncommon font files.** The 31 common fonts the app matches are served
   by Noteshack itself. When a PDF names a font outside them, that font file
@@ -108,6 +109,11 @@ never uploaded. Three things are fetched from the internet, and one is sent only
   the text being translated is sent to Noteshack's translation service on
   Cloudflare (`api.noteshack.org`), which translates it with Workers AI and
   sends it back. Nothing is kept or logged.
+
+- **A problem report, when you send one** (Tools → Report a problem): what
+  you write, the app's version, your browser and the app's language go
+  through the same service to Noteshack's GitHub page, where the report is
+  public. Nothing from your documents is sent.
 
 Everything else, text recognition included, runs on the device.
 
@@ -233,7 +239,8 @@ js/spell.js            spell checking (js/spellworker.js runs Hunspell)
 js/translate.js        translation on the device: Noteshack's engine (Bergamot) or the browser's
 js/remote.js           downloads from files.noteshack.org: checked, and kept in the browser
 js/shaping.js          text in other scripts in saved PDFs: Noto fonts, shaped (HarfBuzz), cut down to the letters used
-worker/                the online translator (api.noteshack.org), a Cloudflare Worker; GitHub deploys it when it changes (tools/worker.py)
+worker/                Noteshack's online service (api.noteshack.org), a Cloudflare Worker: the online translator, and problem
+                       reports filed on GitHub; GitHub deploys it when it changes (tools/worker.py)
 vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
 tools/                 the upload scripts for the translation models and the Noto fonts, the online translator's deploy script; phrases.mjs lists the phrases the code uses
 js/icons.js            toolbar icons

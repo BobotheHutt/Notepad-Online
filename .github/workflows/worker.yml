@@ -7,6 +7,11 @@ on:
     branches: [main, 'claude/**']
     paths: ['worker/**', 'tools/worker.py', '.github/workflows/worker.yml']
   workflow_dispatch:
+    inputs:
+      test_report:
+        description: Also send one test problem report (it is filed as a real issue)
+        type: boolean
+        default: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -36,3 +41,9 @@ jobs:
           code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.noteshack.org/report -H 'origin: https://noteshack.org' -H 'content-type: application/json' -d '{"what":""}')
           echo "empty report: $code"
           test "$code" = 400
+      - name: Send a test report
+        if: ${{ inputs.test_report }}
+        run: |
+          curl -s -X POST https://api.noteshack.org/report -H 'origin: https://noteshack.org' -H 'content-type: application/json' \
+            -d '{"what":"Test report from the deploy, to check reports reach GitHub. Close it.","steps":"","version":"test","browser":"GitHub Actions","lang":"en","website":""}' | tee out.json
+          grep -q '"url":"https://github.com/' out.json

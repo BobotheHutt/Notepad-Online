@@ -242,12 +242,14 @@ js/shaping.js          text in other scripts in saved PDFs: Noto fonts, shaped (
 worker/                Noteshack's online service (api.noteshack.org), a Cloudflare Worker: the online translator, and problem
                        reports filed on GitHub; GitHub deploys it when it changes (tools/worker.py)
 vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
-tools/                 the upload scripts for the translation models and the Noto fonts, the online translator's deploy script; phrases.mjs lists the phrases the code uses
+tools/                 the upload scripts for the translation models and the Noto fonts, the online translator's deploy script,
+                       test-setup.py (the tests' fonts and models, where the network cannot reach them); phrases.mjs lists the phrases the code uses
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details
 AUDIT.md               audits: the first version, and the app as released
 LICENSE                the MIT License, for this project's own code
+CLAUDE.md              notes for an AI assistant working on the code: releasing, secrets, open work
 tests/                 the tests (see Tests above)
 ```
 

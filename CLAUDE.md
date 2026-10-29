@@ -37,10 +37,12 @@ privacy promises, the file list and the credits; read the part you need.
 3. Commit and push straight to `main`. No work-branch push first: it only
    doubles GitHub's test run.
 4. Check it is live: `https://noteshack.org/sw.js` shows the new `CACHE`.
-5. GitHub then runs every test in Chromium, Firefox and WebKit (about 12
-   minutes): the safety net. If it fails, fix it at once. Re-run a failure
-   once only when it is plainly unrelated to the change; two known flaky ones
-   are below.
+5. GitHub runs no tests on a push. When the change touches the browser
+   side (not only `worker/` or `tools/`), start Actions → Tests by hand with
+   the affected files, for Firefox and WebKit:
+   `tests: tests/<affected>.spec.mjs …` (empty runs all; only when asked).
+   If it fails, fix it at once. Re-run a failure once only when it is
+   plainly unrelated to the change; two known flaky ones are below.
 
 ### Tests on this machine
 

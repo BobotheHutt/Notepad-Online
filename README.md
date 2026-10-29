@@ -196,8 +196,9 @@ They serve the repository as the site and use it in Chrome, Firefox and Safari's
 exporting, editing and downloading PDFs, filling forms, reading scans,
 storage, printing, accessibility (axe), privacy (which sites are contacted),
 small screens and offline use. The PDFs they open are made fresh each run
-from invented text, so no real document is in the repository. GitHub runs
-them on every push (`.github/workflows/test.yml`).
+from invented text, so no real document is in the repository. Only the ones a
+change affects are run; GitHub runs those in all three when started by hand
+(`.github/workflows/test.yml`).
 
 ## The app's languages
 

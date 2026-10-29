@@ -1,10 +1,15 @@
-# Runs the tests on every push and pull request. A push to main is already
-# live by the time this finishes, so a red run here means: fix it now.
+# Runs the tests named, in Chromium, Firefox and WebKit, when started by hand
+# (Actions → Tests → Run workflow): only the ones a change affects, for what
+# the machine it was made on cannot run (Firefox and WebKit). Not on every
+# push: that ran everything, every time. Leave the box empty to run them all.
 name: Tests
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+    inputs:
+      tests:
+        description: Test files to run, separated by spaces (e.g. tests/pdf.spec.mjs); empty runs them all
+        type: string
+        default: ''
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,7 +22,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium firefox webkit
-      - run: npm test
+      - run: npx playwright test $TESTS
+        env:
+          TESTS: ${{ inputs.tests }}
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

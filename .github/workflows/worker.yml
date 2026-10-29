@@ -1,0 +1,17 @@
+# Deploys the online translator (worker/, at api.noteshack.org) to Cloudflare
+# when it changes. The token is the repository secret CLOUDFLARE_API_TOKEN.
+name: Online translator
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['worker/**', 'tools/worker.py', '.github/workflows/worker.yml']
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/worker.py
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -233,7 +233,7 @@ js/spell.js            spell checking (js/spellworker.js runs Hunspell)
 js/translate.js        translation on the device: Noteshack's engine (Bergamot) or the browser's
 js/remote.js           downloads from files.noteshack.org: checked, and kept in the browser
 js/shaping.js          text in other scripts in saved PDFs: Noto fonts, shaped (HarfBuzz), cut down to the letters used
-worker/                the online translator (api.noteshack.org), a Cloudflare Worker; tools/worker.py deploys it
+worker/                the online translator (api.noteshack.org), a Cloudflare Worker; GitHub deploys it when it changes (tools/worker.py)
 vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
 tools/                 the upload scripts for the translation models and the Noto fonts, the online translator's deploy script; phrases.mjs lists the phrases the code uses
 js/icons.js            toolbar icons

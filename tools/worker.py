@@ -3,15 +3,20 @@ Workers as `noteshack-api`, answering at api.noteshack.org.
 
     CLOUDFLARE_API_TOKEN=… python3 tools/worker.py
 
-The token needs Account → Workers Scripts → Edit. The Worker gets Workers AI
-(the AI binding) and a rate limit per visitor (LIMIT); its workers.dev
-address is turned off, so it answers only at api.noteshack.org, which is
-connected to it once, in the dashboard (Settings → Domains & Routes)."""
-import json, os, urllib.request, uuid
+Run by GitHub Actions (.github/workflows/worker.yml) when worker/ changes,
+with the token in the repository's secrets. The token needs Account →
+Workers Scripts → Edit, and for noteshack.org Zone → Workers Routes → Edit
+and Zone → Zone → Read. The Worker gets Workers AI (the AI binding) and a
+rate limit per visitor (LIMIT); it answers at api.noteshack.org, and its
+workers.dev address is turned off."""
+import json, os, urllib.parse, urllib.request, uuid
 
 ACCOUNT = 'c047d9e1fea222a9db788c3e9a79cc37'
 NAME = 'noteshack-api'
-API = f'https://api.cloudflare.com/client/v4/accounts/{ACCOUNT}/workers/scripts/{NAME}'
+HOST = 'api.noteshack.org'
+ZONE = 'noteshack.org'
+CF = 'https://api.cloudflare.com/client/v4'
+API = f'{CF}/accounts/{ACCOUNT}/workers/scripts/{NAME}'
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
 METADATA = {
@@ -54,6 +59,9 @@ def main():
     print('deployed', NAME, r['result'].get('etag', ''))
     call(API + '/subdomain', json.dumps({'enabled': False, 'previews_enabled': False}).encode(), 'POST')
     print('workers.dev address off')
+    zone = call(f'{CF}/zones?name=' + urllib.parse.quote(ZONE))['result'][0]['id']
+    call(f'{CF}/accounts/{ACCOUNT}/workers/domains', json.dumps({'hostname': HOST, 'service': NAME, 'environment': 'production', 'zone_id': zone}).encode(), 'PUT')
+    print('answering at', HOST)
 
 
 if __name__ == '__main__':

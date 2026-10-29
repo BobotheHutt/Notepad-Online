@@ -88,7 +88,7 @@ documents list automatically the first time you open the new version.
 
 ## Privacy
 
-There is no account, no analytics, no ads and no cookies, and documents are
+There is no account, no ads and no cookies, and documents are
 never uploaded. Three things are fetched from the internet, and two are sent only when you ask:
 
 - **Uncommon font files.** The 31 common fonts the app matches are served

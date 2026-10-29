@@ -611,7 +611,6 @@ NpI18n.add({
   "A font for this text did not download correctly. Try again.": "Une police pour ce texte ne s’est pas téléchargée correctement. Réessayez.",
   "Could not load the text tools. Check your connection and try again.": "Impossible de charger les outils de texte. Vérifiez votre connexion et réessayez.",
   "Makes a translated copy. With a translator on this computer, the text is not sent anywhere. You can then check it paragraph by paragraph against the original.": "Crée une copie traduite. Avec un traducteur sur cet ordinateur, le texte n’est envoyé nulle part. Vous pouvez ensuite la vérifier paragraphe par paragraphe face à l’original.",
-  "There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.": "Il n’y a ni compte, ni statistiques, ni publicités, ni cookies. Vos documents et PDF ne quittent jamais cet appareil, sauf si vous choisissez d’en traduire un en ligne.",
   "Everything happens on your computer. Nothing you open or write is uploaded (unless you choose to translate it online), and it works offline.": "Tout se passe sur votre ordinateur. Rien de ce que vous ouvrez ou écrivez n’est envoyé en ligne (sauf si vous choisissez de le traduire en ligne), et cela fonctionne hors connexion.",
   "Online": "En ligne",
   "More languages. The text is sent to Noteshack’s translation service on Cloudflare (Workers AI), translated there and sent back; it is not kept. Not for anything confidential. Formatting inside a paragraph is not kept.": "Plus de langues. Le texte est envoyé au service de traduction de Noteshack sur Cloudflare (Workers AI), traduit là-bas et renvoyé ; il n’est pas conservé. Pas pour un contenu confidentiel. La mise en forme à l’intérieur d’un paragraphe n’est pas conservée.",
@@ -634,5 +633,6 @@ NpI18n.add({
   "The report could not be sent. Check your connection and try again.": "Le signalement n’a pas pu être envoyé. Vérifiez votre connexion et réessayez.",
   "Thank you": "Merci",
   "Your report was sent.": "Votre signalement a été envoyé.",
-  "See it on GitHub": "Le voir sur GitHub"
+  "See it on GitHub": "Le voir sur GitHub",
+  "There is no account, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.": "Il n’y a ni compte, ni publicités, ni cookies. Vos documents et PDF ne quittent jamais cet appareil, sauf si vous choisissez d’en traduire un en ligne."
 });

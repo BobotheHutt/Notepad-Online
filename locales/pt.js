@@ -611,7 +611,6 @@ NpI18n.add({
   "A font for this text did not download correctly. Try again.": "Uma fonte para este texto não foi baixada corretamente. Tente de novo.",
   "Could not load the text tools. Check your connection and try again.": "Não foi possível carregar as ferramentas de texto. Verifique sua conexão e tente de novo.",
   "Makes a translated copy. With a translator on this computer, the text is not sent anywhere. You can then check it paragraph by paragraph against the original.": "Cria uma cópia traduzida. Com um tradutor neste computador, o texto não é enviado a lugar nenhum. Depois você pode revisá-la parágrafo por parágrafo com o original.",
-  "There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.": "Não há conta, análises, anúncios nem cookies. Seus documentos e PDFs nunca saem deste dispositivo, a menos que você escolha traduzir um online.",
   "Everything happens on your computer. Nothing you open or write is uploaded (unless you choose to translate it online), and it works offline.": "Tudo acontece no seu computador. Nada do que você abre ou escreve é enviado (a menos que você escolha traduzi-lo online), e funciona offline.",
   "Online": "Online",
   "More languages. The text is sent to Noteshack’s translation service on Cloudflare (Workers AI), translated there and sent back; it is not kept. Not for anything confidential. Formatting inside a paragraph is not kept.": "Mais idiomas. O texto é enviado ao serviço de tradução do Noteshack na Cloudflare (Workers AI), traduzido lá e devolvido; não é guardado. Não use para nada confidencial. A formatação dentro de um parágrafo não é mantida.",
@@ -634,5 +633,6 @@ NpI18n.add({
   "The report could not be sent. Check your connection and try again.": "Não foi possível enviar o relato. Verifique sua conexão e tente de novo.",
   "Thank you": "Obrigado",
   "Your report was sent.": "Seu relato foi enviado.",
-  "See it on GitHub": "Ver no GitHub"
+  "See it on GitHub": "Ver no GitHub",
+  "There is no account, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.": "Não há conta, anúncios nem cookies. Seus documentos e PDFs nunca saem deste dispositivo, a menos que você escolha traduzir um online."
 });

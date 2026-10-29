@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-49';
+  const APP_VERSION = '2026.10.29-50';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2342,7 +2342,7 @@
         el('li', {}, _('Version {version}', { version: APP_VERSION }))),
       el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
-        el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
+        el('p', {}, _('There is no account, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
         el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing. A problem report, when you send one (Tools → Report a problem), goes the same way to Noteshack’s GitHub page, where it is public: only what you write, the app’s version, your browser and the app’s language.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Disclaimer')),
         el('p', {}, _('Noteshack is provided as is, without warranty of any kind. Text recognition, translation and font matching can be wrong: check a document before you send, submit or sign it. Keep backups of anything important.')),

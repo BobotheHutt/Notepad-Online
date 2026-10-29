@@ -28,7 +28,7 @@ and lets you edit and sign PDFs.
 - **The app in your language**: English, Spanish, French, German, Portuguese or Italian, chosen in View → App language (or the browser's language, at first). Menus, messages, dates and numbers follow it; each document keeps a language of its own. The translations were written with the help of AI and have not yet been checked by native speakers.
 - **Each document has a language**, shown in the status bar: worked out from its text on your computer, or chosen from 55. It sets spell checking and which way text runs (Arabic, Hebrew, Persian and Urdu run right to left), and saved Word files, web pages and PDFs record it.
 - **Spell checking in the document's language**: English, Spanish, French, German, Portuguese and Italian are checked by Noteshack itself, with the Hunspell dictionaries LibreOffice uses. Misspelled words are underlined; right-click one for corrections, to add it to your dictionary, or to ignore it in that document (Shift + right-click gives the browser's own menu). Other languages use the browser's spell check.
-- **Translation, on your computer** (Tools → Translate…): makes a translated copy of a document; the text is not sent anywhere. Noteshack's own translator is Firefox's translation engine with Mozilla's models, between English, Spanish, French, German, Portuguese and Italian (two of the others go through English); it keeps bold, links and other formatting, and downloads each language's model (about 25 MB) the first time, then keeps it. Where the browser has a translator of its own (Chrome), its languages are offered too, as plain text. Names and terms you list are left as they are, and so are pictures and code. Each paragraph of the copy is highlighted until checked: the panel shows its original, which you can change and translate again. A PDF (or a scan, read first) can be translated keeping its layout: a copy in which each paragraph is replaced where it stands, in its matched font, set a little smaller where the translation runs longer so it stays in its space, with the original left as it was; or into a document of its words, to check paragraph by paragraph and save as Word or text.
+- **Translation, on your computer** (Tools → Translate…): makes a translated copy of a document; with a translator on your computer, the text is not sent anywhere. Noteshack's own translator is Firefox's translation engine with Mozilla's models, between English, Spanish, French, German, Portuguese and Italian (two of the others go through English); it keeps bold, links and other formatting, and downloads each language's model (about 25 MB) the first time, then keeps it. Where the browser has a translator of its own (Chrome), its languages are offered too, as plain text. **Online**, only when you choose it, Noteshack's own translation service on Cloudflare translates between 53 languages (Meta's M2M-100 model, run by Workers AI), as plain text: the text is sent there, translated and sent back, and not kept, so it is not for anything confidential. Names and terms you list are left as they are, and so are pictures and code. Each paragraph of the copy is highlighted until checked: the panel shows its original, which you can change and translate again. A PDF (or a scan, read first) can be translated keeping its layout: a copy in which each paragraph is replaced where it stands, in its matched font, set a little smaller where the translation runs longer so it stays in its space, with the original left as it was; or into a document of its words, to check paragraph by paragraph and save as Word or text.
 - Back up every document to one file and restore it anywhere
 
 **PDFs**
@@ -88,7 +88,7 @@ documents list automatically the first time you open the new version.
 ## Privacy
 
 There is no account, no analytics, no ads and no cookies, and documents are
-never uploaded. Three things are fetched from the internet:
+never uploaded. Three things are fetched from the internet, and one is sent only when you ask:
 
 - **Uncommon font files.** The 31 common fonts the app matches are served
   by Noteshack itself. When a PDF names a font outside them, that font file
@@ -103,6 +103,11 @@ never uploaded. Three things are fetched from the internet:
   and the font for a script (Arabic, Chinese, Hindi and others), the first
   time a PDF needs it. Only the file is downloaded; the text is translated,
   and fonts are cut down to the letters used, on the device.
+
+- **The online translator, only when you choose it** (Translate → Online):
+  the text being translated is sent to Noteshack's translation service on
+  Cloudflare (`api.noteshack.org`), which translates it with Workers AI and
+  sends it back. Nothing is kept or logged.
 
 Everything else, text recognition included, runs on the device.
 
@@ -135,6 +140,7 @@ with their license texts:
 - [Hunspell](https://hunspell.github.io) (as hunspell-wasm), MPL 1.1, with Hunspell dictionaries from [wooorm/dictionaries](https://github.com/wooorm/dictionaries), each under its own license (see `vendor/dictionaries`)
 - [franc](https://github.com/wooorm/franc), MIT License
 - [Bergamot translator](https://github.com/browsermt/bergamot-translator) (Firefox's translation engine), Mozilla Public License 2.0, with [Mozilla's translation models](https://github.com/mozilla/translations), Mozilla Public License 2.0 (served from `files.noteshack.org`, not stored in this repository; `tools/translation-models.py` puts them there)
+- [M2M-100](https://github.com/facebookresearch/fairseq/tree/main/examples/m2m_100) (Meta), MIT License, run by Cloudflare Workers AI for the online translator (`worker/`)
 - [HarfBuzz](https://harfbuzz.github.io) (as harfbuzzjs, with its subsetter), MIT License (Old MIT)
 - [bidi-js](https://github.com/lojjic/bidi-js), MIT License
 - [Noto fonts](https://notofonts.github.io) (Google), SIL Open Font License 1.1 (served from `files.noteshack.org`, not stored in this repository; `tools/noto-fonts.py` puts them there)
@@ -227,8 +233,9 @@ js/spell.js            spell checking (js/spellworker.js runs Hunspell)
 js/translate.js        translation on the device: Noteshack's engine (Bergamot) or the browser's
 js/remote.js           downloads from files.noteshack.org: checked, and kept in the browser
 js/shaping.js          text in other scripts in saved PDFs: Noto fonts, shaped (HarfBuzz), cut down to the letters used
+worker/                the online translator (api.noteshack.org), a Cloudflare Worker; tools/worker.py deploys it
 vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
-tools/                 the upload scripts for the translation models and the Noto fonts; phrases.mjs lists the phrases the code uses
+tools/                 the upload scripts for the translation models and the Noto fonts, the online translator's deploy script; phrases.mjs lists the phrases the code uses
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

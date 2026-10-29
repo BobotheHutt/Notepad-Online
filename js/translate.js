@@ -1,6 +1,6 @@
 /* Noteshack — translation, on this computer.
 
-   Two engines, and with either the text never leaves the computer:
+   Two engines on this computer, with which the text never leaves it:
    - Noteshack's own: Firefox's translation engine (Bergamot, vendor/bergamot)
      with Mozilla's models. A model is downloaded from files.noteshack.org the
      first time a pair of languages is used, checked against its fingerprint,
@@ -9,10 +9,15 @@
      a paragraph (bold, links…).
    - The browser's own, where there is one (Chrome's built-in translator):
      more languages, but plain text, so formatting inside a paragraph is lost.
+   And one online, only when chosen: Noteshack's own service on Cloudflare
+   (worker/index.js, api.noteshack.org), Meta's M2M-100 model by Workers AI,
+   for 53 languages. The text is sent there and translated; nothing is kept.
+   Plain text, like the browser's.
 
    NpTranslate.ours(from, to)          Noteshack's engine can do it
    NpTranslate.browser(from, to)       Promise: 'available' | 'downloadable' | null
    NpTranslate.toDownload(from, to)    Promise: bytes still to download for ours
+   NpTranslate.online(from, to)        the online service can do it
    NpTranslate.open(from, to, engine, onProgress)
                                        Promise<a translator, for translate() below>
    NpTranslate.document(html, t, opts) Promise<{ html, originals }>: each
@@ -169,7 +174,84 @@
     return { markup: false, translate: (text) => t.translate(text), close: () => { try { t.destroy(); } catch (e) { /* gone */ } } };
   }
 
+  /* ----- online: Noteshack's service on Cloudflare ----- */
+
+  const API = 'https://api.noteshack.org/translate';
+  // the app's language codes → the model's; Chinese written the traditional
+  // way can be translated from, not into
+  const M2M = { nb: 'no', 'zh-Hans': 'zh', 'zh-Hant': 'zh' };
+  const M2M_LANGS = new Set(['en', 'es', 'fr', 'de', 'pt', 'it', 'nl', 'pl', 'sv', 'da', 'no', 'fi', 'cs', 'sk', 'hu', 'ro', 'hr', 'sl', 'et', 'lv', 'lt',
+    'el', 'ru', 'uk', 'bg', 'sr', 'tr', 'ar', 'he', 'fa', 'ur', 'hi', 'bn', 'ta', 'te', 'mr', 'gu', 'pa', 'zh', 'ja', 'ko', 'th', 'vi', 'id',
+    'ms', 'tl', 'sw', 'ca', 'gl', 'ga', 'cy', 'is', 'af']);
+  const m2m = (code) => (M2M[code] || code);
+  function online(from, to) {
+    const f = m2m(from), t = m2m(to);
+    return to !== 'zh-Hant' && f !== t && M2M_LANGS.has(f) && M2M_LANGS.has(t);
+  }
+
+  // Pieces of text are gathered into requests (the service takes up to 32
+  // and 12,000 characters at once), two requests at a time.
+  function openOnline(from, to, onProgress) {
+    const f = m2m(from), t = m2m(to);
+    const queue = []; // { text, resolve, reject }
+    let timer = null, running = 0, closed = false;
+    const why = (status, body) => (status === 429 || (body && body.error === 'limit')
+      ? _('The online translator is busy, or has reached today’s limit. Try again later, or choose a translator on this computer.')
+      : _('The online translator could not be reached ({status}).', { status }));
+    async function send(batch) {
+      running++;
+      try {
+        let res;
+        try {
+          res = await fetch(API, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: f, to: t, texts: batch.map((b) => b.text) }), credentials: 'omit', referrerPolicy: 'no-referrer' });
+        } catch (e) { throw new Error(_('The online translator could not be reached. Check your connection.')); }
+        let body = null;
+        try { body = await res.json(); } catch (e) { /* none */ }
+        if (!res.ok || !body || !Array.isArray(body.texts) || body.texts.length !== batch.length) throw new Error(why(res.status, body));
+        batch.forEach((b, i) => b.resolve(body.texts[i]));
+      } catch (e) {
+        for (const b of batch) b.reject(e);
+      } finally {
+        running--;
+        pump();
+      }
+    }
+    function pump() {
+      while (queue.length && running < 2 && !closed) {
+        const batch = [];
+        let size = 0;
+        while (queue.length && batch.length < 32 && size + queue[0].text.length <= 12000) { size += queue[0].text.length; batch.push(queue.shift()); }
+        send(batch);
+      }
+    }
+    // a piece longer than the service takes is sent sentence by sentence
+    async function one(text) {
+      if (text.length > 2000) {
+        const parts = text.match(/[^.!?。！？]+[.!?。！？]*\s*/gu) || [text];
+        const out = [];
+        let cur = '';
+        for (const p of parts) { if (cur && cur.length + p.length > 2000) { out.push(cur); cur = ''; } cur += p; }
+        if (cur) out.push(cur);
+        const done = await Promise.all(out.map((p) => (p.length > 2000 ? Promise.all(p.match(/[\s\S]{1,2000}/g).map(one)).then((x) => x.join('')) : one(p))));
+        return done.join(' ');
+      }
+      return new Promise((resolve, reject) => {
+        if (closed) { reject(new Error(_('The translator stopped.'))); return; }
+        queue.push({ text, resolve, reject });
+        clearTimeout(timer);
+        timer = setTimeout(pump, 20);
+      });
+    }
+    if (onProgress) onProgress(1);
+    return Promise.resolve({
+      markup: false,
+      translate: one,
+      close() { closed = true; for (const b of queue.splice(0)) b.reject(new Error(_('The translator stopped.'))); }
+    });
+  }
+
   function open(from, to, engineName, onProgress) {
+    if (engineName === 'online') return openOnline(from, to, onProgress);
     return engineName === 'browser' ? openBrowser(from, to, onProgress) : openOurs(from, to, onProgress);
   }
 
@@ -321,7 +403,7 @@
 
   window.NpTranslate = {
     ours: (from, to) => !!route(from, to),
-    browser, toDownload, open, unit,
+    browser, online, toDownload, open, unit,
     document: translateDocument,
     // the languages Noteshack's engine translates between
     languages: () => [...new Set(Object.keys(MODELS).flatMap((p) => [p.slice(0, 2), p.slice(2)]))]

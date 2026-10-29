@@ -197,3 +197,55 @@ test('a paragraph that runs longer in translation stays in its own space', async
   expect(lines[4].text).toMatch(/Firmado|Firma/);
   expect(lines.map((l) => l.text).join(' ')).toMatch(/jueves/);
 });
+
+// The online translator: only when chosen, and only the text goes.
+test('online, for more languages, only when chosen', async ({ app: p }) => {
+  const sent = [];
+  await p.route('https://api.noteshack.org/translate', async (route) => {
+    const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST' };
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+    const q = route.request().postDataJSON();
+    sent.push(q);
+    return route.fulfill({ status: 200, headers: Object.assign({ 'content-type': 'application/json' }, cors), body: JSON.stringify({ texts: q.texts.map((t) => 'SV ' + t) }) });
+  });
+  await openHtml(p, 'Note.html', '<p>Good morning to <b>everyone</b>.</p><p>See you at Noteshack.</p>');
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  const dlg = p.locator('dialog[open]');
+  // Swedish: only the online translator has it, and it is not chosen for you
+  await dlg.getByRole('radio', { name: /^Swedish/ }).check();
+  await expect(dlg.locator('input[name="tr-engine"][value="online"]')).not.toBeChecked();
+  await expect(dlg).toContainText('not kept');
+  await dlg.getByLabel('Leave these as they are').fill('Noteshack');
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+  await expect(p.locator('#toast')).toContainText('Choose a translator.');
+  expect(sent).toEqual([]);
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  await dlg.getByRole('radio', { name: /^Swedish/ }).check();
+  await dlg.locator('input[name="tr-engine"][value="online"]').check();
+  await dlg.getByLabel('Leave these as they are').fill('Noteshack');
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+  await expect(p.locator('#doc-title')).toHaveValue(/\(Swedish\)$/, { timeout: 30000 });
+  const ed = p.locator('#editor');
+  await expect(ed.locator('p').first()).toHaveText('SV Good morning to everyone.');
+  await expect(ed.locator('p').nth(1)).toHaveText('SV See you at Noteshack.');
+  // the pieces went together, in one request, without the kept name
+  expect(sent.length).toBe(1);
+  expect(sent[0]).toEqual({ from: 'en', to: 'sv', texts: ['Good morning to everyone.', 'See you at'] });
+});
+
+test('the online translator says when it has reached its limit', async ({ app: p, errors }) => {
+  await p.route('https://api.noteshack.org/translate', (route) => route.fulfill({ status: 429, headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'content-type': 'application/json' }, body: '{"error":"limit"}' }));
+  await openHtml(p, 'Busy.html', '<p>Good morning to everyone.</p>');
+  await p.click('.menu-btn:has-text("Tools")');
+  await p.click('[data-action="translate"]');
+  const dlg = p.locator('dialog[open]');
+  await dlg.getByRole('radio', { name: /^Swedish/ }).check();
+  await dlg.locator('input[name="tr-engine"][value="online"]').check();
+  await dlg.getByRole('button', { name: 'Translate' }).click();
+  await expect(p.locator('#toast')).toContainText('reached today’s limit');
+  await expect(p.locator('.doc-item')).toHaveCount(1);
+  // the refusal this test made
+  errors.splice(0, errors.length, ...errors.filter((e) => !/429/.test(e)));
+});

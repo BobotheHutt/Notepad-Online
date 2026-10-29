@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-46';
+  const APP_VERSION = '2026.10.29-47';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -278,8 +278,8 @@
 
   // A translated copy: a new document, each paragraph marked until it is
   // checked (data-np-tr="n", its original in doc.translation.originals[n]).
-  // Translated on this computer, by Noteshack's engine or the browser's
-  // (js/translate.js).
+  // Translated on this computer, by Noteshack's engine or the browser's, or,
+  // only when chosen, online (js/translate.js).
   const KEEP_WORDS = 'np.translate.keep';
   const keepWords = () => { try { return JSON.parse(localStorage.getItem(KEEP_WORDS) || '[]'); } catch (e) { return []; } };
   const mb = (n) => (n < 1e6 ? '<1' : Math.round(n / 1e6).toLocaleString(LOC)) + ' MB';
@@ -310,10 +310,12 @@
     const none = el('p', { class: 'dlg-text', hidden: true }, _('Noteshack translates between {languages}. This browser has no translator of its own for this language.', { languages: new Intl.ListFormat(LOC, { type: 'conjunction' }).format(NpTranslate.languages().map((c) => NpLang.name(c, true))) }));
     const ours = el('input', { type: 'radio', name: 'tr-engine', value: 'ours' });
     const theirs = el('input', { type: 'radio', name: 'tr-engine', value: 'browser' });
+    const web = el('input', { type: 'radio', name: 'tr-engine', value: 'online' });
     const oursNote = el('span', { class: 'engine-note' });
     const engines = el('div', { class: 'engines', role: 'radiogroup', 'aria-label': _('Translator') },
       el('label', { class: 'engine' }, ours, el('span', {}, el('strong', {}, _('Noteshack’s translator')), el('span', { class: 'engine-note' }, _('Firefox’s translation engine. Keeps bold, links and other formatting.')), oursNote)),
-      el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, _('This browser’s translator')), el('span', { class: 'engine-note' }, _('Formatting inside a paragraph (bold, links) is not kept.')))));
+      el('label', { class: 'engine' }, theirs, el('span', {}, el('strong', {}, _('This browser’s translator')), el('span', { class: 'engine-note' }, _('Formatting inside a paragraph (bold, links) is not kept.')))),
+      el('label', { class: 'engine' }, web, el('span', {}, el('strong', {}, _('Online')), el('span', { class: 'engine-note' }, _('More languages. The text is sent to Noteshack’s translation service on Cloudflare (Workers AI), translated there and sent back; it is not kept. Not for anything confidential. Formatting inside a paragraph is not kept.')))));
     // a PDF: translated where its text stands, or its words as a document
     const isPdf = src.type === 'pdf';
     const asLayout = el('input', { type: 'radio', name: 'tr-kind', value: 'layout', checked: true });
@@ -325,14 +327,14 @@
     keep.value = keepWords().join('\n');
 
     // the language last translated into stays chosen, once it turns out possible
-    const can = (code) => code !== from && (NpTranslate.ours(from, code) || !!browserCan.get(code));
+    const can = (code) => code !== from && (NpTranslate.ours(from, code) || !!browserCan.get(code) || NpTranslate.online(from, code));
     function paintList() {
       const q = search.value.trim().toLowerCase();
       let any = false;
       for (const r of rows) {
-        const o = NpTranslate.ours(from, r.code), b = browserCan.get(r.code);
+        const o = NpTranslate.ours(from, r.code), b = browserCan.get(r.code), w = NpTranslate.online(from, r.code);
         r.row.hidden = !can(r.code) || (!!q && !r.row.dataset.find.includes(q));
-        r.tags.textContent = [o ? 'Noteshack' : null, b ? _('Browser') : null].filter(Boolean).join(' · ');
+        r.tags.textContent = [o ? 'Noteshack' : null, b ? _('Browser') : null, w ? _('Online') : null].filter(Boolean).join(' · ');
         if (can(r.code)) any = true;
       }
       to = want && can(want) ? want : null;
@@ -342,12 +344,16 @@
       paintEngines();
     }
     async function paintEngines() {
-      const o = !!to && NpTranslate.ours(from, to), b = !!to && !!browserCan.get(to);
+      const o = !!to && NpTranslate.ours(from, to), b = !!to && !!browserCan.get(to), w = !!to && NpTranslate.online(from, to);
       ours.disabled = !o;
       theirs.disabled = !b;
-      ours.closest('.engine').hidden = !o && b;
+      web.disabled = !w;
+      ours.closest('.engine').hidden = !o && (b || w);
       theirs.closest('.engine').hidden = !b;
-      if (!ours.checked && !theirs.checked || ours.checked && !o || theirs.checked && !b) { ours.checked = o; theirs.checked = !o && b; }
+      web.closest('.engine').hidden = !w;
+      // online only when picked: never chosen for you
+      if (web.checked && !w) web.checked = false;
+      if (!web.checked && (!ours.checked && !theirs.checked || ours.checked && !o || theirs.checked && !b)) { ours.checked = o; theirs.checked = !o && b; }
       engines.hidden = !to;
       oursNote.textContent = '';
       if (o) {
@@ -358,7 +364,7 @@
     async function checkBrowser() {
       browserCan.clear();
       const f = from;
-      if (_('Translator') in window) {
+      if ('Translator' in window) {
         await Promise.all(NpLang.list.map(async (l) => { const a = await NpTranslate.browser(f, l.code); if (f === from) browserCan.set(l.code, a); }));
       }
       if (f === from) paintList();
@@ -372,7 +378,7 @@
       title: _('Translate'),
       wide: true,
       body: el('div', { class: 'stack' },
-        el('p', { class: 'dlg-text' }, _('Makes a translated copy, on this computer: the text is not sent anywhere. You can then check it paragraph by paragraph against the original.')),
+        el('p', { class: 'dlg-text' }, _('Makes a translated copy. With a translator on this computer, the text is not sent anywhere. You can then check it paragraph by paragraph against the original.')),
         el('label', { class: 'field' }, el('span', {}, _('From')), fromSel),
         el('div', { class: 'field' }, el('span', {}, _('Into')), search, list, none),
         engines,
@@ -383,14 +389,15 @@
       onOpen: () => { const r = list.querySelector('input:checked'); if (r) r.closest('label').scrollIntoView({ block: 'center' }); }
     });
     if (v !== 'go') return;
-    if (!to || (!ours.checked && !theirs.checked)) { toast(_('Choose a language to translate into.')); return; }
+    if (!to) { toast(_('Choose a language to translate into.')); return; }
+    if (!ours.checked && !theirs.checked && !web.checked) { toast(_('Choose a translator.')); return; }
     const words = keep.value.split('\n').map((s) => s.trim()).filter(Boolean);
     try { localStorage.setItem(KEEP_WORDS, JSON.stringify(words)); localStorage.setItem('np.translate.to', to); } catch (e) { /* this time only */ }
     if (isPdf && current === src) {
       // scans are read in the language translated from
       if (src.lang !== from) { src.lang = from; src.langAuto = false; await NpStore.putDoc(src); applyDocLang(); }
     }
-    await translateDoc(src, from, to, theirs.checked ? 'browser' : 'ours', words, isPdf && asLayout.checked ? 'layout' : 'doc');
+    await translateDoc(src, from, to, web.checked ? 'online' : theirs.checked ? 'browser' : 'ours', words, isPdf && asLayout.checked ? 'layout' : 'doc');
   }
 
   // A dialog showing how far a long job has got, with Cancel.
@@ -429,7 +436,7 @@
     let t = null;
     let copy = null;
     try {
-      t = await NpTranslate.open(from, to, engine, (p) => pr.set(engine === 'browser' ? _('Getting the browser’s translator ready… {percent}', { percent: pct(p) }) : _('Downloading the translation model… {percent}', { percent: pct(p) }), p));
+      t = await NpTranslate.open(from, to, engine, (p) => (engine === 'online' ? null : pr.set(engine === 'browser' ? _('Getting the browser’s translator ready… {percent}', { percent: pct(p) }) : _('Downloading the translation model… {percent}', { percent: pct(p) }), p)));
       pr.set(_('Translating…'), 0);
       const readNote = (d, n) => pr.set(_('Reading the scanned pages first… {done} of {total}', { done: d, total: n }), n ? d / n : 0);
       if (kind === 'layout') {
@@ -2231,7 +2238,7 @@
         feature(_('Write'), _('A full word processor. Open and save Word documents, Markdown, web pages and plain text.')),
         feature(_('Edit any PDF'), _('Change its text in the original font, fill in forms, sign, highlight, add notes and pages.')),
         feature(_('Scans become editable'), _('Open a scanned PDF or a photo of a page, click it, and its words become real text you can change, set in letters taken from the scan itself.')),
-        feature(_('Private'), _('Everything happens on your computer. Nothing you open or write is uploaded, and it works offline.'))),
+        feature(_('Private'), _('Everything happens on your computer. Nothing you open or write is uploaded (unless you choose to translate it online), and it works offline.'))),
       el('label', { class: 'welcome-hide' }, check, el('span', {}, _('Don’t show this again'))));
     await dialog({ title: _('Welcome to Noteshack'), body, actions: [{ label: _('Get started'), value: 'ok', primary: true }] });
     try { if (check.checked) localStorage.setItem(WELCOME_KEY, 'hidden'); } catch (e) { /* ignore */ }
@@ -2276,8 +2283,8 @@
         el('li', {}, _('Version {version}', { version: APP_VERSION }))),
       el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
-        el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.')),
-        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device.'))),
+        el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
+        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Disclaimer')),
         el('p', {}, _('Noteshack is provided as is, without warranty of any kind. Text recognition, translation and font matching can be wrong: check a document before you send, submit or sign it. Keep backups of anything important.')),
         el('p', {}, _('You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.'))),

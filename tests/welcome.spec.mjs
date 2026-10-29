@@ -5,7 +5,7 @@ test.use({ welcome: true });
 test('the welcome shows each visit until "Don’t show this again" is ticked', async ({ app: p }) => {
   const box = p.locator('dialog[open]');
   await expect(box).toContainText('Welcome to Noteshack');
-  await expect(box).toContainText('Scans become editable');
+  await expect(box).toContainText('Edit scans');
   await box.getByRole('button', { name: 'Get started' }).click();
   await p.reload(); await p.waitForSelector('body.ready');
   await expect(box).toContainText('Welcome to Noteshack');

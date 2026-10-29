@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-50';
+  const APP_VERSION = '2026.10.29-51';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2234,12 +2234,13 @@
     const feature = (title, text) => el('li', {}, el('strong', {}, title), el('span', {}, text));
     const check = el('input', { type: 'checkbox', id: 'welcome-hide' });
     const body = el('div', { class: 'welcome' },
-      el('p', { class: 'dlg-text' }, _('A free word processor and PDF editor that works right in your browser.')),
+      el('p', { class: 'dlg-text' }, _('A word processor and PDF editor that runs right in your browser. Free, no account, nothing to install.')),
       el('ul', { class: 'welcome-list' },
-        feature(_('Write'), _('A full word processor. Open and save Word documents, Markdown, web pages and plain text.')),
-        feature(_('Edit any PDF'), _('Change its text in the original font, fill in forms, sign, highlight, add notes and pages.')),
-        feature(_('Scans become editable'), _('Open a scanned PDF or a photo of a page, click it, and its words become real text you can change, set in letters taken from the scan itself.')),
-        feature(_('Private'), _('Everything happens on your computer. Nothing you open or write is uploaded (unless you choose to translate it online), and it works offline.'))),
+        feature(_('Write anything'), _('Letters, notes, reports. It opens and saves Word files too.')),
+        feature(_('Fix any PDF'), _('Click on the text and change it, and it stays in the original font. Fill in forms, sign, and add text, drawings or pages.')),
+        feature(_('Edit scans'), _('Open a scanned page or a photo of one, and its words become text you can change, in letters that match the page.')),
+        feature(_('Translate'), _('Turn a document or PDF into another language, layout and all.')),
+        feature(_('Keep it to yourself'), _('Your documents stay on your computer, and it works offline.'))),
       el('label', { class: 'welcome-hide' }, check, el('span', {}, _('Don’t show this again'))));
     await dialog({ title: _('Welcome to Noteshack'), body, actions: [{ label: _('Get started'), value: 'ok', primary: true }] });
     try { if (check.checked) localStorage.setItem(WELCOME_KEY, 'hidden'); } catch (e) { /* ignore */ }

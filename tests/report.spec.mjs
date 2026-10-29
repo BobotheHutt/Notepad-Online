@@ -2,6 +2,10 @@
 // GitHub; the text is kept if it could not be sent.
 import { test, expect } from './helpers.mjs';
 
+// In the test tool's WebKit, requests from a page the offline cache controls
+// skip the stand-in for the service below, so the cache is left out.
+test.use({ serviceWorkers: 'block' });
+
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'access-control-allow-methods': 'POST' };
 
 test('a problem report is sent with the version, browser and language, and nothing else', async ({ app: p, errors }) => {

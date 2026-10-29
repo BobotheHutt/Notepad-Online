@@ -60,3 +60,31 @@ test('adding another PDF, duplicating, deleting', async ({ app: p }) => {
   await p.locator('dialog[open]').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect.poll(async () => (await dbState(p)).sources).toEqual([2]);
 });
+
+test('Storage shows the downloaded models and fonts, and removes them, keeping documents', async ({ app: p }) => {
+  // a model and two fonts, as the app keeps them, and a cache that is not a download
+  await p.evaluate(async () => {
+    const put = async (cache, url, bytes) => (await caches.open(cache)).put(url, new Response(new Uint8Array(bytes)));
+    await put('np-translate-v1', 'https://files.noteshack.org/models/x.gz', 2 * 1048576);
+    await put('np-fonts-noto-v1', 'https://files.noteshack.org/fonts/y.gz', 1048576);
+    await put('np-fonts-v1', 'https://cdn.jsdelivr.net/z.woff2', 524288);
+    await put('np-other', 'https://example.com/keep', 10);
+  });
+  const docs = await p.locator('.doc-item').count();
+  const open = async () => {
+    await p.locator('.menu', { has: p.locator('[data-action="storage"]') }).locator('.menu-btn').click();
+    await p.click('.menu.open [data-action="storage"]');
+  };
+  await open();
+  const line = p.locator('dialog[open] .downloads');
+  await expect(line).toContainText('Downloaded translation models and fonts: 3.5 MB');
+  await line.getByRole('button', { name: 'Remove' }).click();
+  await expect(line).toHaveText('No translation models or fonts are downloaded.');
+  expect(await p.evaluate(async () => (await caches.keys()).filter((k) => k.startsWith('np-')))).toEqual(['np-other']);
+  await p.keyboard.press('Escape');
+  expect(await p.locator('.doc-item').count()).toBe(docs);
+  // and About is its own window now
+  await p.locator('.menu', { has: p.locator('[data-action="about"]') }).locator('.menu-btn').click();
+  await p.click('.menu.open [data-action="about"]');
+  await expect(p.locator('dialog[open] h2')).toHaveText('About Noteshack');
+});

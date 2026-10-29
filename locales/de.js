@@ -102,7 +102,8 @@ NpI18n.add({
   "Spell check": "Rechtschreibprüfung",
   "Markdown shortcuts": "Markdown-Kürzel",
   "Keyboard shortcuts": "Tastenkürzel",
-  "About and storage": "Info und Speicher",
+  "Storage…": "Speicher…",
+  "About Noteshack": "Über Noteshack",
   "Switch light or dark": "Zwischen hell und dunkel wechseln",
   "Focus mode (Ctrl+Shift+F)": "Fokusmodus (Strg+Umschalt+F)",
   "Toolbars": "Symbolleisten",
@@ -635,5 +636,11 @@ NpI18n.add({
   "Open a scanned page or a photo of one, and its words become text you can change, in letters that match the page.": "Öffnen Sie eine gescannte Seite oder ein Foto davon, und ihre Wörter werden zu Text, den Sie ändern können, in Buchstaben, die zur Seite passen.",
   "Turn a document or PDF into another language, layout and all.": "Bringen Sie ein Dokument oder eine PDF in eine andere Sprache, samt Layout.",
   "Keep it to yourself": "Bleibt bei Ihnen",
-  "Your documents stay on your computer, and it works offline.": "Ihre Dokumente bleiben auf Ihrem Computer, und alles funktioniert auch offline."
+  "Your documents stay on your computer, and it works offline.": "Ihre Dokumente bleiben auf Ihrem Computer, und alles funktioniert auch offline.",
+  "Storage": "Speicher",
+  "Downloaded translation models and fonts: {size} MB": "Heruntergeladene Übersetzungsmodelle und Schriften: {size} MB",
+  "No translation models or fonts are downloaded.": "Keine Übersetzungsmodelle oder Schriften heruntergeladen.",
+  "Remove": "Entfernen",
+  "Removed. They download again when needed.": "Entfernt. Sie werden bei Bedarf wieder heruntergeladen.",
+  "Your documents are kept. Translation models and fonts download again the first time they are needed.": "Ihre Dokumente bleiben erhalten. Übersetzungsmodelle und Schriften werden beim nächsten Bedarf wieder heruntergeladen."
 });

@@ -102,7 +102,8 @@ NpI18n.add({
   "Spell check": "Verificação ortográfica",
   "Markdown shortcuts": "Atalhos do Markdown",
   "Keyboard shortcuts": "Atalhos de teclado",
-  "About and storage": "Sobre e armazenamento",
+  "Storage…": "Armazenamento…",
+  "About Noteshack": "Sobre o Noteshack",
   "Switch light or dark": "Alternar entre claro e escuro",
   "Focus mode (Ctrl+Shift+F)": "Modo foco (Ctrl+Shift+F)",
   "Toolbars": "Barras de ferramentas",
@@ -635,5 +636,11 @@ NpI18n.add({
   "Open a scanned page or a photo of one, and its words become text you can change, in letters that match the page.": "Abra uma página digitalizada ou uma foto dela, e as palavras viram texto que você pode mudar, com letras iguais às da página.",
   "Turn a document or PDF into another language, layout and all.": "Passe um documento ou PDF para outro idioma, com layout e tudo.",
   "Keep it to yourself": "Só seu",
-  "Your documents stay on your computer, and it works offline.": "Seus documentos ficam no seu computador, e tudo funciona offline."
+  "Your documents stay on your computer, and it works offline.": "Seus documentos ficam no seu computador, e tudo funciona offline.",
+  "Storage": "Armazenamento",
+  "Downloaded translation models and fonts: {size} MB": "Modelos de tradução e fontes baixados: {size} MB",
+  "No translation models or fonts are downloaded.": "Nenhum modelo de tradução ou fonte foi baixado.",
+  "Remove": "Remover",
+  "Removed. They download again when needed.": "Removidos. Serão baixados de novo quando forem necessários.",
+  "Your documents are kept. Translation models and fonts download again the first time they are needed.": "Seus documentos continuam aqui. Os modelos de tradução e as fontes são baixados de novo na primeira vez que forem necessários."
 });

@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.29-52';
+  const APP_VERSION = '2026.10.29-53';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1866,6 +1866,7 @@
     shortcuts: shortcutsDialog,
     report: () => reportDialog(),
     about: aboutDialog,
+    storage: storageDialog,
     'find-next': () => findStep(1),
     'find-prev': () => findStep(-1),
     'find-close': () => closeFind(true),
@@ -2325,24 +2326,69 @@
     });
   }
 
-  async function aboutDialog() {
-    let usage = '';
-    try {
-      if (navigator.storage && navigator.storage.estimate) {
-        const e = await navigator.storage.estimate();
-        usage = _('{size} MB used', { size: (e.usage / 1048576).toLocaleString(LOC, { maximumFractionDigits: 1, minimumFractionDigits: 1 }) });
+  // the downloaded files kept in the browser (Cache Storage): translation
+  // models, the Noto fonts for other scripts, and fonts PDFs name; each is
+  // downloaded again when it is next needed
+  const DOWNLOADS = ['np-translate-v1', 'np-fonts-noto-v1', 'np-fonts-v1'];
+  async function downloadsSize() {
+    let n = 0;
+    if (typeof caches === 'undefined') return n;
+    for (const name of DOWNLOADS) {
+      if (!(await caches.has(name))) continue;
+      const cache = await caches.open(name);
+      for (const req of await cache.keys()) {
+        const res = await cache.match(req);
+        if (res) n += (await res.blob()).size;
       }
-    } catch (e) { /* not available */ }
+    }
+    return n;
+  }
+  const mbOf = (bytes) => (bytes / 1048576).toLocaleString(LOC, { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+
+  async function storageDialog() {
+    const usedLine = el('li', {});
+    const showUsage = async () => {
+      let usage = '';
+      try {
+        if (navigator.storage && navigator.storage.estimate) usage = _('{size} MB used', { size: mbOf((await navigator.storage.estimate()).usage) });
+      } catch (e) { /* not available */ }
+      usedLine.textContent = _n(docs.length, '{n} document', '{n} documents') + (usage ? ' · ' + usage : '');
+    };
+    await showUsage();
     let persisted = false;
     try { persisted = navigator.storage && navigator.storage.persisted ? await navigator.storage.persisted() : false; } catch (e) { /* not available */ }
+    let downloaded = 0;
+    try { downloaded = await downloadsSize(); } catch (e) { /* not available */ }
+    const downloadsLine = el('li', { class: 'downloads' });
+    const showDownloads = () => {
+      downloadsLine.replaceChildren(downloaded ? _('Downloaded translation models and fonts: {size} MB', { size: mbOf(downloaded) }) : _('No translation models or fonts are downloaded.'));
+      if (downloaded) {
+        downloadsLine.append(' ', el('button', { class: 'btn btn-sm', type: 'button', onclick: async () => {
+          for (const name of DOWNLOADS) { try { await caches.delete(name); } catch (e) { /* already gone */ } }
+          downloaded = 0;
+          showDownloads();
+          await showUsage();
+          toast(_('Removed. They download again when needed.'));
+        } }, _('Remove')));
+      }
+    };
+    showDownloads();
+    const body = el('div', { class: 'stack about' },
+      el('ul', { class: 'facts' },
+        usedLine,
+        el('li', {}, NpStore.persistent ? (persisted ? _('Storage is marked persistent: the browser will not clear it to free space.') : _('Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.')) : _('This browser is not allowing storage (private window?). Work is kept only until you close the tab.')),
+        downloadsLine),
+      el('p', { class: 'muted' }, _('Your documents are kept. Translation models and fonts download again the first time they are needed.')),
+      el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')));
+    dialog({ title: _('Storage'), body });
+  }
+
+  async function aboutDialog() {
     const body = el('div', { class: 'stack about' },
       el('p', {}, _('Noteshack is a word processor and PDF editor that runs entirely in your browser. Your documents are stored on this device, in this browser, and are never uploaded.')),
       el('ul', { class: 'facts' },
-        el('li', {}, _n(docs.length, '{n} document', '{n} documents') + (usage ? ' · ' + usage : '')),
-        el('li', {}, NpStore.persistent ? (persisted ? _('Storage is marked persistent: the browser will not clear it to free space.') : _('Storage is “best effort”: a browser short on disk space may clear it. Back up anything important.')) : _('This browser is not allowing storage (private window?). Work is kept only until you close the tab.')),
         el('li', {}, _('Works offline once loaded, and can be installed as an app from your browser’s menu.')),
         el('li', {}, _('Version {version}', { version: APP_VERSION }))),
-      el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
         el('p', {}, _('There is no account, no ads and no cookies. Your documents and PDFs never leave this device, unless you choose to translate one online.')),
         el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device. The online translator, only when you choose it in Translate, sends the text to Noteshack’s translation service on Cloudflare (api.noteshack.org), which translates it with Workers AI and sends it back, keeping nothing. A problem report, when you send one (Tools → Report a problem), goes the same way to Noteshack’s GitHub page, where it is public: only what you write, the app’s version, your browser and the app’s language.'))),
@@ -2366,7 +2412,7 @@
         el('p', {}, _('Noteshack’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Trademarks')),
         el('p', {}, _('Adobe, Acrobat and ClearScan are trademarks of Adobe. Microsoft, Word and Calibri are trademarks of Microsoft. Arial and Times New Roman are trademarks of The Monotype Corporation. They are named only to describe compatibility; Noteshack is not affiliated with or endorsed by them.'))));
-    dialog({ title: _('About and storage'), body });
+    dialog({ title: _('About Noteshack'), body });
   }
 
   async function editAlt(img) {

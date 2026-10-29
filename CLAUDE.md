@@ -73,14 +73,12 @@ translator, reports) stand it in with `page.route`, and need
 
 ## Open work
 
-1. Proposed, **not approved**: an About-and-storage line to remove downloaded
-   models and fonts.
-2. Later, only if asked: translation with your own key (DeepL, Google…); a
+1. Later, only if asked: translation with your own key (DeepL, Google…); a
    Buy Me a Coffee link.
-3. Flaky tests: `editor.spec` once found 4 documents instead of 3 (not
+2. Flaky tests: `editor.spec` once found 4 documents instead of 3 (not
    reproduced in 30 runs; it now prints the names if it happens again);
    reading a scan in WebKit once found no text.
-4. The app's translations have not been checked by native speakers, and
+3. The app's translations have not been checked by native speakers, and
    none are available.
 
 ## Keeping this file current

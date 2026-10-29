@@ -34,8 +34,9 @@
   const measureCtx = document.createElement('canvas').getContext('2d');
   // CSS font-family for an item: the matched font when it has one, with the
   // closest standard family behind it while that font is still loading.
+  // (with Noto behind it for scripts the font lacks: js/shaping.js)
   function familyCss(it) {
-    return (it.font ? '"' + NpFonts.cssFamily(it.font) + '", ' : '') + CSS_FAMILY[it.family || 'sans'];
+    return (it.font ? '"' + NpFonts.cssFamily(it.font) + '", ' : '') + NpShape.css(S.rec && S.rec.lang) + ', ' + CSS_FAMILY[it.family || 'sans'];
   }
   function fontCss(it, sizePx) {
     const w = it.font ? it.font.weight : it.bold ? 700 : 400;
@@ -628,6 +629,19 @@
 
   function px(v) { return v * S.scale + 'px'; }
 
+  // Text in a script the page's fonts lack is shown in the Noto font it
+  // will be saved in (js/shaping.js), fetched the first time; the page is
+  // drawn again once it has come.
+  function showScripts(info, mine) {
+    const rec = S.rec;
+    for (const it of mine) {
+      if (it.type !== 'text' || !it.text || !/[^\u0000-\u00ff]/.test(it.text)) continue;
+      NpShape.prepare(it.text, { family: it.family, bold: it.bold, italic: it.italic, lang: rec.lang || '' })
+        .then((added) => { if (added && S.rec === rec && !S.editing) renderOverlay(info); })
+        .catch(() => { /* shown in the browser's own fonts */ });
+    }
+  }
+
   function renderOverlay(info) {
     if (S.editing && itemById(S.editing) && itemById(S.editing).page === info.entry.uid) return;
     const layer = info.layer;
@@ -635,6 +649,7 @@
     layer.replaceChildren();
     info.seq = (info.seq || 0) + 1;
     const mine = S.rec.items.filter((i) => i.page === info.entry.uid);
+    showScripts(info, mine);
     // patches over replaced text go underneath everything else
     const coverDiv = (c, color, id) => el('div', { class: 'pdf-cover', 'data-id': id || null, style: 'left:' + px(c.x) + ';top:' + px(c.y) + ';width:' + px(c.w) + ';height:' + px(c.h) + ';background:' + color });
     for (const it of mine) {
@@ -5014,6 +5029,17 @@
       if (!fonts[n]) fonts[n] = await base.embedFont(L.StandardFonts[n]);
       return fonts[n];
     };
+    // the fonts a character can be written in as it is: the matched font, or
+    // the standard one; anything else is shaped and written in Noto
+    const can = (f, ch) => { try { f.encodeText(ch); return true; } catch (e) { return false; } };
+    const simpleFor = async (it) => {
+      const matched = await fontFor(it);
+      const std = it.font ? await fontFor(Object.assign({}, it, { font: null })) : matched;
+      const charset = it.font && matched && matched.getCharacterSet ? new Set(matched.getCharacterSet()) : null;
+      return (ch) => (charset && charset.has(ch.codePointAt(0)) ? matched : can(std, ch) ? std : null);
+    };
+    const shaper = NpShape.writer(base, L);
+    let shapeFailed = null;
     const images = new Map();
     const cffFonts = [];
     let replaced = 0;
@@ -5094,6 +5120,19 @@
         erased += res.n;
         if (regions.length && !res.n) coveredNothing++;
       }
+      // A line with letters the PDF's fonts lack: shaped, in Noto. False
+      // when it needs none, or the fonts could not be had (then "?").
+      const shaped = async (text, it, o) => {
+        const simple = await simpleFor(it);
+        if (!NpShape.needs(text, simple)) return false;
+        try {
+          await shaper.draw(page, text, Object.assign({
+            R, size: it.size, color: hexRgb(it.color), family: it.family, bold: it.bold, italic: it.italic, lang: rec.lang || '', simple,
+            toPdf: (dx, dy) => toPdf(R, box, dx, dy)
+          }, o));
+          return true;
+        } catch (e) { shapeFailed = e; return false; }
+      };
       // Keep the page's own drawing state from leaking into ours.
       page.node.normalize();
       const ctx = base.context;
@@ -5141,6 +5180,7 @@
         const charset = it.font && matched && matched.getCharacterSet ? new Set(matched.getCharacterSet()) : null;
         for (let k = 0; k < lay.runs.length; k++) {
           const r = lay.runs[k];
+          if (await shaped(r.text, it, { x: r.x, base: r.base, scaleX: r.scaleX, invisible: painted.has(it.id + ':' + k) })) { if (r.overflow) overflowed++; continue; }
           const font = charset && [...r.text].some((ch) => !charset.has(ch.codePointAt(0)) && ch !== ' ')
             ? await fontFor(Object.assign({}, it, { font: null })) : matched;
           let safe = '';
@@ -5167,6 +5207,7 @@
         if (!erasedHere) for (const b of convRects(it).rects) { page.drawRectangle(Object.assign(rectToPdf(R, box, b.x, b.y, b.w, b.h), { color: hexRgb(it.bg) })); }
         let over = false;
         for (const r of convLayout(it)) {
+          if (!it.smallCaps && await shaped(r.text, Object.assign({}, r.st, { size: it.size, color: it.color }), { x: r.x, base: r.base, scaleX: r.scaleX })) { over = over || r.overflow; continue; }
           const matched = await fontFor(r.st);
           const charset = r.st.font && matched && matched.getCharacterSet ? new Set(matched.getCharacterSet()) : null;
           const font = charset && [...r.text].some((ch) => !charset.has(ch.codePointAt(0)))
@@ -5209,18 +5250,22 @@
         } else if (it.type === 'text' && it.text && !it.anchored && !it.conv) {
           const font = await fontFor(it);
           const lines = it.text.replace(/\t/g, '    ').split('\n');
-          lines.forEach((line, i) => {
+          for (const [i, line] of lines.entries()) {
+            const lineBase = it.y + BASELINE[it.family || 'sans'] * it.size + i * LINE * it.size;
+            if (await shaped(line, it, { x: it.x, base: lineBase })) continue;
             let safe = '';
             for (const ch of line) {
               try { font.encodeText(ch); safe += ch; } catch (e) { safe += '?'; replaced++; }
             }
-            if (!safe) return;
-            const [x, y] = toPdf(R, box, it.x, it.y + BASELINE[it.family || 'sans'] * it.size + i * LINE * it.size);
+            if (!safe) continue;
+            const [x, y] = toPdf(R, box, it.x, lineBase);
             page.drawText(safe, { x, y, size: it.size, font, color: hexRgb(it.color), rotate: L.degrees(R) });
-          });
+          }
         }
       }
     }
+    // the Noto fonts, cut down to the letters used
+    try { await shaper.finish(); } catch (e) { shapeFailed = e; }
     // pdf-lib files every font it embeds whole as TrueType; those made from
     // the scan's letters are CFF fonts, so their entries are put right
     if (cffFonts.length) {
@@ -5243,10 +5288,16 @@
       }
     }
     const bytes = await base.save({ updateFieldAppearances: false });
-    if (replaced) api.toast(_n(replaced, '{n} character could not be written with the PDF’s standard fonts and became “?”.', '{n} characters could not be written with the PDF’s standard fonts and became “?”.'), 6000);
-    if (overflowed) api.toast(_('Some edited text is longer than the space it had, so it runs past the end of its line. Shorten it if it overlaps something.'), 7000);
-    if (coveredNothing) api.toast(_('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.'), 7000);
-    if (warnings.length) api.toast(_('Some form fields could not be filled: {fields}', { fields: warnings.slice(0, 3).join(', ') }), 6000);
+    // what the saved file could not carry as it was, said now and kept for
+    // the save to say again after its own message (warnings())
+    const said = [];
+    if (shapeFailed) said.push(_('Some text needs a font that could not be downloaded, so it became “?”. Check your connection and save again.'));
+    else if (replaced) said.push(_n(replaced, '{n} character could not be written with the PDF’s standard fonts and became “?”.', '{n} characters could not be written with the PDF’s standard fonts and became “?”.'));
+    if (overflowed) said.push(_('Some edited text is longer than the space it had, so it runs past the end of its line. Shorten it if it overlaps something.'));
+    if (coveredNothing) said.push(_('Some covered areas had nothing underneath to remove except drawings. Those are hidden, but still inside the file.'));
+    if (warnings.length) said.push(_('Some form fields could not be filled: {fields}', { fields: warnings.slice(0, 3).join(', ') }));
+    S.warnings = said;
+    if (said.length) api.toast(said.join(' '), 8000);
 
     return new Blob([bytes], { type: 'application/pdf' });
   }
@@ -5333,14 +5384,15 @@
   // last line takes the rest and is narrowed as an edited line is.
   // lines: [{ room, width(text, k) }] → { k, texts }
   function fitLines(lines, words) {
+    const join = (a, b) => joinWords(words.slice(a, b));
     for (const k of [1, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7, 0.65, 0.6]) {
       const texts = [];
       let pos = 0;
       for (const l of lines) {
         let n = 0;
-        while (pos + n < words.length && (n === 0 || l.width(words.slice(pos, pos + n + 1).join(' '), k) <= l.room)) n++;
-        if (n && l.width(words.slice(pos, pos + n).join(' '), k) > l.room && k > 0.6) break; // one word too long for its line
-        texts.push(words.slice(pos, pos + n).join(' '));
+        while (pos + n < words.length && (n === 0 || l.width(join(pos, pos + n + 1), k) <= l.room)) n++;
+        if (n && l.width(join(pos, pos + n), k) > l.room && k > 0.6) break; // one word too long for its line
+        texts.push(join(pos, pos + n));
         pos += n;
       }
       if (pos >= words.length && texts.length === lines.length) return { k, texts };
@@ -5350,13 +5402,30 @@
     lines.forEach((l, i) => {
       let n = 0;
       if (i === lines.length - 1) n = words.length - pos;
-      else while (pos + n < words.length && (n === 0 || l.width(words.slice(pos, pos + n + 1).join(' '), 0.6) <= l.room)) n++;
-      texts.push(words.slice(pos, pos + n).join(' '));
+      else while (pos + n < words.length && (n === 0 || l.width(join(pos, pos + n + 1), 0.6) <= l.room)) n++;
+      texts.push(join(pos, pos + n));
       pos += n;
     });
     return { k: 0.6, texts };
   }
-  const splitWords = (s) => String(s || '').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  // The places a line may break. Chinese and Japanese put no spaces between
+  // words: there the browser's word boundaries are used, punctuation kept
+  // with the word before it (a line never starts with 。or、). Each piece
+  // keeps the space after it, if it had one.
+  const NO_SPACES = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}]/u;
+  function splitWords(s) {
+    const text = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!NO_SPACES.test(text) || typeof Intl.Segmenter !== 'function') return text.split(' ').filter(Boolean).map((w) => w + ' ');
+    const out = [];
+    for (const seg of new Intl.Segmenter((S.rec && S.rec.lang) || undefined, { granularity: 'word' }).segment(text)) {
+      const t = seg.segment;
+      if (/^\s+$/.test(t)) { if (out.length) out[out.length - 1] += ' '; continue; }
+      if (!seg.isWordLike && out.length && !/\s$/.test(out[out.length - 1])) out[out.length - 1] += t;
+      else out.push(t);
+    }
+    return out;
+  }
+  const joinWords = (ws) => ws.join('').trim();
 
   // A page made editable from a scan: its paragraphs (or single lines).
   function convUnits(uidv) {
@@ -5423,7 +5492,7 @@
         if (group.length >= 2 ? Math.abs(b.x0 - group[1].x0) > cur.size * 0.8 : b.x0 > cur.x0 + cur.size * 0.8 || b.x0 < cur.x0 - cur.size * 4) break;
         // the line before was full: the next one's first word would not have fitted on it
         const right = Math.max(b.x1, ...group.map((q) => q.x1));
-        const first = splitWords(b.ts[0].str)[0] || '';
+        const first = (splitWords(b.ts[0].str)[0] || '').trim();
         if (cur.x1 + textWidth(' ' + first, { family: b.ts[0].family, size: b.size }) < right - cur.size * 0.1) break;
         group.push(b);
         taken.add(b);
@@ -5601,6 +5670,8 @@
     copyText: copyPageText,
     addPages: () => $('#pdf-add-input').click(),
     get active() { return !!S.rec; },
+    // what the last saved PDF could not carry as it was (then cleared)
+    warnings: () => { const w = S.warnings || []; S.warnings = []; return w; },
     finishEditing,
     // every scanned page read now; the open document translated in place
     readEverything, translate: translateOpen

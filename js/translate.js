@@ -54,44 +54,18 @@
   const ALL = new Map(Object.entries(MODELS).flatMap(([p, fs]) => Object.values(fs).map((f) => [urlOf(p, f), { url: urlOf(p, f), size: f[1], sha: f[2] }])));
   const filesOf = (from, to) => (route(from, to) || []).flatMap((p) => Object.values(MODELS[p]).map((f) => ALL.get(urlOf(p, f))));
 
-  async function kept(url) {
-    try { return await (await caches.open(KEEP)).match(url); } catch (e) { return null; }
-  }
-
   async function toDownload(from, to) {
     let n = 0;
-    for (const f of filesOf(from, to)) if (!(await kept(f.url))) n += f.size;
+    for (const f of filesOf(from, to)) if (!(await NpRemote.kept(f.url, KEEP))) n += f.size;
     return n;
   }
 
-  const hex = (buf) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('');
-
-  // A model file, downloaded once and kept; unpacked here (the engine takes
-  // it unpacked). onBytes(n) as it arrives.
-  async function getFile(f, onBytes) {
-    const k = await kept(f.url);
-    let gz = k ? await k.arrayBuffer() : null;
-    if (gz) onBytes(f.size);
-    else {
-      const res = await fetch(f.url, { credentials: 'omit' });
-      if (!res.ok) throw new Error(_('Could not download the translation model ({status}).', { status: String(res.status) }));
-
-      const chunks = [];
-      let got = 0;
-      const reader = res.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        got += value.length;
-        onBytes(got);
-      }
-      gz = await new Blob(chunks).arrayBuffer();
-      if (hex(await crypto.subtle.digest('SHA-256', gz)) !== f.sha) throw new Error(_('The translation model did not download correctly. Try again.'));
-      try { await (await caches.open(KEEP)).put(f.url, new Response(gz, { headers: { 'content-type': 'application/gzip' } })); } catch (e) { /* used this time only */ }
-    }
-    return new Response(new Blob([gz]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
-  }
+  // A model file, downloaded once and kept (js/remote.js); unpacked, as the
+  // engine takes it. onBytes(n) as it arrives.
+  const getFile = (f, onBytes) => NpRemote.get(f, KEEP, onBytes, {
+    failed: (status) => _('Could not download the translation model ({status}).', { status }),
+    damaged: _('The translation model did not download correctly. Try again.')
+  });
 
   // Downloads (or finds kept) what a pair needs, with progress (0…1).
   const ready = new Map(); // url → Promise<ArrayBuffer>, until the engine takes it

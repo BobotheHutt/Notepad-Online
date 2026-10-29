@@ -39,8 +39,20 @@ Third-party libraries, unmodified:
               files.noteshack.org (tools/translation-models.py), downloaded
               the first time a language pair is used.
 
+- harfbuzz/   harfbuzzjs 1.6.4: HarfBuzz compiled to WebAssembly (harfbuzz.wasm,
+              with index.mjs and harfbuzz.js to load it) and its subsetter
+              (harfbuzz-subset.wasm), Old MIT (COPYING; LICENSE for the
+              JavaScript). Shapes text in other scripts for saved PDFs and
+              cuts their fonts down to the letters used. The Noto fonts it
+              shapes with (SIL Open Font License 1.1) are not here: they are
+              on files.noteshack.org (tools/noto-fonts.py), downloaded the
+              first time a script needs one.
+- bidi/       bidi-js 1.1.0 (Jason Johnston), MIT. The Unicode bidirectional
+              algorithm: the order of right-to-left and left-to-right text.
+
 Loaded only when needed: PDF tools when a PDF is opened, Tesseract when
 "Read text" is used, opentype.js when a scan's letters are made into a font,
-UTIF.js when a TIFF is opened, the translator when a document is translated.
+UTIF.js when a TIFF is opened, the translator when a document is translated,
+HarfBuzz and bidi-js when a PDF with text in other scripts is saved.
 
 Each folder holds its library's license text, which must stay with it.

@@ -35,6 +35,7 @@ and lets you edit and sign PDFs.
 - Open any PDF (menu, or drop it on the window). It goes in your documents list like everything else.
 - **Edit text**: click any line of the PDF's own text and retype it. Only the words you change are replaced; the rest of the line is left exactly as it was.
 - **The original font**: the app works out which font the words were set in (from the font's name in the PDF, or, on a scan, by comparing the letters with 31 common document fonts) and downloads it, so new words match. Paid fonts like Arial, Times New Roman and Calibri are matched with free fonts drawn to the same shapes and widths (Arimo, Tinos, Carlito).
+- **Text in any script**: Arabic, Hebrew, Hindi and the other Indian scripts, Thai, Chinese, Japanese, Korean, Cyrillic, Greek and Vietnamese can be typed into a PDF, or translated into one, and are saved shaped (letters joined, conjuncts formed, marks placed) and in the right order, right to left where they run that way, in a Noto font. The font for a script is downloaded the first time it is used, then kept, and only the letters used go into the saved PDF, so a page of Chinese adds kilobytes, not the font's 10 MB. Such text can be searched and copied from in the saved file. Offline, before a script's font has been downloaded, its letters are saved as “?” and the app says so.
 - Add text, highlight, white-out, draw, boxes, images, and your **signature** (drawn once, remembered if you like)
 - Fill in PDF forms: text boxes, checkboxes, dropdowns and radio buttons
 - **Images too**: open a JPG, PNG, WebP, TIFF or BMP (a scan saved as an image, or a photo of a page) and it opens in the same editor, with every tool here. A photo taken sideways is turned upright. **Save** gives back the same kind of file at the same size in pixels, with your changes drawn in: a JPG comes back as a JPG, and a multi-page TIFF as a multi-page TIFF. (A JPG, PNG or WebP that has gained pages comes back as a zip with one image per page.) Export… makes it a PDF, a Word document, text or another kind of image.
@@ -96,10 +97,12 @@ never uploaded. Three things are fetched from the internet:
   visitor's IP address; nothing from the document is sent.
 - **Linked pictures.** A picture in a document that links to a web address
   (for example, pasted from a web page) is loaded from that address.
-- **Translation models.** The first time you translate between two
-  languages, the model for them is downloaded from Noteshack's own file
-  storage (`files.noteshack.org`) and kept in the browser. Only the model is
-  downloaded; the text is translated on the device.
+- **Translation models and script fonts**, from Noteshack's own file
+  storage (`files.noteshack.org`), kept in the browser after the first time:
+  the model for two languages, the first time you translate between them,
+  and the font for a script (Arabic, Chinese, Hindi and others), the first
+  time a PDF needs it. Only the file is downloaded; the text is translated,
+  and fonts are cut down to the letters used, on the device.
 
 Everything else, text recognition included, runs on the device.
 
@@ -132,6 +135,9 @@ with their license texts:
 - [Hunspell](https://hunspell.github.io) (as hunspell-wasm), MPL 1.1, with Hunspell dictionaries from [wooorm/dictionaries](https://github.com/wooorm/dictionaries), each under its own license (see `vendor/dictionaries`)
 - [franc](https://github.com/wooorm/franc), MIT License
 - [Bergamot translator](https://github.com/browsermt/bergamot-translator) (Firefox's translation engine), Mozilla Public License 2.0, with [Mozilla's translation models](https://github.com/mozilla/translations), Mozilla Public License 2.0 (served from `files.noteshack.org`, not stored in this repository; `tools/translation-models.py` puts them there)
+- [HarfBuzz](https://harfbuzz.github.io) (as harfbuzzjs, with its subsetter), MIT License (Old MIT)
+- [bidi-js](https://github.com/lojjic/bidi-js), MIT License
+- [Noto fonts](https://notofonts.github.io) (Google), SIL Open Font License 1.1 (served from `files.noteshack.org`, not stored in this repository; `tools/noto-fonts.py` puts them there)
 - 31 fonts from [Fontsource](https://fontsource.org), SIL Open Font License (Roboto Slab: Apache 2.0)
 
 Fonts come from [Fontsource](https://fontsource.org) when needed and are
@@ -219,8 +225,10 @@ locales/               the app's phrases in Spanish, French, German, Portuguese 
 js/lang.js             the languages, and working out which one a text is in
 js/spell.js            spell checking (js/spellworker.js runs Hunspell)
 js/translate.js        translation on the device: Noteshack's engine (Bergamot) or the browser's
+js/remote.js           downloads from files.noteshack.org: checked, and kept in the browser
+js/shaping.js          text in other scripts in saved PDFs: Noto fonts, shaped (HarfBuzz), cut down to the letters used
 vendor/                the libraries (see vendor/README.md), with their licenses; loaded only when needed
-tools/                 the translation models' upload script; phrases.mjs lists the phrases the code uses
+tools/                 the upload scripts for the translation models and the Noto fonts; phrases.mjs lists the phrases the code uses
 js/icons.js            toolbar icons
 sw.js                  offline support
 manifest.webmanifest   app install details

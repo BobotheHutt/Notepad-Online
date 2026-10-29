@@ -26,16 +26,16 @@ async function localFonts(context) {
   });
 }
 
-// The translation models, from files.noteshack.org. It answers only pages on
-// noteshack.org, so the tests fetch them here and hand them to the page; each
-// is kept in tests/.fixtures/models after the first time, or comes from
-// NOTESHACK_MODELS (a folder laid out as on the site: en-es/model…gz) where
-// the site is out of reach.
-const MODELS = process.env.NOTESHACK_MODELS || path.join(ROOT, 'tests', '.fixtures', 'models');
-async function translationModels(context) {
-  await context.route(/^https:\/\/files\.noteshack\.org\/translate\/v1\//, async (route) => {
+// Files from files.noteshack.org: translation models and fonts. It answers
+// only pages on noteshack.org, so the tests fetch them here and hand them to
+// the page; each is kept in tests/.fixtures/files after the first time, or
+// comes from NOTESHACK_FILES (a folder laid out as on the site:
+// translate/v1/en-es/…, fonts/v1/NotoSansArabic/…) where the site is out of reach.
+const FILES = process.env.NOTESHACK_FILES || path.join(ROOT, 'tests', '.fixtures', 'files');
+async function remoteFiles(context) {
+  await context.route(/^https:\/\/files\.noteshack\.org\//, async (route) => {
     const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/gzip' };
-    const file = path.join(MODELS, route.request().url().replace(/^.*\/translate\/v1\//, ''));
+    const file = path.join(FILES, new URL(route.request().url()).pathname);
     if (!fs.existsSync(file)) {
       const res = await route.fetch({ headers: { origin: 'https://noteshack.org' } });
       if (!res.ok()) return route.fulfill({ status: res.status(), body: '', headers });
@@ -49,10 +49,10 @@ async function translationModels(context) {
 }
 
 export const test = base.extend({
-  context: async ({ context, welcome, models }, use) => {
+  context: async ({ context, welcome, remote }, use) => {
     await localFonts(context);
     // only where asked: in Firefox, any stand-in keeps the offline cache from answering
-    if (models) await translationModels(context);
+    if (remote) await remoteFiles(context);
     // the welcome popup stays away unless a test is about it
     if (!welcome) await context.addInitScript(() => { try { localStorage.setItem('np.welcome', 'hidden'); localStorage.setItem('np.safari-note', 'shown'); } catch (e) { /* ignore */ } });
     await use(context);
@@ -75,8 +75,8 @@ export const test = base.extend({
   filePickers: [false, { option: true }],
   // the welcome popup, off unless a test is about it
   welcome: [false, { option: true }],
-  // the translation models served from tests/.fixtures/models (see above)
-  models: [false, { option: true }],
+  // files.noteshack.org, served from tests/.fixtures/files (see above)
+  remote: [false, { option: true }],
   app: async ({ page, errors, filePickers }, use) => {
     if (!filePickers) await page.addInitScript(() => { window.showSaveFilePicker = undefined; window.showOpenFilePicker = undefined; });
     else {

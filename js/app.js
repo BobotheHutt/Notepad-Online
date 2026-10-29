@@ -23,7 +23,7 @@
   NpI18n.dom(document.body);
 
   // Shown in Tools → About, so it is easy to tell which version is running.
-  const APP_VERSION = '2026.10.28-45';
+  const APP_VERSION = '2026.10.29-46';
 
   const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -2277,7 +2277,7 @@
       el('p', { class: 'muted' }, _('Tip: File → Back up all documents saves everything to one file you can restore on another computer.')),
       el('details', { class: 'about-more' }, el('summary', {}, _('Privacy')),
         el('p', {}, _('There is no account, no analytics, no ads and no cookies. Your documents and PDFs never leave this device.')),
-        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And the first time you translate between two languages, the model for them is downloaded from Noteshack’s own file storage (files.noteshack.org) and kept in this browser; the text itself is translated on this device.'))),
+        el('p', {}, _('Three things are fetched from the internet. When a PDF names an uncommon font (the common ones come from Noteshack itself), the font file is downloaded from the free Fontsource library through jsDelivr (cdn.jsdelivr.net), which, like any website, sees your IP address but nothing from your document. Pictures in your documents that link to a web address are loaded from that address. And from Noteshack’s own file storage (files.noteshack.org), kept in this browser once downloaded: the model for two languages the first time you translate between them, and the font for a script (Arabic, Chinese, Hindi and others) the first time a PDF needs it. Your text is translated, and written into PDFs, on this device.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Disclaimer')),
         el('p', {}, _('Noteshack is provided as is, without warranty of any kind. Text recognition, translation and font matching can be wrong: check a document before you send, submit or sign it. Keep backups of anything important.')),
         el('p', {}, _('You are responsible for the documents you change. Do not alter a document in a way that misleads anyone, such as a form or record someone else filled in or signed.'))),
@@ -2291,6 +2291,9 @@
           el('li', {}, _('Hunspell (MPL 1.1) with Hunspell dictionaries, each under its own license: spell checking')),
           el('li', {}, _('franc, MIT License: tells which language a text is in')),
           el('li', {}, _('Bergamot, Firefox’s translation engine, and Mozilla’s translation models, Mozilla Public License 2.0: translation')),
+          el('li', {}, _('HarfBuzz (Old MIT) as harfbuzzjs (MIT License): shapes text in any script for saved PDFs, and cuts fonts down to the letters used')),
+          el('li', {}, _('bidi-js, MIT License: puts right-to-left and left-to-right text in order')),
+          el('li', {}, _('Noto fonts (Google), SIL Open Font License 1.1: text in scripts other fonts lack')),
           el('li', {}, _('Fonts from Fontsource, each under its own free license (SIL Open Font License or Apache License 2.0); fonts made from a scan are changed copies, renamed as the Open Font License asks'))),
         el('p', {}, _('Noteshack’s own code is released under the MIT License. The full license texts are in the app’s source: LICENSE, and the vendor folder for each library.'))),
       el('details', { class: 'about-more' }, el('summary', {}, _('Trademarks')),
@@ -2916,6 +2919,9 @@
         else if (!canWriteFiles()) toast(_('Saved to your Downloads. (This browser does not let websites save over a file, so each save is a new copy.)'), 7000);
       }
       if (out.fellBack) toast(_('This browser cannot save WebP images, so it was saved as PNG.'), 6000);
+      // what the PDF could not carry as it was matters more than where it went
+      const warned = doc.type === 'pdf' ? NpPdf.warnings() : [];
+      if (warned.length) toast(warned.join(' '), 9000);
     } catch (e) {
       toast(_('Could not save: {reason}', { reason: e.message || e }), 7000);
     }
